@@ -20,19 +20,22 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: pnpm install
 
       - name: Embed Python scripts
-        run: npm run embed
+        run: pnpm run embed
 
       - name: Build macOS (Intel)
-        run: npx electron-builder -m --publish never
+        run: pnpm exec electron-builder -m --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Build macOS (ARM)
-        run: npx electron-builder -m --arm64 --publish never
+        run: pnpm exec electron-builder -m --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
@@ -55,14 +58,17 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: pnpm install
 
       - name: Embed Python scripts
-        run: npm run embed
+        run: pnpm run embed
 
       - name: Build Windows
-        run: npx electron-builder -w --publish never
+        run: pnpm exec electron-builder -w --publish never
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
