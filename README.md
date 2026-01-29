@@ -10,7 +10,7 @@ A menubar app to control an Apple TV from your desktop.
 
 ## Installation
 
-macOS and Windows builds are available on the [releases page](https://github.com/bsharper/atv-desktop-remote/releases).
+macOS and Windows builds are available on the [releases page](https://github.com/energee/appletv-desktop-remote/releases).
 
 ## Usage
 
