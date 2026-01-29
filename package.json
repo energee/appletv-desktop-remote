@@ -20,7 +20,6 @@
         "start": "electron app",
         "postinstall": "electron-builder install-app-deps",
         "build": "npx electron-builder -m",
-        "docker-build": "./electron_docker.sh 'npm run build:win'",
         "build:win": "npx electron-builder -w",
         "build-arm": "npx electron-builder -m --arm64"
     },
@@ -32,6 +31,7 @@
         "@electron/remote": "^2.1.2",
         "menubar": "^9.5.1"
     },
+    "packageManager": "pnpm@10.28.0",
     "pnpm": {
         "onlyBuiltDependencies": [
             "electron"
