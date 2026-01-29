@@ -4,237 +4,405 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Change Hotkey</title>
-    <script>
-        window.jQuery = window.$ = require('jquery');
-        require('./js/select2.min.js')($)
-    </script>
-    <link rel="stylesheet" href="css/pure-min.css">
-    <link href="css/select2.min.css" rel="stylesheet" />
     <style>
-        body {
-            min-width: 340px;
+        :root {
+            --bg: #e8e4e0;
+            --surface: rgba(255, 255, 255, 0.55);
+            --glass: rgba(255, 255, 255, 0.35);
+            --glass-border: rgba(255, 255, 255, 0.5);
+            --glass-hover: rgba(255, 255, 255, 0.6);
+            --text-primary: #1d1d1f;
+            --text-secondary: #6e6e73;
+            --text-tertiary: #98989d;
+            --border: rgba(0, 0, 0, 0.08);
+            --accent: #b8a99a;
+            --accent-glass: rgba(184, 169, 154, 0.25);
+            --blur: 20px;
+            --shadow-sm: 0 1px 4px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+            --radius-sm: 10px;
+            --radius-md: 16px;
+            --radius-full: 50%;
+            --transition-fast: 120ms ease;
+            --transition-med: 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
-        .hotkeys-container {
-            margin: 20px;
+
+        .darkMode {
+            --bg: #1a1816;
+            --surface: rgba(50, 48, 46, 0.6);
+            --glass: rgba(50, 48, 46, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-hover: rgba(60, 58, 56, 0.6);
+            --text-primary: #f5f5f7;
+            --text-secondary: #98989d;
+            --text-tertiary: #636366;
+            --border: rgba(255, 255, 255, 0.06);
+            --accent: #c4b5a6;
+            --accent-glass: rgba(196, 181, 166, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+            -webkit-font-smoothing: antialiased;
             display: flex;
             flex-direction: column;
-            align-items: stretch;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(165deg, #ede9e5 0%, #ddd8d3 40%, #e5e0dc 100%);
+            color: var(--text-primary);
+            user-select: none;
+            padding: 24px 20px 20px;
         }
-        .hotkeys-multiple {
-            width: 100%;
-            min-width: 300px;
-            height: 200px;
+
+        .darkMode body,
+        body.darkMode {
+            background: linear-gradient(165deg, #1e1c1a 0%, #141210 40%, #1a1816 100%);
         }
-        #parsed-hotkeys, #all-parsed-hotkeys {
-            width: 100%;
-            min-width: 300px;
-            padding: 10px;
-            box-sizing: border-box;
-        }
-        .select2-container {
-            width: 100% !important;
-        }
-        label {
-            display: block;
-            margin-bottom: 10px;
-            margin-top: 10px;
-            font-weight: bold;
-        }
-        .info {
-            font-style: italic;
-            margin: 10px;
-        }
-        #buttons {
-            margin-top: 20px;
+
+        .live-hotkey {
+            background: var(--surface);
+            backdrop-filter: blur(var(--blur));
+            -webkit-backdrop-filter: blur(var(--blur));
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 10px 22px;
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 22px;
             text-align: center;
+            min-width: 120px;
+            letter-spacing: 0.03em;
+            transition: all var(--transition-med);
+        }
+
+        .live-hotkey.empty {
+            color: var(--text-tertiary);
+            font-weight: 400;
+            font-size: 13px;
+        }
+
+        .builder-section {
+            width: 100%;
+            max-width: 360px;
+            margin-bottom: 16px;
+        }
+
+        .builder-label {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+            margin-bottom: 8px;
+        }
+
+        .modifier-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .mod-pill {
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: var(--glass);
+            backdrop-filter: blur(var(--blur));
+            -webkit-backdrop-filter: blur(var(--blur));
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 5px 12px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            outline: none;
+        }
+
+        .mod-pill:hover {
+            background: var(--glass-hover);
+        }
+
+        .mod-pill.active {
+            background: var(--accent-glass);
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+
+        .key-select {
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: var(--glass);
+            backdrop-filter: blur(var(--blur));
+            -webkit-backdrop-filter: blur(var(--blur));
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-sm);
+            padding: 7px 12px;
+            width: 100%;
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e6e73'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            transition: border-color var(--transition-fast);
+        }
+
+        .darkMode .key-select {
+            background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2398989d'/%3E%3C/svg%3E");
+        }
+
+        .key-select:focus {
+            border-color: var(--accent);
+        }
+
+        .key-select option {
+            background: var(--bg);
+            color: var(--text-primary);
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 360px;
+        }
+
+        .btn {
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
+            padding: 9px 0;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            outline: none;
+            flex: 1;
+            text-align: center;
+        }
+
+        .btn-accent {
+            background: var(--accent);
+            color: #ffffff;
+            border: 1px solid var(--accent);
+        }
+
+        .btn-accent:hover {
+            filter: brightness(1.08);
+        }
+
+        .btn-accent:active {
+            filter: brightness(0.95);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            background: var(--glass);
+            border-color: var(--glass-border);
         }
     </style>
 </head>
 <body>
-    <div class="pure-g">
-        <div class="pure-u-1-1">
-       
-            <div class="hotkeys-container">
-                <label for="hotkeys">Hotkey</label>
-                <select id="hotkeys" class="hotkeys-multiple" name="keys[]" multiple="multiple">
-                </select>
-                <label for="parsed-hotkeys">Current Hotkey Value</label>
-                <input type="text" disabled id="parsed-hotkeys" name="parsed-hotkeys" readonly>
-                <label for="all_hotkeys">All Hotkeys</label>
-                <select id="all_hotkeys" class="hotkeys-multiple" name="allkeys[]" multiple="multiple"></select>
-                <label for="all-parsed-hotkeys">All Hotkeys Value</label>
-                <input type="text" disabled id="all-parsed-hotkeys" name="all-parsed-hotkeys" readonly>
-                <div id="buttons">
-                    <button class="pure-button" onclick="addHotkeys()">Add</button>
-                    <button class="pure-button" onclick="saveHotkey()">Save</button>
-                    <button class="pure-button" onclick="closeWindow()">Cancel</button>
-                </div>
-            </div>
-            <div class="info">
+    <div class="live-hotkey empty" id="liveHotkey">Select modifiers and a key</div>
 
-                Hotkeys will be registered when this window is closed. For more infromation about hotkeys/accelerators, go to 
-                <a href="https://www.electronjs.org/docs/latest/api/accelerator" id="accellink">https://www.electronjs.org/docs/latest/api/accelerator</a><br>
-                The default value is Super+Shift+R
-            </div>
-            </div>
+    <div class="builder-section">
+        <div class="builder-label">Modifiers</div>
+        <div class="modifier-row" id="modifierRow">
+            <button class="mod-pill" data-mod="Super" data-symbol="⌘">⌘ Cmd</button>
+            <button class="mod-pill" data-mod="Ctrl" data-symbol="⌃">⌃ Ctrl</button>
+            <button class="mod-pill" data-mod="Alt" data-symbol="⌥">⌥ Alt</button>
+            <button class="mod-pill" data-mod="Shift" data-symbol="⇧">⇧ Shift</button>
+        </div>
+        <div class="builder-label">Key</div>
+        <select class="key-select" id="keySelect">
+            <option value="">Choose a key...</option>
+        </select>
     </div>
+
+    <div class="actions">
+        <button class="btn btn-accent" id="saveBtn" onclick="saveHotkey()" title="Save this shortcut and close">Save</button>
+        <button class="btn btn-ghost" onclick="resetToDefault()" title="Clear custom shortcut and use ⌘⇧R">Reset to Default</button>
+    </div>
+
     <script>
         const path = require('path');
         const MYPATH = path.join(process.env.APPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + "/.local/share"), "ATV Remote");
-        const hotkeyPath = path.join(MYPATH, "hotkey.txt")
+        const hotkeyPath = path.join(MYPATH, "hotkey.txt");
         const fs = require('fs');
         const remote = require('@electron/remote');
-        
-        function closeWindow() {
-            let window = remote.getCurrentWindow();
-            window.close();
+
+        const DEFAULT_HOTKEY = 'Super+Shift+R';
+        const symbolMap = { 'Super': '⌘', 'Ctrl': '⌃', 'Alt': '⌥', 'Shift': '⇧' };
+        const modOrder = ['Super', 'Ctrl', 'Alt', 'Shift'];
+
+        // Detect dark mode
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.body.classList.add('darkMode');
+        }
+
+        // Populate key dropdown
+        (function populateKeys() {
+            var sel = document.getElementById('keySelect');
+            for (var i = 65; i <= 90; i++) {
+                var opt = document.createElement('option');
+                opt.value = String.fromCharCode(i);
+                opt.textContent = String.fromCharCode(i);
+                sel.appendChild(opt);
+            }
+            for (var n = 0; n <= 9; n++) {
+                var opt = document.createElement('option');
+                opt.value = String(n);
+                opt.textContent = String(n);
+                sel.appendChild(opt);
+            }
+        })();
+
+        // Toggle modifier pills
+        document.getElementById('modifierRow').addEventListener('click', function(e) {
+            var pill = e.target.closest('.mod-pill');
+            if (!pill) return;
+            pill.classList.toggle('active');
+            updatePreview();
+        });
+
+        document.getElementById('keySelect').addEventListener('change', updatePreview);
+
+        function getActiveMods() {
+            var mods = [];
+            document.querySelectorAll('.mod-pill.active').forEach(function(pill) {
+                mods.push(pill.dataset.mod);
+            });
+            // Sort in canonical order
+            mods.sort(function(a, b) { return modOrder.indexOf(a) - modOrder.indexOf(b); });
+            return mods;
+        }
+
+        function getSelectedKey() {
+            return document.getElementById('keySelect').value;
+        }
+
+        function buildComboString() {
+            var parts = getActiveMods();
+            var key = getSelectedKey();
+            if (key) parts.push(key);
+            return parts.join('+');
+        }
+
+        function buildDisplayString() {
+            var mods = getActiveMods();
+            var symbols = mods.map(function(m) { return symbolMap[m] || m; });
+            var key = getSelectedKey();
+            if (key) symbols.push(key);
+            return symbols.join(' ');
+        }
+
+        function updatePreview() {
+            var el = document.getElementById('liveHotkey');
+            var display = buildDisplayString();
+            if (display) {
+                el.textContent = display;
+                el.classList.remove('empty');
+            } else {
+                el.textContent = 'Select modifiers and a key';
+                el.classList.add('empty');
+            }
+        }
+
+        function setModifiersFromCombo(combo) {
+            // Clear all
+            document.querySelectorAll('.mod-pill').forEach(function(p) { p.classList.remove('active'); });
+            document.getElementById('keySelect').value = '';
+
+            var parts = combo.split('+').map(function(p) { return p.trim(); });
+            parts.forEach(function(part) {
+                // Check if it's a modifier
+                var modMap = {
+                    'Super': 'Super', 'Command': 'Super', 'Cmd': 'Super',
+                    'CommandOrControl': 'Super', 'CmdOrCtrl': 'Super',
+                    'Control': 'Ctrl', 'Ctrl': 'Ctrl',
+                    'Alt': 'Alt', 'Option': 'Alt',
+                    'Shift': 'Shift'
+                };
+                var mapped = modMap[part];
+                if (mapped) {
+                    var pill = document.querySelector('.mod-pill[data-mod="' + mapped + '"]');
+                    if (pill) pill.classList.add('active');
+                } else {
+                    // It's the key
+                    document.getElementById('keySelect').value = part.toUpperCase();
+                }
+            });
+            updatePreview();
         }
 
         function loadExistingHotkey() {
             if (fs.existsSync(hotkeyPath)) {
-                var hotkeysStr = fs.readFileSync(hotkeyPath, 'utf8').trim();
-                var split_hotkeys = hotkeysStr.split(',').map(hk => hk.trim()).filter(hk => hk !== '');
-                split_hotkeys.forEach(function(hk) {
-                    $('#all_hotkeys').append(createOption(hk, hk));
-                });
-                
-                // if(split_hotkeys.length > 0) {
-                //     var firstCombo = split_hotkeys[0].split('+');
-                //     $("#hotkeys").val(firstCombo).trigger("change");
-                // }
-                addHotkeyOption();
-                return true;
+                var raw = fs.readFileSync(hotkeyPath, 'utf8').trim();
+                if (raw) {
+                    var hotkeys = raw.split(',').map(function(h) { return h.trim(); }).filter(function(h) { return h !== ''; });
+                    if (hotkeys.length > 0) {
+                        setModifiersFromCombo(hotkeys[0]);
+                        return true;
+                    }
+                }
             }
+            setModifiersFromCombo(DEFAULT_HOTKEY);
             return false;
         }
 
-        function createOption (text, value, selected) {
-            if (typeof selected === 'undefined') {
-                selected = true;
-            }
-            var option = document.createElement("option");
-            option.text = text;
-            option.value = value;
-            option.selected = selected;
-            return option;
-        }
-
-        function addHotkeys() {
-            var combo = $('#parsed-hotkeys').val();
-            if (!combo || combo.trim() === '') {
-                return;
-            }
-            // no dupes
-            if ($('#all_hotkeys option[value="' + combo + '"]').length === 0) {
-                $('#all_hotkeys').append(createOption(combo, combo));
-            }
-            $('#hotkeys').val(null).trigger("change");
-            $('#parsed-hotkeys').val('');
-            addHotkeyOption();
-        }
-        function showAllHotkeys() {
-            var hotkeys = $('#all_hotkeys').val() || [];
-            $('#all-parsed-hotkeys').val(hotkeys.join(','));
-        }
-
         function saveHotkey() {
-            var hotkeys = $('#all_hotkeys').val() || [];
-            if (hotkeys.length === 0) {
-                fs.unlinkSync(hotkeyPath);
+            var combo = buildComboString();
+            if (!combo) return;
+
+            // Read existing file to preserve multiple hotkeys (comma-separated)
+            var existing = [];
+            if (fs.existsSync(hotkeyPath)) {
+                var raw = fs.readFileSync(hotkeyPath, 'utf8').trim();
+                if (raw) {
+                    existing = raw.split(',').map(function(h) { return h.trim(); }).filter(function(h) { return h !== ''; });
+                }
+            }
+
+            // Replace first hotkey or set as only hotkey
+            if (existing.length > 1) {
+                existing[0] = combo;
+                fs.writeFileSync(hotkeyPath, existing.join(','));
             } else {
-                
-                fs.writeFileSync(hotkeyPath, hotkeys.join(','));
+                fs.writeFileSync(hotkeyPath, combo);
+            }
+
+            closeWindow();
+        }
+
+        function resetToDefault() {
+            if (fs.existsSync(hotkeyPath)) {
+                fs.unlinkSync(hotkeyPath);
             }
             closeWindow();
         }
 
-        function hotkeysFromParsed(parsedHotkeys) {
-            var hotkeys = [];
-            var keys = parsedHotkeys.split('+');
-            keys.forEach(function(key) {
-                if (key.length === 1) {
-                    hotkeys.push(key.toUpperCase());
-                } else {
-                    hotkeys.push(key);
-                }
-            });
-            return hotkeys;
-        }
-        function _addHotkeyOption() {
-            $('#select2-all_hotkeys-container .select2-selection__choice__display').on('click', function(e) {
-                e.stopPropagation();
-                var hotkey = $(this).text();
-                
-                $('#all_hotkeys').find("option[value='" + hotkey + "']").remove();
-                $('#all_hotkeys').trigger('change');
-                
-                var keys = hotkey.split('+');
-                $('#hotkeys').val(keys).trigger('change');
-            });
-            showAllHotkeys();
-        }
-        function addHotkeyOption() {
-            setTimeout(() => {
-                _addHotkeyOption();
-            }, 10);
+        function closeWindow() {
+            var win = remote.getCurrentWindow();
+            win.close();
         }
 
-        $(document).ready(function() {
-            var metaKeys = ["Command", "Cmd", "Control", "Ctrl", "CommandOrControl", "CmdOrCtrl", "Alt", "Option", "AltGr", "Shift", "Super"];
-            metaKeys.forEach(function(key) {
-                var option = document.createElement("option");
-                option.text = key;
-                option.value = key;
-                $('#hotkeys').append(option);
-            });
-
-            // Add uppercase letters A-Z
-            for (var i = 65; i <= 90; i++) {
-                var letter = String.fromCharCode(i);
-                var option = document.createElement("option");
-                option.text = letter;
-                option.value = letter;
-                $('#hotkeys').append(option);
-            }
-
-            // Add numbers 0-9
-            for (var i = 0; i <= 9; i++) {
-                var option = document.createElement("option");
-                option.text = i;
-                option.value = i;
-                $('#hotkeys').append(option);
-            }
-            $('#hotkeys').select2();
-            $('#hotkeys').select2({
-                placeholder: 'Select keys for combination',
-                allowClear: true
-            });
-            
-            $('#hotkeys').on('change', function() {
-                var hotkeys = $(this).val() || [];
-                $('#parsed-hotkeys').val(hotkeys.join('+'));
-            });
-            $('#all_hotkeys').select2({
-                placeholder: 'Review your hotkey combinations',
-                tags: true,
-                minimumResultsForSearch: -1
-            });
-            $("#all_hotkeys").on('change', function() {
-                showAllHotkeys();
-            });
-            
-            $('#all_hotkeys').on('select2:opening', function(e) {
-                e.preventDefault();
-            });
-            
-            if (!loadExistingHotkey()) {
-                $("#hotkeys").val(hotkeysFromParsed("Super+Shift+R")).trigger("change");
-            }
-            $("#accellink").click(function() {
-                require('electron').shell.openExternal(this.href);
-                return false;
-            });
-        });
+        // Init
+        loadExistingHotkey();
     </script>
 </body>
 </html>

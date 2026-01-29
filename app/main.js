@@ -48,8 +48,8 @@ if (!gotTheLock) {
 }
 function createHotkeyWindow() {
     hotkeyWindow = new BrowserWindow({
-        width: 500,
-        height: 500,
+        width: 400,
+        height: 340,
         webPreferences: {
             nodeIntegration: true,
             enableRemoteModule: true,
@@ -59,9 +59,8 @@ function createHotkeyWindow() {
     require("@electron/remote/main").enable(hotkeyWindow.webContents);
     hotkeyWindow.loadFile('hotkey.html');
     hotkeyWindow.setMenu(null);
-    hotkeyWindow.on('close', (event) => {
-        event.preventDefault();
-        hotkeyWindow.hide();
+    hotkeyWindow.on('closed', () => {
+        hotkeyWindow = null;
         registerHotkeys();
     });
 }
@@ -99,8 +98,8 @@ function createWindow() {
         preloadWindow: preloadWindow,
         showDockIcon: false,
         browserWindow: {
-            width: 300,
-            height: 500,
+            width: 280,
+            height: 420,
             alwaysOnTop: false,
             webPreferences: {
                 nodeIntegration: true,
@@ -122,6 +121,25 @@ function createWindow() {
             console.log('window closed, quitting')
             app.exit();
         })
+        // Override menubar's 100ms blur-to-hide with a longer delay
+        win.removeAllListeners('blur');
+        if (mb._blurTimeout) { clearTimeout(mb._blurTimeout); mb._blurTimeout = null; }
+        var blurTimeout = null;
+        win.on('blur', () => {
+            if (!win) return;
+            if (win.isAlwaysOnTop()) {
+                mb.emit('focus-lost');
+                return;
+            }
+            if (blurTimeout) clearTimeout(blurTimeout);
+            blurTimeout = setTimeout(() => {
+                mb.hideWindow();
+            }, 400);
+        });
+        win.on('focus', () => {
+            if (blurTimeout) { clearTimeout(blurTimeout); blurTimeout = null; }
+        });
+
         win.on('show', () => {
             win.webContents.send('shortcutWin');
             if (handleVolumeButtonsGlobal) handleVolume();
@@ -348,8 +366,8 @@ app.whenReady().then(() => {
         applicationName: "ATV Remote",
         applicationVersion: version,
         version: version,
-        credits: "Brian Harper",
-        copyright: "Copyright 2025",
+        credits: "Ted Slesinski",
+        copyright: "\u00A9 2026",
         website: "https://github.com/bsharper",
         iconPath: "./images/full.png"
     });

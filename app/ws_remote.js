@@ -131,10 +131,15 @@ function startWebsocket() {
         }
         if (j.command == "current-text") {
             console.log(`current text: ${j.data}`)
-            ipcRenderer.invoke('current-text', j.data);
+            $("#inlineTextInput").val(j.data);
         }
         if (j.command == "kbfocus-status") {
-            ipcRenderer.invoke('kbfocus-status', j.data);
+            // Show/hide inline keyboard based on whether ATV has text input focus
+            if (j.data) {
+                showInlineKeyboard();
+            } else {
+                hideInlineKeyboard();
+            }
         }
     });
 }
