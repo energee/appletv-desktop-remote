@@ -27,12 +27,12 @@ jobs:
         run: npm run embed
 
       - name: Build macOS (Intel)
-        run: npm run build
+        run: npx electron-builder -m --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Build macOS (ARM)
-        run: npm run build-arm
+        run: npx electron-builder -m --arm64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
@@ -62,7 +62,7 @@ jobs:
         run: npm run embed
 
       - name: Build Windows
-        run: npm run build:win
+        run: npx electron-builder -w --publish never
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
