@@ -6,9 +6,8 @@ var ipcRenderer = electron.ipcRenderer;
 var nativeTheme;
 var remote;
 var dialog;
-// Initialize remote after document is ready
 var mb;
-var Menu, MenuItem
+var Menu, MenuItem;
 function initializeRemote() {
     try {
         remote = require('@electron/remote');
@@ -142,6 +141,13 @@ function initIPC() {
     ipcRenderer.on('input-change', (event, data) => {
         sendMessage("settext", {text: data});
     });
+
+    atv_events.on('connected', function(connected) {
+        updateConnectionDot(connected ? "connected" : "disconnected");
+    });
+    atv_events.on('connection_failure', function() {
+        updateConnectionDot("disconnected");
+    });
 }
 
 window.addEventListener('blur', e => {
@@ -159,14 +165,10 @@ window.addEventListener('beforeunload', async e => {
         ipcRenderer.invoke('debug', 'connection closed')
     } catch (err) {
         console.log(err);
-        //ipcRenderer.invoke('debug', `Error: ${err}`)
     }
 });
 
-
-
 function toggleAltText(tf) {
-    //$("#topTextKBLink .keyTextAlt").width($("#topTextKBLink .keyText").width() + "px");
     if (tf) {
         $(".keyText").show();
         $(".keyTextAlt").hide();
@@ -176,16 +178,16 @@ function toggleAltText(tf) {
     }
 }
 
-function openKeyboardClick(event) {
-    event.preventDefault();
-    openKeyboard();
+function showInlineKeyboard() {
+    $("#inline-keyboard").show();
+    sendMessage("gettext");
+    $("#inlineTextInput").focus();
 }
 
-function openKeyboard() {
-    ipcRenderer.invoke('openInputWindow')
-    setTimeout(() => { // yes, this is done but it works
-        sendMessage("gettext")
-    }, 10)
+function hideInlineKeyboard() {
+    $("#inline-keyboard").hide();
+    $("#inlineTextInput").blur();
+    $("#inlineTextInput").val("");
 }
 
 window.addEventListener('keyup', e => {
@@ -200,6 +202,14 @@ window.addEventListener('app-command', (e, cmd) => {
 
 window.addEventListener('keydown', e => {
     //console.log(e);
+    // If inline text input is focused, only handle Escape (to blur), pass everything else to the input
+    if (document.activeElement && document.activeElement.id === 'inlineTextInput') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            $("#inlineTextInput").blur();
+        }
+        return;
+    }
     var key = e.key;
     if (key == ' ') key = 'Space';
     var mods = ["Control", "Shift", "Alt", "Option", "Fn", "Hyper", "OS", "Super", "Meta", "Win"].filter(mod => { return e.getModifierState(mod) })
@@ -223,10 +233,6 @@ window.addEventListener('keydown', e => {
     if (key == 'h') {
         ipcRenderer.invoke('hideWindow');
     }
-    if (key == 'k') {
-        openKeyboard();
-        return;
-    }
     if (!isConnected()) {
         if ($("#pairCode").is(':focus') && key == 'Enter') {
             submitCode();
@@ -234,16 +240,10 @@ window.addEventListener('keydown', e => {
         return;
     }
     if ($("#cancelPairing").is(":visible")) return;
-    var fnd = false;
-    Object.keys(ws_keymap).forEach(k => {
-        if (key == k) {
-            fnd = true;
-            sendCommand(k, shifted);
-            e.preventDefault();
-            return false;
-        }
-    })
-
+    if (ws_keymap[key] !== undefined) {
+        sendCommand(key, shifted);
+        e.preventDefault();
+    }
 })
 
 function createDropdown(ks) {
@@ -281,74 +281,19 @@ function createDropdown(ks) {
 
 function createATVDropdown() {
     $("#statusText").hide();
-    var creds = JSON.parse(localStorage.getItem('remote_credentials') || "{}")
-    var ks = Object.keys(creds);
-    var atvc = localStorage.getItem('atvcreds')
-    var selindex = 0;
-    ks.forEach((k, i) => {
-        var v = creds[k]
-        if (JSON.stringify(v) == atvc) selindex = i;
-    })
-
-    var ar = ks.map((el, i) => {
-        var obj = {
-            id: el,
-            text: el
-        }
-        if (i == selindex) {
-            obj.selected = true;
-        }
-        return obj;
-    })
-    ar.unshift({
-        id: 'addnew',
-        text: 'Pair another remote'
-    })
-    var txt = "";
-    txt += `<span class='ctText'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>`
-    txt += `<select id="remoteDropdown"></select>`
-    $("#atvDropdownContainer").html(txt);
-    $("#remoteDropdown").select2({
-        data: ar,
-        placeholder: 'Select a remote',
-        dropdownAutoWidth: true,
-        minimumResultsForSearch: Infinity
-    })
-
-
-
-    $("#remoteDropdown").on('change', () => {
-        var vl = $("#remoteDropdown").val();
-        if (vl) {
-            if (vl == 'addnew') {
-                startScan();
-                return;
-            } else {
-                pairDevice = vl;
-                localStorage.setItem('atvcreds', JSON.stringify(getCreds(vl)));
-                connectToATV();
-            }
-        }
-    })
+    handleContextMenu();
 }
 
-function showAndFade(text) {
-    $("#cmdFade").html(text)
-    $("#cmdFade").stop(true).fadeOut(0).css({ "visibility": "visible" }).fadeIn(200).delay(800).fadeOut(function() {
-        $(this).css({ "display": "flex", "visibility": "hidden" });
-    });
-}
 
 function _updatePlayState() {
-    var label = (device.playing ? "Pause" : "Play")
-    console.log(`Update play state: ${label}`)
-    $(`[data-key="Pause"] .keyText`).html(label);
+    var icon = device.playing ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+    console.log(`Update play state: ${device.playing ? "Pause" : "Play"}`)
+    $(`[data-key="play_pause"] .keyText`).html(icon);
 }
 
 var updatePlayState = lodash.debounce(_updatePlayState, 300);
 
-async function sendCommand(k, shifted) {
-    if (typeof shifted === 'undefined') shifted = false;
+async function sendCommand(k, shifted = false) {
     console.log(`sendCommand: ${k}`)
     if (k == 'Pause') k = 'Space';
     var rcmd = ws_keymap[k];
@@ -365,19 +310,12 @@ async function sendCommand(k, shifted) {
         }, 500);
     }
     if (k == 'Space') {
-        var pptxt = rcmd == "Pause" ? "Play" : "Pause";
-        el.find('.keyText').html(pptxt);
+        var ppicon = rcmd == "Pause" ? '<i class="fas fa-play"></i>' : '<i class="fas fa-pause"></i>';
+        el.find('.keyText').html(ppicon);
     }
     console.log(`Keydown: ${k}, sending command: ${rcmd} (shifted: ${shifted})`)
     previousKeys.push(rcmd);
     if (previousKeys.length > 10) previousKeys.shift()
-    var desc = rcmd;
-    if (desc == 'volume_down') desc = 'Lower Volume'
-    if (desc == 'volume_up') desc = 'Raise Volume'
-    if (desc == 'play_pause') desc = "play/pause"
-    if (desc == 'Tv') desc = 'TV'
-    if (desc == 'LongTv') desc = 'TV long press'
-    showAndFade(desc);
     if (shifted) {
         ws_sendCommandAction(rcmd, "Hold")
     } else {
@@ -390,8 +328,7 @@ function getWorkingPath() {
 }
 
 function isConnected() {
-    return atv_connected
-        //return !!(device && device.connection)
+    return atv_connected;
 }
 
 async function askQuestion(msg) {
@@ -408,21 +345,18 @@ async function askQuestion(msg) {
 function startPairing(dev) {
     atv_connected = false;
     $("#initText").hide();
-    //setStatus("Enter the pairing code");
     $("#results").hide();
     $("#pairButton").on('click', () => {
         submitCode();
         return false;
     });
     $("#pairCodeElements").show();
-    //ipcRenderer.invoke('startPair', dev);
     ws_startPair(dev);
 }
 
 function submitCode() {
     var code = $("#pairCode").val();
     $("#pairCode").val("");
-    //ipcRenderer.invoke('finishPair', code);
     if ($("#pairStepNum").text() == "1") {
         ws_finishPair1(code)
     } else {
@@ -430,92 +364,195 @@ function submitCode() {
     }
 }
 
+function showKeyboardHint() {
+    var hintCount = parseInt(localStorage.getItem('kbHintCount') || "0");
+    if (hintCount >= 3) return;
+    localStorage.setItem('kbHintCount', String(hintCount + 1));
+    // Briefly flash keyboard shortcut labels
+    setTimeout(function() {
+        toggleAltText(false);
+        setTimeout(function() {
+            toggleAltText(true);
+        }, 1500);
+    }, 800);
+}
+
 function showKeyMap() {
     $("#initText").hide();
-    $(".directionTable").fadeIn();
-    $("#topTextKBLink").show();
-    
+    $("#touchpad").css('display', 'flex').hide().fadeIn();
+
+    // --- Touchpad gesture detection ---
+    var touchpad = document.getElementById('touchpad');
+    var startX, startY, startTime;
+    var longPressTimer = null;
+    var moved = false;
+    var hintHidden = false;
+
+    function hideHint() {
+        if (!hintHidden) {
+            hintHidden = true;
+            $('.touchpad-hint').addClass('hidden');
+        }
+    }
+
+    function flashArrow(direction) {
+        var el = $('.touchpad-arrow-' + direction);
+        el.removeClass('flash');
+        // Force reflow to restart animation
+        void el[0].offsetWidth;
+        el.addClass('flash');
+
+        // Pulse the touchpad border
+        var tp = $('#touchpad');
+        tp.removeClass('swipe-pulse');
+        void tp[0].offsetWidth;
+        tp.addClass('swipe-pulse');
+    }
+
+    // --- Swipe detection via two-finger scroll (wheel events) ---
+    var scrollAccX = 0;
+    var scrollAccY = 0;
+    var scrollCooldown = false;
+    var scrollResetTimer = null;
+    var SCROLL_THRESHOLD = 90;  // accumulated delta px to trigger a nav command
+    var SCROLL_COOLDOWN = 200;  // ms before another swipe can fire
+    var SCROLL_RESET = 300;     // ms of no scrolling to reset accumulators
+
+    touchpad.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        hideHint();
+
+        if (scrollCooldown) return;
+
+        scrollAccX += e.deltaX;
+        scrollAccY += e.deltaY;
+
+        // Reset accumulators if user stops scrolling
+        if (scrollResetTimer) clearTimeout(scrollResetTimer);
+        scrollResetTimer = setTimeout(function() {
+            scrollAccX = 0;
+            scrollAccY = 0;
+        }, SCROLL_RESET);
+
+        // Check if accumulated scroll crosses threshold
+        if (Math.abs(scrollAccX) >= SCROLL_THRESHOLD || Math.abs(scrollAccY) >= SCROLL_THRESHOLD) {
+            var direction;
+            if (Math.abs(scrollAccX) > Math.abs(scrollAccY)) {
+                direction = scrollAccX > 0 ? 'left' : 'right';
+            } else {
+                direction = scrollAccY > 0 ? 'up' : 'down';
+            }
+            console.log('[touchpad] SCROLL SWIPE → ' + direction);
+            flashArrow(direction);
+            sendCommand(direction, false);
+
+            // Reset and cooldown
+            scrollAccX = 0;
+            scrollAccY = 0;
+            scrollCooldown = true;
+            setTimeout(function() { scrollCooldown = false; }, SCROLL_COOLDOWN);
+        }
+    }, { passive: false });
+
+    // --- Tap (click) and long-press ---
+    var clickStart = null;
+
+    touchpad.addEventListener('mousedown', function(e) {
+        hideHint();
+        clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+        longPressTimer = setTimeout(function() {
+            console.log('[touchpad] long press → select hold');
+            sendCommand('select', true);
+            clickStart = null;
+        }, 1000);
+    });
+
+    touchpad.addEventListener('mouseup', function(e) {
+        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        if (!clickStart) return;
+        var dx = e.clientX - clickStart.x;
+        var dy = e.clientY - clickStart.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var elapsed = Date.now() - clickStart.t;
+        if (dist < 15 && elapsed < 300) {
+            console.log('[touchpad] TAP → select');
+            sendCommand('select', false);
+        }
+        clickStart = null;
+    });
+
+    // --- Media / secondary button long-press handlers (unchanged logic) ---
     var longPressTimers = {};
     var longPressProgress = {};
     var isLongPressing = {};
-    
+
     $("[data-key]").off('mousedown mouseup mouseleave');
-    
+
     $("[data-key]").on('mousedown', function(e) {
         var key = $(this).data('key');
         var $button = $(this);
-        
+
         if (longPressTimers[key]) {
             clearTimeout(longPressTimers[key]);
             clearInterval(longPressProgress[key]);
         }
-        
+
         var progressValue = 0;
         isLongPressing[key] = true;
-        
+
         $button.addClass('pressing');
         longPressProgress[key] = setInterval(() => {
             if (!isLongPressing[key]) return;
-            
-            progressValue += 2;    
-            var progressPercent = Math.min(progressValue, 100);
-            var radiusPercent = 100 - progressPercent;
 
-            var computedStyle = window.getComputedStyle($button[0]);
-            var bgColor = computedStyle.backgroundColor;
-            
-            if (bgColor === 'rgba(0, 0, 0, 0)' || bgColor === 'transparent') {
-                var isDarkMode = $('body').hasClass('darkMode');
-                bgColor = isDarkMode ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
-            }
-            
-            $button.css('background', `radial-gradient(circle, transparent ${radiusPercent}%, ${bgColor} ${radiusPercent}%)`);            
+            progressValue += 2;
+            var progressPercent = Math.min(progressValue, 100);
+            var degrees = Math.round(progressPercent * 3.6);
+
+            var isDarkMode = $('body').hasClass('darkMode');
+            var ringColor = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
+            var transparentColor = isDarkMode ? 'rgba(10, 132, 255, 0.1)' : 'rgba(0, 113, 227, 0.08)';
+
+            $button.css('box-shadow', `0 0 0 3px ${ringColor.replace(/[\d.]+\)$/, (progressPercent / 100 * 0.7).toFixed(2) + ')')}`);
 
             var scale = 1 + (progressPercent * 0.001);
             $button.css('transform', `scale(${scale})`);
-            
-        }, 20); 
+
+        }, 20);
 
         longPressTimers[key] = setTimeout(() => {
             if (!isLongPressing[key]) return;
-            
+
             clearInterval(longPressProgress[key]);
 
             $button.addClass('longpress-triggered');
 
-            var computedStyle = window.getComputedStyle($button[0]);
-            var successColor = computedStyle.backgroundColor;
-            
-            if (successColor === 'rgba(0, 0, 0, 0)' || successColor === 'transparent') {
-                var isDarkMode = $('body').hasClass('darkMode');
-                successColor = isDarkMode ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
-            }
-            
-            $button.css('background', successColor);
-            
+            var isDarkMode = $('body').hasClass('darkMode');
+            var successRing = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
+            $button.css('box-shadow', `0 0 0 3px ${successRing}`);
+
             console.log(`Long press triggered for: ${key}`);
-            sendCommand(key, true); // true indicates long press
-            
+            sendCommand(key, true);
+
             isLongPressing[key] = false;
-            
+
             setTimeout(() => {
                 $button.removeClass('pressing longpress-triggered');
                 $button.css({
                     'background': '',
-                    'transform': ''
+                    'transform': '',
+                    'box-shadow': ''
                 });
             }, 200);
-            
-        }, 1000); // 1 second for long press
+
+        }, 1000);
     });
-    
+
     $("[data-key]").on('mouseup mouseleave', function(e) {
         var key = $(this).data('key');
         var $button = $(this);
-        
-        // If we're not in a long press state, this is a regular click
+
         if (isLongPressing[key]) {
-            
+
             if (longPressTimers[key]) {
                 clearTimeout(longPressTimers[key]);
                 longPressTimers[key] = null;
@@ -524,33 +561,53 @@ function showKeyMap() {
                 clearInterval(longPressProgress[key]);
                 longPressProgress[key] = null;
             }
-            
-            // Reset state
+
             isLongPressing[key] = false;
-            
-            // Reset styles
+
             $button.removeClass('pressing');
             $button.css({
                 'background': '',
-                'transform': ''
+                'transform': '',
+                'box-shadow': ''
             });
-            
-            
+
             if (e.type === 'mouseup') {
                 console.log(`Regular click for: ${key}`);
-                sendCommand(key, false); // false = "not shifted" = regular click
+                sendCommand(key, false);
             }
         }
     });
-    
+
     var creds = _getCreds();
-    if (Object.keys(creds).indexOf("Companion") > -1) {
+    var hasCompanion = Object.keys(creds).indexOf("Companion") > -1;
+    if (hasCompanion) {
         $("#topTextHeader").hide();
-        $("#topTextKBLink").show();
+        // Show hint about auto-keyboard, fade out after a few seconds
+        var companionHintShown = parseInt(localStorage.getItem('companionHintCount') || "0");
+        if (companionHintShown < 5) {
+            localStorage.setItem('companionHintCount', String(companionHintShown + 1));
+            $("#companion-hint").fadeIn(300).delay(5000).fadeOut(500);
+        }
+        // Poll kbfocus every 2s to detect when ATV enters a text input
+        if (window._kbfocusPoll) clearInterval(window._kbfocusPoll);
+        window._kbfocusPoll = setInterval(function() {
+            if (isConnected()) sendMessage('kbfocus');
+        }, 2000);
+
+        // Debounced input handler — send text to ATV as user types
+        var _inlineTextDebounce = null;
+        $("#inlineTextInput").off('input').on('input', function() {
+            var val = $(this).val();
+            if (_inlineTextDebounce) clearTimeout(_inlineTextDebounce);
+            _inlineTextDebounce = setTimeout(function() {
+                sendMessage("settext", {text: val});
+            }, 100);
+        });
     } else {
         $("#topTextHeader").show();
-        $("#topTextKBLink").hide();
     }
+
+    showKeyboardHint();
 }
 
 var connecting = false;
@@ -563,7 +620,9 @@ function handleMessage(msg) {
             device.bundleIdentifier = msg.payload.playerPath.client.bundleIdentifier;
             var els = device.bundleIdentifier.split('.')
             var nm = els[els.length - 1];
-        } catch (err) {}
+        } catch (err) {
+            console.warn('Could not parse bundle identifier:', err.message);
+        }
         if (msg && msg.payload && msg.payload.playbackState) {
             device.playing = msg.payload.playbackState == 1;
             device.lastMessage = JSON.parse(JSON.stringify(msg))
@@ -576,9 +635,18 @@ function handleMessage(msg) {
     }
 }
 
+function updateConnectionDot(state) {
+    var dot = $("#connectionDot");
+    dot.removeClass("connected connecting disconnected");
+    if (state === "connected") dot.addClass("connected");
+    else if (state === "connecting") dot.addClass("connecting");
+    else if (state === "disconnected") dot.addClass("disconnected");
+}
+
 async function connectToATV() {
     if (connecting) return;
     connecting = true;
+    updateConnectionDot("connecting");
     setStatus("Connecting to ATV...");
     $("#runningElements").show();
     atv_credentials = JSON.parse(localStorage.getItem('atvcreds'))
@@ -610,11 +678,8 @@ function startScan() {
     $("#topTextKBLink").hide();
     $("#addNewElements").show();
     $("#runningElements").hide();
-    //mb.showWindow();
-    $("#atvDropdownContainer").html("");
     setStatus("Please wait, scanning...")
     $("#pairingLoader").html(getLoader());
-    //ipcRenderer.invoke('scanDevices');
     ws_startScan();
 }
 
@@ -648,13 +713,11 @@ function _getCreds(nm) {
     if (ks.length === 0) {
         return {};
     }
-    if (typeof nm == 'undefined' && ks.length > 0) {
-        return creds[ks[0]]
-    } else {
-        if (Object.keys(creds).indexOf(nm) > -1) {
-            localStorage.setItem('currentDeviceID', nm)
-            return creds[nm];
-        }
+    if (typeof nm === 'undefined') {
+        return creds[ks[0]];
+    }
+    if (ks.indexOf(nm) > -1) {
+        return creds[nm];
     }
 }
 
@@ -667,12 +730,6 @@ function getCreds(nm) {
 function setAlwaysOnTop(tf) {
     console.log(`setAlwaysOnTop(${tf})`)
     ipcRenderer.invoke('alwaysOnTop', String(tf));
-}
-
-function alwaysOnTopToggle() {
-    var cd = $("#alwaysOnTopCheck").prop('checked')
-    localStorage.setItem('alwaysOnTopChecked', cd);
-    setAlwaysOnTop(cd);
 }
 
 var lastMenuEvent;
@@ -703,7 +760,36 @@ function handleContextMenu() {
     let tray = mb.tray
     var mode = localStorage.getItem('uimode') || 'systemmode';
 
-    const subMenu = Menu.buildFromTemplate([
+    // Build Devices submenu from saved credentials
+    var creds = JSON.parse(localStorage.getItem('remote_credentials') || "{}");
+    var ks = Object.keys(creds);
+    var atvc = localStorage.getItem('atvcreds');
+    var deviceItems = ks.map(function(k) {
+        return {
+            type: 'checkbox',
+            label: k,
+            checked: JSON.stringify(creds[k]) === atvc,
+            click: function() {
+                localStorage.setItem('atvcreds', JSON.stringify(creds[k]));
+                connectToATV();
+                handleContextMenu();
+            }
+        };
+    });
+    if (deviceItems.length > 0) {
+        deviceItems.push({ type: 'separator' });
+    }
+    deviceItems.push({
+        label: 'Pair new device...',
+        click: function() {
+            mb.showWindow();
+            startScan();
+        }
+    });
+
+    const devicesSubMenu = Menu.buildFromTemplate(deviceItems);
+
+    const appearanceSubMenu = Menu.buildFromTemplate([
         { type: 'checkbox', id: 'systemmode', click: subMenuClick, label: 'Follow system settings', checked: (mode == "systemmode") },
         { type: 'checkbox', id: 'darkmode', click: subMenuClick, label: 'Dark mode', checked: (mode == "darkmode") },
         { type: 'checkbox', id: 'lightmode', click: subMenuClick, label: 'Light mode', checked: (mode == "lightmode") }
@@ -711,14 +797,14 @@ function handleContextMenu() {
 
     var topChecked = JSON.parse(localStorage.getItem('alwaysOnTopChecked') || "false")
     const contextMenu = Menu.buildFromTemplate([
+        { label: 'Devices', submenu: devicesSubMenu },
         { type: 'checkbox', label: 'Always on-top', click: toggleAlwaysOnTop, checked: topChecked },
         { type: 'separator' },
-        { role: 'about', label: 'About' },
-        { type: 'separator' },
-        { label: 'Appearance', submenu: subMenu, click: subMenuClick },
+        { label: 'Appearance', submenu: appearanceSubMenu, click: subMenuClick },
         { label: 'Change hotkey', click: changeHotkeyClick },
         { type: 'separator' },
-        { label: 'Quit', click: confirmExit }
+        { role: 'about', label: 'About' },
+        { label: 'Quit', click: confirmExit, accelerator: 'CommandOrControl+Q' }
     ]);
     tray.removeAllListeners('right-click');
     tray.on('right-click', () => {
@@ -731,15 +817,11 @@ function toggleAlwaysOnTop(event) {
     ipcRenderer.invoke('alwaysOnTop', String(event.checked));
 }
 
-async function helpMessage() {
-    await dialog.showMessageBox({ type: 'info', title: 'Howdy!', message: 'Thanks for using this program!\nAfter pairing with an Apple TV (one time process), you will see the remote layout.\n\nEvery button is mapped to the keyboard, press and hold the "Option" key to see which key does what.\n\n To open this program, press Command+Shift+R (pressing this again will close it). Also right-clicking the icon in the menu will show additional options.' })
-}
 
 function timeoutAsync(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Modify the init function to handle remote initialization
 async function init() {
     if (!initializeRemote()) {
         console.log('Remote not ready, retrying in 100ms...');
@@ -752,9 +834,8 @@ async function init() {
     $("#exitLink").on('click', () => {
         $("#exitLink").blur();
         setTimeout(() => {
-                confirmExit();
-            }, 1)
-            //electron.remote.app.quit();
+            confirmExit();
+        }, 1)
     })
     $("#cancelPairing").on('click', () => {
         console.log('cancelling');
@@ -773,7 +854,6 @@ async function init() {
     }
     if (localStorage.getItem('firstRun') != 'false') {
         localStorage.setItem('firstRun', 'false');
-        await helpMessage();
         mb.showWindow();
     }
 
@@ -793,12 +873,7 @@ function hideAppMenus() {
 
 async function checkEnv() {
     var isProd = await ipcRenderer.invoke('isProduction')
-
     if (isProd) return hideAppMenus();
-
-    // dev environment
-    //remote.getCurrentWindow().webContents.toggleDevTools({ mode: 'detach' });
-
 }
 
 function themeUpdated() {

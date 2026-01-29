@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
 <html>
 
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ATV Remote</title>
     <link rel="stylesheet" href="css/loaders.css">
@@ -17,33 +17,20 @@
     </script>
     <script src="js/tippy-headless.umd.min.js"></script>
     <script src="js/loader.js"></script>
+</head>
 
+<body>
+        <!-- Top bar (hidden, preserving exitLink for JS compatibility) -->
+        <button id="exitLink" style="display:none"></button>
 
-    <body>
-        <div class="pure-g">
-            <div class="pure-u-1-2">
-                <div id="alwaysOnTopWrapper">
-                    <span class="keyTextAlt">H - hide window</span>
-                </div>
-            </div>
-            <div class="pure-u-1-2">
-                <div id="exitLinkWrapper">
-                    <button id="exitLink" class="simpleButton"><span class="keyText">Quit</span><span class="keyTextAlt">Q (3x)</span></button>
-                </div>
-            </div>
-        </div>
+        <!-- Header -->
         <div class="center" id="keyboardButtonDiv">
             <div class="topText">
-                <span id="topTextHeader">ATV Remote</span>
+                <span id="topTextHeader">ATV Remote<span id="connectionDot" class="connection-dot"></span></span>
             </div>
-                <div id="topTextKBLink">
-                    <div onclick="openKeyboardClick(event)">
-                        <span class="keyTextAlt">K</span>
-                        <span class="keyText">Open Keyboard</span>
-                    </div>
-                </div>    
-            
-            <div id="initText"> 
+            <div id="topTextKBLink" style="display:none"></div>
+
+            <div id="initText">
                 <p>If this is the first time this program has started, please be patient. It may take up to five minutes to get set up.</p>
                 <p>The Python library <strong>pyatv</strong> is being installed in the directory:</p>
                 <p><span id="workingPathSpan"></span></p>
@@ -54,14 +41,14 @@
                 </div>
             </div>
         </div>
-        <div id="main">
 
+        <div id="main">
+            <!-- Pairing flow -->
             <div id="addNewElements">
                 <div id="loader">
                     <div id="pairingLoader"></div>
                 </div>
                 <div id="pairingElements">
-
                     <div id="results">
                         <label for="atv_picker">Select a device below to start pairing. You only need to do this once.</label>
                         <select id="atv_picker"></select>
@@ -70,111 +57,95 @@
                         <label for="pairCode">Enter the 4 digit code here. This will be displayed on the device you selected.<br><span style="font-size:0.8em">Pairing <span id="pairProtocolName">AirPort</span> credentials (pairing step <span id="pairStepNum">1</span> of 2)</span>
                         <input id="pairCode" type="text" style="text-align: center" maxlength="4" />
                     </label><button onclick="javascript:;" class="simpleButton" id="pairButton">Submit</button>
-                    
                     </div>
                     <button id="cancelPairing" class="simpleButton"><span class="keyText">Cancel</span><span class="keyTextAlt">Cancel</span></button>
                 </div>
             </div>
+
+            <!-- Remote controls -->
             <div id="runningElements">
-
                 <div id="keyMapElement"></div>
-                <div class="pure-g">
-                    <div class="pure-u-1 pure-u-md-1-4"></div>
-                    <div class="pure-u-1 pure-u-md-1-2">
-                        <table class="pythonError">
-                            <tr>
-                                <td></td>
-                                <td><span class="pythonErrorHeader">Python not found</span></td>
-                                <td></td>
-                            </tr>
-                            <tr>
-                                <td></td>
-                                <td>You must install Python to use this program. Visit python.org to download Python, and make sure to select the option to add Python to the path.</td>
-                                <td></td>
-                            </tr>
-                        </table>
-                        <table class="directionTable">
-                            <tr>
-                                <td>
-                                    <div data-key="volume_down" data-tippy-content="Lower Volume" class=" directionCircle volumeKeys"><span class='keyText'><i class="fas fa-volume-down"></i></span><span class='keyTextAlt'>-, _</span></div>
-                                </td>
-                                <td>
-                                    <div data-key="up" data-tippy-content="Up arrow" class="directionArrows directionCircle"><span class='keyText'><i class="fas fa-arrow-up"></i></span><span class='keyTextAlt'>Up</span></div>
-                                </td>
-                                <td>
-                                    <div data-key="volume_up" data-tippy-content="Raise Volume" class=" directionCircle volumeKeys"><span class='keyText'><i class="fas fa-volume-up"></i></span><span class='keyTextAlt'>+, =</span></div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <div data-key="left" class="directionArrows directionCircle"><span class='keyText'><i class="fas fa-arrow-left"></i></span><span class='keyTextAlt'>Left</span></div>
-                                </td>
-                                <td>
-                                    <div data-key="select" class="selectArrow directionArrows directionCircle"><span class='keyText'>Select</span><span class='keyTextAlt'>Enter</span></div>
-                                </td>
-                                <td>
-                                    <div data-key="right" class="directionArrows directionCircle"><span class='keyText'><i class="fas fa-arrow-right"></i></span><span class='keyTextAlt'>Right</span></div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <div data-key="skip_backward" class="directionCircle"><span class='keyText'>Prev</span><span class='keyTextAlt'>P, [</span></div>
-                                </td>
-                                <td>
-                                    <div data-key="down" class="directionArrows directionCircle"><span class='keyText'><i class="fas fa-arrow-down"></i></span><span class='keyTextAlt'>Down</span></div>
-                                </td>
-                                <td>
-                                    <div data-key="skip_forward" class="directionCircle"><span class='keyText'>Next</span><span class='keyTextAlt'>N, ]</span></div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
 
-                                </td>
-                                <td>
+                <table class="pythonError">
+                    <tr>
+                        <td><span class="pythonErrorHeader">Python not found</span></td>
+                    </tr>
+                    <tr>
+                        <td>You must install Python to use this program. Visit python.org to download Python, and make sure to select the option to add Python to the path.</td>
+                    </tr>
+                </table>
 
-                                </td>
-                                <td>
-
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <div class="directionCircle" data-key="play_pause"><span class='keyText'>Play</span><span class='keyTextAlt'>Space</span></div>
-                                </td>
-                                <td>
-                                    <div class="directionCircle menuButton" data-key="menu"><span class='keyText'>Menu</span><span class='keyTextAlt'>Esc, <i class="fas fa-backspace"></i></span></div>
-                                </td>
-                                <td>
-                                    <div class="directionCircle" data-key="home"><span class='keyText'>TV</span><span class='keyTextAlt'>T, L</span></div>
-                                </td>
-                            </tr>
-                        </table>
-
+                <!-- Remote body -->
+                <div class="remote-body">
+                    <!-- Inline text input (shown when ATV has text field focused) -->
+                    <div id="inline-keyboard" style="display:none">
+                        <input type="text" id="inlineTextInput" class="large-text-input" placeholder="Type to search...">
+                        <span class="inline-kb-hint">Text input active on Apple TV</span>
                     </div>
-                    <div class="pure-u-1 pure-u-md-1-4"></div>
+                    <div id="companion-hint" class="companion-hint" style="display:none">
+                        <i class="fas fa-keyboard"></i> Keyboard auto-activates with text fields
+                    </div>
 
-                    <div class="pure-u-1-12"></div>
-                    <div class="pure-u-5-6"></div>
-                    <div class="pure-u-1-12"></div>
+                    <!-- Swipeable touchpad -->
+                    <div id="touchpad">
+                        <div class="touchpad-hint">
+                            <i class="fas fa-hand-pointer"></i>
+                            <span>swipe or tap</span>
+                        </div>
+                        <div class="touchpad-arrow touchpad-arrow-up"><i class="fas fa-chevron-up"></i></div>
+                        <div class="touchpad-arrow touchpad-arrow-down"><i class="fas fa-chevron-down"></i></div>
+                        <div class="touchpad-arrow touchpad-arrow-left"><i class="fas fa-chevron-left"></i></div>
+                        <div class="touchpad-arrow touchpad-arrow-right"><i class="fas fa-chevron-right"></i></div>
+                    </div>
+
+                    <!-- Media controls row -->
+                    <div class="media-row">
+                        <div data-key="menu" data-tippy-content="Menu (Esc) · G for Top Menu" class="directionCircle media-btn"><span class='keyText'><i class="fas fa-arrow-left"></i></span><span class='keyTextAlt'>Esc</span></div>
+                        <div data-key="play_pause" data-tippy-content="Play / Pause" class="directionCircle media-btn play-btn"><span class='keyText'><i class="fas fa-play"></i></span><span class='keyTextAlt'>Space</span></div>
+                        <div data-key="home" data-tippy-content="Home (T) · L for Long-press" class="directionCircle media-btn"><span class='keyText'><i class="fas fa-tv"></i></span><span class='keyTextAlt'>T</span></div>
+                    </div>
+
+                    <!-- Secondary controls row -->
+                    <div class="secondary-row">
+                        <div data-key="skip_backward" data-tippy-content="Skip Back" class="directionCircle secondary-btn"><span class='keyText'><i class="fas fa-backward"></i></span><span class='keyTextAlt'>[</span></div>
+                        <div data-key="volume_down" data-tippy-content="Lower Volume" class="directionCircle secondary-btn vol-btn"><span class='keyText'><i class="fas fa-volume-down"></i></span><span class='keyTextAlt'>-</span></div>
+                        <div data-key="volume_up" data-tippy-content="Raise Volume" class="directionCircle secondary-btn vol-btn"><span class='keyText'><i class="fas fa-volume-up"></i></span><span class='keyTextAlt'>+</span></div>
+                        <div data-key="skip_forward" data-tippy-content="Skip Forward" class="directionCircle secondary-btn"><span class='keyText'><i class="fas fa-forward"></i></span><span class='keyTextAlt'>]</span></div>
+                    </div>
+                    <div class="shortcut-hint">Hold <kbd>&#x2325;</kbd> to show keyboard shortcuts</div>
                 </div>
-
             </div>
 
-
-            <div id="cmdWrapper">
-                <div id="cmdFade"></div>
-            </div>
-
+            <h2 id="statusText"></h2>
         </div>
-        <footer>
-            <div class="footer center">
-                <h2 id="statusText"></h2>
-                <div id="atvDropdownContainer"></div>
-            </div>
-        </footer>
-    </body>
     <script src="web_remote.js"></script>
     <script src="ws_remote.js"></script>
+    <script>
+        tippy('[data-tippy-content]', {
+            delay: [400, 0],
+            placement: 'top',
+            onShow(instance) {
+                instance.popper.style.visibility = 'visible';
+            },
+            onHide(instance) {
+                instance.popper.style.visibility = 'hidden';
+            },
+            render(instance) {
+                const popper = document.createElement('div');
+                popper.className = 'atv-tooltip';
+                popper.style.visibility = 'hidden';
+                const content = document.createElement('div');
+                content.className = 'atv-tooltip-content';
+                content.textContent = instance.props.content;
+                popper.appendChild(content);
+                return { popper, onUpdate(prevProps, nextProps) {
+                    if (prevProps.content !== nextProps.content) {
+                        content.textContent = nextProps.content;
+                    }
+                }};
+            },
+        });
+    </script>
+</body>
 
 </html>
