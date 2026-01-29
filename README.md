@@ -1,45 +1,45 @@
 # ATV Desktop Remote
-A simple menubar app that allows you to control an Apple TV from your desktop
 
- ![What this application looks like when running in either light or dark mode](screenshot_new.png)
+A menubar app to control an Apple TV from your desktop.
 
+<p align="center">
+  <img src="light.png" alt="ATV Remote — Light Mode" width="270"/>
+  &nbsp;&nbsp;
+  <img src="dark.png" alt="ATV Remote — Dark Mode" width="270"/>
+</p>
 
+## Installation
 
-## Installation 
-
-If you have homebrew installed `brew install atv-remote`
-
-macOS and Windows versions can be downloaded from here: https://github.com/bsharper/atv-desktop-remote/releases
-
+macOS and Windows builds are available on the [releases page](https://github.com/bsharper/atv-desktop-remote/releases).
 
 ## Usage
 
- 1. Keys are mapped to the keyboard when the application is open (pressing return or enter on the keyboard for select, delete for Menu, etc).
- 2. Press `Option`, or `Alt` on Windows, to see what the characters are mapped to when the application is open.
- 3. Long press buttons now works to simulate long presses on the remote
- 
- <p align="center">
-  <img src="buttonpress.gif" alt="long press button animation" width="200"/>
-</p>
- 
- 
- 
- ## Running
+- The app runs in the menubar — click the remote icon to open, right-click for options.
+- Use the **touchpad** to swipe or tap, just like a real Apple TV remote.
+- **Long-press** any button to simulate a long press on the remote.
+- Hold **Option** (or **Alt** on Windows) to reveal keyboard shortcuts.
+- Press `Cmd+Shift+R` to open the app from anywhere (`Win+Shift+R` on Windows).
 
- 1. Run `npm install` (`yarn` and `pnpm` should also work)
- 2. Run `npm start`
- 3. The application runs in the menubar. Look for a tiny remote icon and click on it. Right-click for more options.
- 4. The first time the app runs it will need to pair with an Apple TV. You can pair with more than one.
- 5. Press `Cmd+Shift+R` to open the application from anywhere. On Windows its `Win+Shift+R`
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Arrow keys | Navigate |
+| Enter | Select |
+| Space | Play / Pause |
+| Esc / Backspace | Menu |
+| T | Home (TV) |
+| L | Long-press Home |
+| G | Top Menu |
+| [ / ] | Skip backward / forward |
+| + / - | Volume up / down |
+
+## Running from Source
+
+1. `pnpm install` 
+2. `pnpm start`
+3. The first time the app runs it will pair with an Apple TV. You can pair with more than one device.
 
 ## Building
 
-1. `electron-builder` is used to create a standalone application.
-
-## Notes
-
-This is cobbled together from a few projects I've worked on. It works well enough for me for daily use, so I figured others might like it. 
-
-This project is built using [pyatv.](https://pyatv.dev/)
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/brianharper)
+`electron-builder` is used to create a standalone application.
