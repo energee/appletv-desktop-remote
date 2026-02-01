@@ -8,12 +8,11 @@ const util = require('util');
 var secondWindow;
 process.env['MYPATH'] = path.join(process.env.APPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + "/.local/share"), "ATV Remote");
 const lodash = _ = require('./js/lodash.min');
-const server_runner = require('./server_runner')
+const ATVService = require('./atv_service');
 const fs = require('fs');
-server_runner.startServer();
+const atvService = new ATVService();
 
-
-global["server_runner"] = server_runner;
+global["atvService"] = atvService;
 
 const preloadWindow = true;
 const readyEvent = preloadWindow ? "ready" : "after-create-window";
@@ -163,7 +162,7 @@ function createWindow() {
             console.log(`ipcDebug: ${arg}`)
         })
         ipcMain.handle('quit', event => {
-            server_runner.stopServer();
+            atvService.destroy();
             app.exit()
         });
         ipcMain.handle('alwaysOnTop', (event, arg) => {
@@ -184,11 +183,6 @@ function createWindow() {
         ipcMain.handle('isProduction', (event) => {
             return (!process.defaultApp);
         });
-        ipcMain.handle('isWSRunning', (event, arg) => {
-            console.log('isWSRunning');
-            if (server_runner.isServerRunning()) win.webContents.send('wsserver_started')
-        })
-        
         ipcMain.handle('closeInputOpenRemote', (event, arg) => {
             console.log('closeInputOpenRemote');
             showWindow();
@@ -198,38 +192,56 @@ function createWindow() {
             secondWindow.show();
             secondWindow.webContents.send('openInputWindow');
         });
-        ipcMain.handle('current-text', (event, arg) => {
-            console.log('current-text', arg);
-            secondWindow.webContents.send('current-text', arg);
+        // --- ATV Service IPC Handlers ---
+        ipcMain.handle('atv:scan', async () => {
+            return await atvService.scan();
         });
-        ipcMain.handle('kbfocus-status', (event, arg) => {
-            secondWindow.webContents.send('kbfocus-status', arg);
-            kbHasFocus = arg;
-        })
-        ipcMain.handle('kbfocus', () => {
-            win.webContents.send('kbfocus');
-        })
+
+        ipcMain.handle('atv:startPair', async (event, deviceLabel) => {
+            await atvService.startPair(deviceLabel);
+        });
+
+        ipcMain.handle('atv:finishPair', async (event, pin) => {
+            return await atvService.finishPair(pin);
+        });
+
+        ipcMain.handle('atv:connect', async (event, creds) => {
+            await atvService.connect(creds);
+        });
+
+        ipcMain.handle('atv:disconnect', async () => {
+            await atvService.disconnect();
+        });
+
+        ipcMain.handle('atv:sendKey', async (event, key, action) => {
+            await atvService.sendKey(key, action);
+        });
+
+        ipcMain.handle('atv:isConnected', () => {
+            return atvService.isConnected();
+        });
+
+        // Forward ATVService events to renderer
+        atvService.on('connected', () => {
+            if (win) win.webContents.send('atv:connected');
+        });
+        atvService.on('connection-failure', () => {
+            if (win) win.webContents.send('atv:connection-failure');
+        });
+        atvService.on('connection-lost', () => {
+            if (win) win.webContents.send('atv:connection-lost');
+        });
+        atvService.on('disconnected', () => {
+            if (win) win.webContents.send('atv:disconnected');
+        });
+        atvService.on('now-playing', (info) => {
+            if (win) win.webContents.send('atv:now-playing', info);
+        });
 
         powerMonitor.addListener('resume', event => {
             win.webContents.send('powerResume');
         })
 
-        win.on('ready-to-show', () => {
-            console.log('ready to show')
-            if (server_runner.isServerRunning()) {
-                win.webContents.send("wsserver_started")
-            }
-        })
-
-        if (server_runner.isServerRunning()) {
-            console.log(`server already running`)
-            win.webContents.send("wsserver_started")
-        } else {
-            console.log(`server waiting for event`)
-            server_runner.server_events.on("started", () => {
-                win.webContents.send("wsserver_started")
-            })
-        }
     })
 }
 
@@ -352,12 +364,6 @@ function registerHotkeys() {
 
 app.whenReady().then(() => {
 
-    server_runner.testPythonExists().then(r => {
-        console.log(`python exists: ${r}`)
-    }).catch(err => {
-        console.log(`python does not exist: ${err}`)
-    })
-
     createWindow();
     registerHotkeys();
    
@@ -374,7 +380,7 @@ app.whenReady().then(() => {
 })
 
 app.on("before-quit", () => {
-    server_runner.stopServer();
+    atvService.destroy();
 })
 
 app.on('window-all-closed', () => {
