@@ -37,7 +37,9 @@ console.log = function() {
 
 const gotTheLock = app.requestSingleInstanceLock()
 
+
 if (!gotTheLock) {
+
     app.quit()
 } else {
     app.on('second-instance', (event, commandLine, workingDirectory) => {
@@ -108,7 +110,9 @@ function createWindow() {
         }
     })
     global['MB'] = mb;
+
     mb.on(readyEvent, () => {
+
         require("@electron/remote/main").enable(mb.window.webContents);
         win = mb.window;
        
@@ -363,7 +367,6 @@ function registerHotkeys() {
 }
 
 app.whenReady().then(() => {
-
     createWindow();
     registerHotkeys();
    

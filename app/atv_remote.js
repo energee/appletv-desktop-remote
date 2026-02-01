@@ -134,14 +134,7 @@ function ws_init() {
     });
 }
 
-function ws_server_started() {
-    console.log('ws_server_started called (no-op in IPC mode)');
-}
-
-function incReady() {
-    // Simplified: just call ws_init when DOM is ready
-}
-
 $(function() {
+    initIPC();
     ws_init();
 });

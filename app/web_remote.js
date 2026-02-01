@@ -868,6 +868,4 @@ function addThemeListener() {
     }
 }
 
-$(function() {
-    initIPC();
-})
+// initIPC() and ws_init() are called from atv_remote.js on DOM ready
