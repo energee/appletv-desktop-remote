@@ -46,15 +46,20 @@
                 </div>
                 <div id="pairingElements">
                     <div id="results">
-                        <label for="atv_picker">Select a device below to start pairing. You only need to do this once.</label>
-                        <select id="atv_picker"></select>
+                        <div class="pair-section">
+                            <p class="pair-label">Select a device to pair</p>
+                            <select id="atv_picker"></select>
+                        </div>
                     </div>
                     <div id="pairCodeElements">
-                        <label for="pairCode">Enter the 4 digit code here. This will be displayed on the device you selected.<br><span style="font-size:0.8em">Pairing <span id="pairProtocolName">AirPort</span> credentials (pairing step <span id="pairStepNum">1</span> of 2)</span>
-                        <input id="pairCode" type="text" style="text-align: center" maxlength="4" />
-                    </label><button onclick="javascript:;" class="simpleButton" id="pairButton">Submit</button>
+                        <div class="pair-section">
+                            <div class="pair-step-badge">Step <span id="pairStepNum">1</span> of 2 · <span id="pairProtocolName">AirPlay</span></div>
+                            <p class="pair-label">Enter the code shown on your Apple TV</p>
+                            <input id="pairCode" type="text" class="pair-code-input" maxlength="4" placeholder="0000" inputmode="numeric" autocomplete="off" />
+                            <button id="pairButton" class="pair-submit-btn">Continue</button>
+                        </div>
                     </div>
-                    <button id="cancelPairing" class="simpleButton"><span class="keyText">Cancel</span><span class="keyTextAlt">Cancel</span></button>
+                    <button id="cancelPairing" class="pair-cancel-btn">Cancel</button>
                 </div>
             </div>
 

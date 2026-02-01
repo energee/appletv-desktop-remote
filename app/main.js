@@ -115,8 +115,9 @@ function createWindow() {
 
         require("@electron/remote/main").enable(mb.window.webContents);
         win = mb.window;
-       
+
         var webContents = win.webContents;
+
         createInputWindow()
        
 
@@ -202,7 +203,12 @@ function createWindow() {
         });
 
         ipcMain.handle('atv:startPair', async (event, deviceLabel) => {
-            await atvService.startPair(deviceLabel);
+            try {
+                await atvService.startPair(deviceLabel);
+            } catch (err) {
+                console.log('startPair error:', err.message);
+                throw err;
+            }
         });
 
         ipcMain.handle('atv:finishPair', async (event, pin) => {
@@ -273,15 +279,6 @@ function hideWindow() {
         // console.log(err);
         // not sure if this affects windows like app.show does.
     }
-}
-
-function getWorkingPath() {
-    var rp = process.resourcesPath;
-    if (!rp && process.argv.length > 1) rp = path.resolve(process.argv[1]);
-    if (!app.isPackaged) {
-        rp = path.resolve(`${path.dirname(process.argv[1])}/../atv_py_env`)
-    }
-    return rp
 }
 
 function unhandleVolume() {
@@ -377,8 +374,7 @@ app.whenReady().then(() => {
         version: version,
         credits: "Ted Slesinski",
         copyright: "\u00A9 2026",
-        website: "https://github.com/bsharper",
-        iconPath: "./images/full.png"
+        website: "https://github.com/energee"
     });
 })
 

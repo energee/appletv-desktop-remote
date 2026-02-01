@@ -238,27 +238,110 @@ a:link, a:visited, a:hover, a:active {
 
 #pairingElements {
     display: none;
-    margin: 12px;
+    padding: 0 20px 20px;
 }
 
-#pairCode:input[type="text"] {
-    font-size: 24px;
-    min-width: 200px;
+.pair-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.pair-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
     text-align: center;
+    line-height: 1.4;
 }
 
-#pairButton {
-    float: right;
+.pair-step-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+}
+
+.pair-code-input {
+    width: 140px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    font-size: 32px;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-align: center;
+    color: var(--text-primary);
+    background: var(--surface);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 10px 8px;
+    outline: none;
+    transition: border-color var(--transition-med), box-shadow var(--transition-med);
+    -webkit-appearance: none;
+}
+
+.pair-code-input::placeholder {
+    color: var(--text-tertiary);
+    opacity: 0.4;
+}
+
+.pair-code-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glass);
+    caret-color: transparent;
+}
+
+.pair-submit-btn {
+    width: 100%;
+    max-width: 200px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    background: #0a84ff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.pair-submit-btn:hover {
+    background: #409cff;
+}
+
+.pair-submit-btn:active {
+    transform: scale(0.97);
+    background: #0071e3;
+}
+
+.darkMode .pair-submit-btn {
+    background: #0a84ff;
+}
+
+.darkMode .pair-submit-btn:hover {
+    background: #409cff;
+}
+
+.pair-cancel-btn {
+    display: block;
+    margin: 12px auto 0;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 12px;
+    transition: color var(--transition-fast);
+}
+
+.pair-cancel-btn:hover {
+    color: var(--text-secondary);
 }
 
 #results {
     text-align: center;
-}
-
-#results label,
-#pairCodeElements label {
-    font-size: 1.3em;
-    color: var(--text-secondary);
 }
 
 #pairCodeElements {
@@ -267,12 +350,6 @@ a:link, a:visited, a:hover, a:active {
 
 #loader {
     display: none;
-}
-
-#cancelPairing {
-    position: absolute;
-    bottom: 50px;
-    right: 0;
 }
 
 #atv_picker {

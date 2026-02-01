@@ -1,5 +1,6 @@
-const { ipcRenderer } = require('electron');
-const EventEmitter = require('events');
+// ipcRenderer is already declared in web_remote.js (var ipcRenderer = electron.ipcRenderer)
+// Just ensure electron is required for this file's needs
+var EventEmitter = require('events');
 
 var atv_connected = false;
 var connection_failure = false;
@@ -81,12 +82,20 @@ function ws_startPair(dev) {
     });
 }
 
-// Single-step pairing (replaces ws_finishPair1 + ws_finishPair2)
+// Two-phase pairing: AirPlay first, then Companion
 async function ws_finishPair1(code) {
     connection_failure = false;
     try {
         var result = await ipcRenderer.invoke('atv:finishPair', code);
-        // result = { credentials, identifier }
+        if (result.needsCompanionPin) {
+            // AirPlay paired, now need companion PIN
+            console.log('AirPlay paired, waiting for companion PIN...');
+            $("#pairCode").val("");
+            $("#pairStepNum").text("2");
+            $("#pairProtocolName").text("Companion");
+            return;
+        }
+        // Both pairings complete — save and connect
         saveRemote(ws_pairDevice, result);
         localStorage.setItem('atvcreds', JSON.stringify(result));
         connectToATV();

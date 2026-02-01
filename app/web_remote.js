@@ -757,6 +757,14 @@ function handleContextMenu() {
             startScan();
         }
     });
+    deviceItems.push({
+        label: 'Re-pair current device',
+        click: function() {
+            localStorage.removeItem('atvcreds');
+            mb.showWindow();
+            startScan();
+        }
+    });
 
     const devicesSubMenu = Menu.buildFromTemplate(deviceItems);
 
@@ -828,10 +836,12 @@ async function init() {
         mb.showWindow();
     }
 
+    console.log('init: creds=', JSON.stringify(creds));
     if (creds && creds.credentials && creds.identifier) {
         atv_credentials = creds;
         connectToATV();
     } else {
+        console.log('init: no valid creds, starting scan');
         startScan();
     }
 }

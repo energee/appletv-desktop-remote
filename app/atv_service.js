@@ -15,6 +15,8 @@ class ATVService extends EventEmitter {
     this.device = null;
     this.scanResults = {};
     this.pairingSession = null;
+    this.pairingPhase = null; // 'airplay' or 'companion'
+    this.airplayCreds = null;
     this.reconnecting = false;
   }
 
@@ -34,21 +36,47 @@ class ATVService extends EventEmitter {
     const { AppleTV } = await getLib();
     const discoveredDevice = this.scanResults[deviceLabel];
     if (!discoveredDevice) throw new Error(`Device not found: ${deviceLabel}`);
+    console.log(`startPair: device=${discoveredDevice.name}, companionPort=${discoveredDevice.companionPort}, address=${discoveredDevice.address}`);
     this.device = new AppleTV(discoveredDevice);
+    // Phase 1: AirPlay pairing
+    this.pairingPhase = 'airplay';
     this.pairingSession = await this.device.startPairing();
+    console.log('startPair: AirPlay pairing started, PIN should appear on TV');
   }
 
   async finishPair(pin) {
     if (!this.pairingSession) throw new Error('No active pairing session');
     const { Credentials } = await getLib();
-    const hapCreds = await this.pairingSession.finish(pin);
-    const credentials = new Credentials(hapCreds);
-    const serialized = credentials.serialize();
-    this.pairingSession = null;
-    return {
-      credentials: serialized,
-      identifier: this.device.deviceId || 'unknown'
-    };
+
+    if (this.pairingPhase === 'airplay') {
+      // Complete AirPlay pairing
+      const airplayCreds = await this.pairingSession.finish(pin);
+      this.airplayCreds = airplayCreds;
+      console.log('finishPair: AirPlay pairing complete, starting companion pairing...');
+
+      // Phase 2: Companion pairing
+      this.pairingPhase = 'companion';
+      this.pairingSession = await this.device.startCompanionPairing();
+      console.log('finishPair: Companion pairing started, PIN should appear on TV');
+
+      // Signal that we need another PIN
+      return { needsCompanionPin: true };
+    } else if (this.pairingPhase === 'companion') {
+      // Complete companion pairing
+      const companionCreds = await this.pairingSession.finish(pin);
+      console.log('finishPair: Companion pairing complete');
+
+      const credentials = new Credentials(this.airplayCreds, companionCreds);
+      const serialized = credentials.serialize();
+      this.pairingSession = null;
+      this.pairingPhase = null;
+      this.airplayCreds = null;
+
+      return {
+        credentials: serialized,
+        identifier: this.device.deviceId || 'unknown'
+      };
+    }
   }
 
   async connect(credsData) {
@@ -66,8 +94,20 @@ class ATVService extends EventEmitter {
     }
 
     try {
+      // Connect AirPlay (MRP) for key commands
       await this.device.connect(credentials);
       this._setupListeners();
+
+      // Also connect companion if we have those creds
+      if (credentials.companionCredentials && this.device.companionPort) {
+        try {
+          await this.device.connectCompanion(credentials.companionCredentials);
+          console.log('Companion connected');
+        } catch (err) {
+          console.error('Companion connect failed (non-fatal):', err.message);
+        }
+      }
+
       this.emit('connected');
     } catch (err) {
       this.emit('connection-failure');
@@ -90,6 +130,14 @@ class ATVService extends EventEmitter {
 
     this.device.on('nowPlaying', (info) => {
       this.emit('now-playing', info);
+    });
+
+    this.device.on('companionClose', () => {
+      console.log('Companion connection closed');
+    });
+
+    this.device.on('companionError', (err) => {
+      console.error('Companion error:', err);
     });
   }
 
@@ -139,6 +187,8 @@ class ATVService extends EventEmitter {
     await this.disconnect();
     this.scanResults = {};
     this.pairingSession = null;
+    this.pairingPhase = null;
+    this.airplayCreds = null;
     this.removeAllListeners();
   }
 }
