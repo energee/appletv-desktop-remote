@@ -317,9 +317,7 @@ async function sendCommand(k, shifted = false) {
     }
 }
 
-function getWorkingPath() {
-    return path.join(process.env.APPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + "/.local/share"), "ATV Remote");
-}
+
 
 function isConnected() {
     return atv_connected;
@@ -862,9 +860,6 @@ function addThemeListener() {
     }
 }
 
-$(function() {    
+$(function() {
     initIPC();
-    var wp = getWorkingPath();
-    $("#workingPathSpan").html(`<strong>${wp}</strong>`);
-    ipcRenderer.invoke('isWSRunning');
 })
