@@ -16,7 +16,6 @@
         }
     },
     "scripts": {
-        "embed": "node build/create_python_embed.js --overwrite",
         "start": "electron app",
         "postinstall": "electron-builder install-app-deps",
         "build": "npx electron-builder -m",
