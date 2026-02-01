@@ -106,6 +106,28 @@ function ws_is_connected() {
 // --- Initialization ---
 function ws_init() {
     console.log('atv_remote init');
+
+    // Migrate from pyatv credentials format
+    var existingCreds = localStorage.getItem('atvcreds');
+    if (existingCreds) {
+        try {
+            var parsed = JSON.parse(existingCreds);
+            if (parsed.credentials && typeof parsed.credentials === 'string') {
+                try {
+                    JSON.parse(parsed.credentials);
+                    // Parses as JSON — new format, keep it
+                } catch {
+                    // Not JSON — old pyatv format, clear it
+                    console.log('Clearing incompatible pyatv credentials');
+                    localStorage.removeItem('atvcreds');
+                    localStorage.removeItem('remote_credentials');
+                }
+            }
+        } catch {
+            localStorage.removeItem('atvcreds');
+        }
+    }
+
     init().then(() => {
         console.log('init complete');
     });
