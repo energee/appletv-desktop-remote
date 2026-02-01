@@ -17,6 +17,8 @@ function initializeRemote() {
         MenuItem = remote.MenuItem;
         mb = remote.getGlobal('MB');
         electron.remote = remote;
+        // Ensure menubar tray is ready before proceeding
+        if (!mb || !mb.tray) return false;
         return true;
     } catch (err) {
         console.error('Failed to initialize remote:', err);
@@ -616,9 +618,15 @@ async function connectToATV() {
 
     $("#pairingElements").hide();
 
-    await ws_connect(atv_credentials);
-    createATVDropdown();
-    showKeyMap();
+    try {
+        await ws_connect(atv_credentials);
+        createATVDropdown();
+        showKeyMap();
+    } catch (err) {
+        console.error('Connection failed:', err);
+        updateConnectionDot("disconnected");
+        startScan();
+    }
     connecting = false;
 }
 

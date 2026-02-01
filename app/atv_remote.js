@@ -40,9 +40,10 @@ async function ws_startScan() {
     connection_failure = false;
     try {
         var results = await ipcRenderer.invoke('atv:scan');
-        createDropdown(results);
+        createDropdown(results || []);
     } catch (err) {
         console.error('Scan failed:', err);
+        createDropdown([]);
     }
 }
 

@@ -20,10 +20,7 @@ class ATVService extends EventEmitter {
 
   async scan(timeout = 5000) {
     const { scan } = await getLib();
-    const devices = await scan({
-      timeout,
-      filter: (d) => d.model && d.model.toLowerCase().includes('tv')
-    });
+    const devices = await scan({ timeout });
     this.scanResults = {};
     const results = devices.map(d => {
       const label = `${d.name} (${d.address})`;
