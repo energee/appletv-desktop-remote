@@ -130,16 +130,9 @@ function initIPC() {
         console.log(`sendCommand from main: ${key}`)
         sendCommand(key);
     })
-    ipcRenderer.on('kbfocus', () => {
-        sendMessage('kbfocus')
-    })
-    
-    ipcRenderer.on('wsserver_started', () => {
-        ws_server_started();
-    })
-    
     ipcRenderer.on('input-change', (event, data) => {
-        sendMessage("settext", {text: data});
+        // TODO: Re-enable when node-appletv-remote adds text input API
+        // ipcRenderer.invoke('atv:setText', data);
     });
 
     atv_events.on('connected', function(connected) {
@@ -180,7 +173,8 @@ function toggleAltText(tf) {
 
 function showInlineKeyboard() {
     $("#inline-keyboard").show();
-    sendMessage("gettext");
+    // TODO: Re-enable when node-appletv-remote adds text input API
+    // ipcRenderer.invoke('atv:getText');
     $("#inlineTextInput").focus();
 }
 
@@ -253,7 +247,7 @@ function createDropdown(ks) {
     //setStatus("Select a device");
     $("#pairingLoader").html("")
     $("#pairStepNum").html("1");
-    $("#pairProtocolName").html("AirPort");
+    $("#pairProtocolName").html("Apple TV");
     $("#pairingElements").show();
     var ar = ks.map(el => {
         return {
@@ -357,11 +351,7 @@ function startPairing(dev) {
 function submitCode() {
     var code = $("#pairCode").val();
     $("#pairCode").val("");
-    if ($("#pairStepNum").text() == "1") {
-        ws_finishPair1(code)
-    } else {
-        ws_finishPair2(code)
-    }
+    ws_finishPair1(code);
 }
 
 function showKeyboardHint() {
@@ -578,34 +568,9 @@ function showKeyMap() {
         }
     });
 
-    var creds = _getCreds();
-    var hasCompanion = Object.keys(creds).indexOf("Companion") > -1;
-    if (hasCompanion) {
-        $("#topTextHeader").hide();
-        // Show hint about auto-keyboard, fade out after a few seconds
-        var companionHintShown = parseInt(localStorage.getItem('companionHintCount') || "0");
-        if (companionHintShown < 5) {
-            localStorage.setItem('companionHintCount', String(companionHintShown + 1));
-            $("#companion-hint").fadeIn(300).delay(5000).fadeOut(500);
-        }
-        // Poll kbfocus every 2s to detect when ATV enters a text input
-        if (window._kbfocusPoll) clearInterval(window._kbfocusPoll);
-        window._kbfocusPoll = setInterval(function() {
-            if (isConnected()) sendMessage('kbfocus');
-        }, 2000);
-
-        // Debounced input handler — send text to ATV as user types
-        var _inlineTextDebounce = null;
-        $("#inlineTextInput").off('input').on('input', function() {
-            var val = $(this).val();
-            if (_inlineTextDebounce) clearTimeout(_inlineTextDebounce);
-            _inlineTextDebounce = setTimeout(function() {
-                sendMessage("settext", {text: val});
-            }, 100);
-        });
-    } else {
-        $("#topTextHeader").show();
-    }
+    // Keyboard focus detection and inline text input require Companion protocol
+    // support in node-appletv-remote. TODO: Re-enable when library adds these APIs.
+    $("#topTextHeader").hide();
 
     showKeyboardHint();
 }
