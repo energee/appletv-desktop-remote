@@ -1,0 +1,21 @@
+{
+    "name": "atv-mac-remote",
+    "version": "1.4.3",
+    "description": "ATV Remote",
+    "productName": "ATV Remote",
+    "scripts": {
+        "start": "cd .. && npx electron app/main.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "main": "main.js",
+    "dependencies": {
+        "@electron/remote": "^2.1.2",
+        "bluebird": "^3.7.2",
+        "electron-positioner": "^4.1.0",
+        "jquery": "^3.5.1",
+        "menubar": "^9.0.2",
+        "ws": "^8.3.0"
+    }
+}
