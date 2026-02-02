@@ -36,10 +36,27 @@ macOS and Windows builds are available on the [releases page](https://github.com
 
 ## Running from Source
 
-1. `pnpm install` 
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) v20+
+- [pnpm](https://pnpm.io/)
+
+### Setup
+
+1. `pnpm install`
 2. `pnpm start`
 3. The first time the app runs it will pair with an Apple TV. You can pair with more than one device.
 
 ## Building
 
-`electron-builder` is used to create a standalone application.
+`electron-builder` is used to create standalone applications.
+
+| Command | Target |
+|---------|--------|
+| `pnpm build` | macOS (current arch) |
+| `pnpm build-arm` | macOS (ARM64) |
+| `pnpm build:win` | Windows |
+
+## License
+
+This project is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
