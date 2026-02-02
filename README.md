@@ -3,9 +3,9 @@
 A menubar app to control an Apple TV from your desktop. Runs purely in Node.js using [node-appletv-remote](https://github.com/energee/node-appletv-remote) - no Python environment or pyatv required. Compatible with tvOS 26.2.
 
 <p align="center">
-  <img src="light.png" alt="ATV Remote - Light Mode" width="270"/>
+  <img src="screenshots/light.png" alt="ATV Remote - Light Mode" width="270"/>
   &nbsp;&nbsp;
-  <img src="dark.png" alt="ATV Remote - Dark Mode" width="270"/>
+  <img src="screenshots/dark.png" alt="ATV Remote - Dark Mode" width="270"/>
 </p>
 
 ## Installation
