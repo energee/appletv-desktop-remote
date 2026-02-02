@@ -37,7 +37,7 @@ console._log = console.log;
 console.log = function() {
     let txt = util.format(...[].slice.call(arguments)) + '\n'
     process.stdout.write(txt);
-    if (win && win.webContents) {
+    if (win && !win.isDestroyed() && win.webContents) {
         win.webContents.send('mainLog', txt);
     }
 }
