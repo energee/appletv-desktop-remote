@@ -1,6 +1,6 @@
 {
     "name": "appletv-desktop-remote",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "main": "app/dist/main/main.js",
     "description": "Apple TV Remote",
     "productName": "Apple TV Remote",
