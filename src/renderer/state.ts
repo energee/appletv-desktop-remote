@@ -30,6 +30,15 @@ export function setConnecting(val: boolean): void {
   connecting = val;
 }
 
+export function safeParse<T>(json: string | null, fallback: T): T {
+  if (!json) return fallback;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
 // Electron @electron/remote modules (initialized at runtime via require)
 export let nativeTheme: Electron.NativeTheme | null = null;
 export let remote: typeof import('@electron/remote') | null = null;

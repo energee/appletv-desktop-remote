@@ -3,6 +3,7 @@ import {
   atv_connected,
   atv_events,
   connecting,
+  safeParse,
   setAtvConnected,
   setConnecting,
   setPairDevice,
@@ -68,7 +69,6 @@ function scheduleReconnect(): void {
 function attemptReconnect(): void {
   if (atv_connected || reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
     if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-      console.log('Auto-reconnect: max attempts reached');
       atv_events.emit('reconnect_failed');
     }
     reconnectAttempt = 0;
@@ -77,22 +77,16 @@ function attemptReconnect(): void {
 
   const delay = Math.min(500 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
   reconnectAttempt++;
-  console.log(
-    `Auto-reconnect: attempt ${reconnectAttempt}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`,
-  );
-
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     if (atv_connected) return;
 
     try {
-      const creds = JSON.parse(localStorage.getItem('atvcreds')!);
+      const creds = safeParse(localStorage.getItem('atvcreds'), null);
       if (!creds) return;
       await connectATV(creds);
-      console.log('Auto-reconnect: success');
       reconnectAttempt = 0;
-    } catch (err: unknown) {
-      console.log('Auto-reconnect: failed -', (err as Error).message || err);
+    } catch {
       attemptReconnect();
     }
   }, delay);
@@ -112,16 +106,12 @@ export async function scanDevices(): Promise<void> {
   }
 }
 
-export function sendKey(cmd: string): void {
-  ipcRenderer.invoke('atv:sendKey', cmd).catch((err: Error) => {
-    console.error('sendKey failed:', err);
-  });
+export function sendKey(cmd: string): Promise<void> {
+  return ipcRenderer.invoke('atv:sendKey', cmd);
 }
 
-export function sendKeyAction(cmd: string, taction: string): void {
-  ipcRenderer.invoke('atv:sendKey', cmd, taction).catch((err: Error) => {
-    console.error('sendKey failed:', err);
-  });
+export function sendKeyAction(cmd: string, taction: string): Promise<void> {
+  return ipcRenderer.invoke('atv:sendKey', cmd, taction);
 }
 
 export function connectATV(creds: unknown): Promise<void> {
@@ -148,7 +138,6 @@ export async function finishPair(code: string): Promise<void> {
     const result = await ipcRenderer.invoke('atv:finishPair', code);
     if (result.needsCompanionPin) {
       // AirPlay paired, now need companion PIN
-      console.log('AirPlay paired, waiting for companion PIN...');
       ($('#pairCode') as HTMLInputElement).value = '';
       $('#pairStepNum')!.textContent = '2';
       $('#pairProtocolName')!.textContent = 'Companion';
@@ -164,13 +153,11 @@ export async function finishPair(code: string): Promise<void> {
 }
 
 function saveRemote(name: string, creds: unknown): void {
-  const ar = JSON.parse(localStorage.getItem('remote_credentials') || '{}');
+  const ar = safeParse(localStorage.getItem('remote_credentials'), {} as Record<string, unknown>);
   let c = creds;
   if (typeof c === 'string') c = JSON.parse(c);
   ar[name] = c;
   localStorage.setItem('remote_credentials', JSON.stringify(ar));
 }
 
-export function initRemote(): void {
-  console.log('atv_remote init');
-}
+export function initRemote(): void {}

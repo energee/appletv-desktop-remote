@@ -12,6 +12,7 @@ import {
   remote,
   mb,
   Menu,
+  safeParse,
   setAtvConnected,
   setAtvCredentials,
   setConnecting,
@@ -72,24 +73,30 @@ export function initIPC(): void {
     toggleAltText(true);
   });
 
-  ipcRenderer.on('mainLog', (_event, txt: string) => {
-    console.log('[ main ] %s', txt.substring(0, txt.length - 1));
-  });
-
   ipcRenderer.on('powerResume', () => {
     connectToATV();
   });
 
   ipcRenderer.on('sendCommand', (_event, key: string) => {
-    console.log(`sendCommand from main: ${key}`);
     sendCommand(key);
   });
 
   atv_events.on('connected', function (connected: boolean) {
-    updateConnectionDot(connected ? 'connected' : 'disconnected');
+    if (connected) {
+      updateConnectionDot('connected');
+      setStatus('');
+      $('#statusText')!.style.display = 'none';
+    } else {
+      updateConnectionDot('connecting');
+      setStatus('Reconnecting...');
+    }
   });
   atv_events.on('connection_failure', function () {
     updateConnectionDot('disconnected');
+  });
+  atv_events.on('reconnect_failed', function () {
+    updateConnectionDot('disconnected');
+    setStatus('Connection lost. Right-click to reconnect.');
   });
 }
 
@@ -140,7 +147,6 @@ window.addEventListener('keydown', (e) => {
 
   if (key === 'q') {
     qPresses++;
-    console.log(`qPresses ${qPresses}`);
     if (qPresses === 3) ipcRenderer.invoke('quit');
   } else {
     qPresses = 0;
@@ -213,7 +219,6 @@ function getKeyEl(key: string): Element | undefined {
 }
 
 export async function sendCommand(k: string, shifted = false): Promise<void> {
-  console.log(`sendCommand: ${k}`);
   if (k === 'Pause') k = 'Space';
   let rcmd = keymap[k];
   if ((Object.values(keymap) as string[]).includes(k)) rcmd = k as ATVKeyName;
@@ -224,11 +229,18 @@ export async function sendCommand(k: string, shifted = false): Promise<void> {
       el.classList.remove('invert');
     }, 500);
   }
-  console.log(`Keydown: ${k}, sending command: ${rcmd} (shifted: ${shifted})`);
-  if (shifted) {
-    sendKeyAction(rcmd, 'Hold');
-  } else {
-    sendKey(rcmd);
+  try {
+    if (shifted) {
+      await sendKeyAction(rcmd, 'Hold');
+    } else {
+      await sendKey(rcmd);
+    }
+  } catch {
+    if (el) {
+      el.classList.remove('invert');
+      el.classList.add('error-flash');
+      setTimeout(() => el.classList.remove('error-flash'), 600);
+    }
   }
 }
 
@@ -333,7 +345,6 @@ function showKeyMap(): void {
         } else {
           direction = scrollAccY > 0 ? 'up' : 'down';
         }
-        console.log('[touchpad] SCROLL SWIPE \u2192 ' + direction);
         flashArrow(direction);
         sendCommand(direction, false);
 
@@ -355,7 +366,6 @@ function showKeyMap(): void {
     hideHint();
     clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
     longPressTimer = setTimeout(function () {
-      console.log('[touchpad] long press \u2192 select hold');
       sendCommand('select', true);
       clickStart = null;
     }, 1000);
@@ -372,7 +382,6 @@ function showKeyMap(): void {
     const dist = Math.sqrt(dx * dx + dy * dy);
     const elapsed = Date.now() - clickStart.t;
     if (dist < 15 && elapsed < 300) {
-      console.log('[touchpad] TAP \u2192 select');
       sendCommand('select', false);
     }
     clickStart = null;
@@ -400,7 +409,6 @@ function showKeyMap(): void {
 
         button.classList.add('longpress-triggered');
 
-        console.log(`Long press triggered for: ${key}`);
         sendCommand(key, true);
 
         isLongPressing[key] = false;
@@ -424,7 +432,6 @@ function showKeyMap(): void {
         button.classList.remove('pressing');
 
         if (e.type === 'mouseup') {
-          console.log(`Regular click for: ${key}`);
           sendCommand(key, false);
         }
       }
@@ -437,11 +444,19 @@ function showKeyMap(): void {
   showKeyboardHint();
 }
 
+function getActiveIdentifier(): string | null {
+  const active = safeParse<ATVCredentials | false>(localStorage.getItem('atvcreds'), false);
+  return active ? active.identifier : null;
+}
+
 function getConnectedDeviceName(): string | null {
-  const atvc = localStorage.getItem('atvcreds');
-  if (!atvc) return null;
-  const creds = JSON.parse(localStorage.getItem('remote_credentials') || '{}');
-  const match = Object.entries(creds).find(([, val]) => JSON.stringify(val) === atvc);
+  const activeId = getActiveIdentifier();
+  if (!activeId) return null;
+  const creds = safeParse(localStorage.getItem('remote_credentials'), {} as Record<string, unknown>);
+  const match = Object.entries(creds).find(([, val]) => {
+    const v = val as ATVCredentials;
+    return v && v.identifier === activeId;
+  });
   if (!match) return null;
   return match[0].replace(/\s*\([\d.]+\)$/, '');
 }
@@ -462,7 +477,7 @@ export async function connectToATV(): Promise<void> {
   updateConnectionDot('connecting');
   setStatus('Connecting to ATV...');
   $('#runningElements')!.style.display = '';
-  setAtvCredentials(JSON.parse(localStorage.getItem('atvcreds')!));
+  setAtvCredentials(safeParse(localStorage.getItem('atvcreds'), false as const));
 
   $('#pairingElements')!.style.display = 'none';
 
@@ -507,7 +522,6 @@ function handleDarkMode(): void {
 
     const darkModeEnabled =
       (nativeTheme.shouldUseDarkColors || alwaysUseDarkMode) && !neverUseDarkMode;
-    console.log(`darkModeEnabled: ${darkModeEnabled}`);
     if (darkModeEnabled) {
       document.body.classList.add('darkMode');
     } else {
@@ -519,7 +533,7 @@ function handleDarkMode(): void {
 }
 
 function getCreds(nm?: string): ATVCredentials | Record<string, never> {
-  const creds = JSON.parse(localStorage.getItem('remote_credentials') || '{}');
+  const creds = safeParse(localStorage.getItem('remote_credentials'), {} as Record<string, unknown>);
   const keys = Object.keys(creds);
   if (keys.length === 0) return {};
 
@@ -529,7 +543,6 @@ function getCreds(nm?: string): ATVCredentials | Record<string, never> {
 }
 
 function setAlwaysOnTop(tf: boolean): void {
-  console.log(`setAlwaysOnTop(${tf})`);
   ipcRenderer.invoke('alwaysOnTop', String(tf));
 }
 
@@ -545,7 +558,6 @@ function subMenuClick(event: Electron.MenuItem): void {
   setTimeout(() => {
     handleDarkMode();
   }, 1);
-  console.log(event);
 }
 
 function confirmExit(): void {
@@ -560,14 +572,15 @@ function handleContextMenu(): void {
   const tray = mb.tray;
   const mode = localStorage.getItem('uimode') || 'systemmode';
 
-  const creds = JSON.parse(localStorage.getItem('remote_credentials') || '{}');
+  const creds = safeParse(localStorage.getItem('remote_credentials'), {} as Record<string, unknown>);
   const ks = Object.keys(creds);
-  const atvc = localStorage.getItem('atvcreds');
+  const activeId = getActiveIdentifier();
   const deviceItems: Electron.MenuItemConstructorOptions[] = ks.map(function (k) {
+    const v = creds[k] as ATVCredentials;
     return {
       type: 'checkbox',
       label: k,
-      checked: JSON.stringify(creds[k]) === atvc,
+      checked: !!(v && activeId && v.identifier === activeId),
       click: function () {
         localStorage.setItem('atvcreds', JSON.stringify(creds[k]));
         connectToATV();
@@ -620,7 +633,7 @@ function handleContextMenu(): void {
     },
   ]);
 
-  const topChecked = JSON.parse(localStorage.getItem('alwaysOnTopChecked') || 'false');
+  const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Devices', submenu: devicesSubMenu },
     {
@@ -673,37 +686,34 @@ export async function init(): Promise<void> {
   handleDarkMode();
   handleContextMenu();
   $('#cancelPairing')!.addEventListener('click', () => {
-    console.log('cancelling');
     window.location.reload();
   });
 
-  const checked = JSON.parse(localStorage.getItem('alwaysOnTopChecked') || 'false');
+  const checked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
   if (checked) setAlwaysOnTop(checked);
 
-  let creds: ATVCredentials | false;
-  try {
-    creds = JSON.parse(localStorage.getItem('atvcreds') || 'false');
-  } catch {
-    creds = getCreds();
-    if (creds) localStorage.setItem('atvcreds', JSON.stringify(creds));
+  let creds: ATVCredentials | false = safeParse(localStorage.getItem('atvcreds'), false as const);
+  if (!creds) {
+    const fallback = getCreds();
+    if (fallback && 'credentials' in fallback) {
+      creds = fallback as ATVCredentials;
+      localStorage.setItem('atvcreds', JSON.stringify(creds));
+    }
   }
   if (localStorage.getItem('firstRun') !== 'false') {
     localStorage.setItem('firstRun', 'false');
     mb.showWindow();
   }
 
-  console.log('init: creds=', JSON.stringify(creds));
   if (creds && creds.credentials && creds.identifier) {
     setAtvCredentials(creds);
     connectToATV();
   } else {
-    console.log('init: no valid creds, starting scan');
     startScan();
   }
 }
 
 function themeUpdated(): void {
-  console.log('theme style updated');
   handleDarkMode();
 }
 
@@ -716,7 +726,6 @@ function addThemeListener(): void {
       nativeTheme.on('updated', themeUpdated);
     }
   } catch (err) {
-    console.log('nativeTheme not ready yet');
     setTimeout(() => {
       tryThemeAddCount++;
       if (tryThemeAddCount < 10) addThemeListener();
