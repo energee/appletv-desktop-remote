@@ -1,6 +1,6 @@
 {
     "main": "dist/main/main.js",
     "dependencies": {
-        "node-appletv-remote": "latest"
+        "node-appletv-remote": "^0.3.2"
     }
 }
