@@ -26,9 +26,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Embed Python scripts
-        run: pnpm run embed
-
       - name: Build macOS (Intel)
         run: pnpm exec electron-builder -m --publish never
         env:
@@ -63,9 +60,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-
-      - name: Embed Python scripts
-        run: pnpm run embed
 
       - name: Build Windows
         run: pnpm exec electron-builder -w --publish never
