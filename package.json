@@ -8,6 +8,10 @@
         "productName": "ATV Remote",
         "appId": "com.electron.atvMacRemote",
         "icon": "app/images/full.png",
+        "files": [
+            "**/*",
+            "dist/**/*"
+        ],
         "mac": {
             "category": "public.app-category.utilities",
             "hardenedRuntime": true,
