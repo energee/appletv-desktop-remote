@@ -1,11 +1,11 @@
 # ATV Desktop Remote
 
-A menubar app to control an Apple TV from your desktop. Runs purely in Node.js using [node-appletv-remote](https://github.com/energee/node-appletv-remote) — no Python environment or pyatv required. Compatible with tvOS 26.2.
+A menubar app to control an Apple TV from your desktop. Runs purely in Node.js using [node-appletv-remote](https://github.com/energee/node-appletv-remote) - no Python environment or pyatv required. Compatible with tvOS 26.2.
 
 <p align="center">
-  <img src="light.png" alt="ATV Remote — Light Mode" width="270"/>
+  <img src="light.png" alt="ATV Remote - Light Mode" width="270"/>
   &nbsp;&nbsp;
-  <img src="dark.png" alt="ATV Remote — Dark Mode" width="270"/>
+  <img src="dark.png" alt="ATV Remote - Dark Mode" width="270"/>
 </p>
 
 ## Installation
@@ -14,7 +14,7 @@ macOS and Windows builds are available on the [releases page](https://github.com
 
 ## Usage
 
-- The app runs in the menubar — click the remote icon to open, right-click for options.
+- The app runs in the menubar - click the remote icon to open, right-click for options.
 - Use the **touchpad** to swipe or tap, just like a real Apple TV remote.
 - **Long-press** any button to simulate a long press on the remote.
 - Hold **Option** (or **Alt** on Windows) to reveal keyboard shortcuts.
