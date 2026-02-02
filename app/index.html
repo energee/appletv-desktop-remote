@@ -1,91 +1,164 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="script-src 'self' 'unsafe-inline' 'unsafe-eval';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ATV Remote</title>
-    <link rel="stylesheet" href="css/loaders.css">
-    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/loaders.css" />
+    <link rel="stylesheet" href="css/main.css" />
+  </head>
 
-</head>
-
-<body>
+  <body>
     <!-- Header -->
     <div class="center" id="keyboardButtonDiv">
-        <div class="topText">
-            <span id="topTextHeader">ATV Remote<span id="connectionDot" class="connection-dot"></span></span>
-        </div>
-        <div id="topTextKBLink"></div>
+      <div class="topText">
+        <span id="topTextHeader"
+          >ATV Remote<span id="connectionDot" class="connection-dot"></span
+        ></span>
+      </div>
+      <div id="topTextKBLink"></div>
 
-        <div id="initText">
-            <p>Starting up...</p>
-            <div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div>
+      <div id="initText">
+        <p>Starting up...</p>
+        <div class="lds-ellipsis">
+          <div></div>
+          <div></div>
+          <div></div>
+          <div></div>
         </div>
+      </div>
     </div>
 
     <div id="main">
-        <!-- Pairing flow -->
-        <div id="addNewElements">
-            <div id="loader">
-                <div id="pairingLoader"></div>
-            </div>
-            <div id="pairingElements">
-                <div id="results">
-                    <div class="pair-section">
-                        <p class="pair-label">Select a device to pair</p>
-                        <select id="atv_picker"></select>
-                    </div>
-                </div>
-                <div id="pairCodeElements">
-                    <div class="pair-section">
-                        <div class="pair-step-badge">Step <span id="pairStepNum">1</span> of 2 · <span id="pairProtocolName">AirPlay</span></div>
-                        <p class="pair-label">Enter the code shown on your Apple TV</p>
-                        <input id="pairCode" type="text" class="pair-code-input" maxlength="4" placeholder="0000" inputmode="numeric" autocomplete="off">
-                        <button id="pairButton" class="pair-submit-btn">Continue</button>
-                    </div>
-                </div>
-                <button id="cancelPairing" class="pair-cancel-btn">Cancel</button>
-            </div>
+      <!-- Pairing flow -->
+      <div id="addNewElements">
+        <div id="loader">
+          <div id="pairingLoader"></div>
         </div>
-
-        <!-- Remote controls -->
-        <div id="runningElements">
-            <div class="remote-body">
-                <!-- Touchpad -->
-                <div id="touchpad">
-                    <div class="touchpad-hint">
-                        <span data-icon="pointer"></span>
-                        <span>swipe or tap</span>
-                    </div>
-                    <div class="touchpad-arrow touchpad-arrow-up"><span data-icon="chevron-up"></span></div>
-                    <div class="touchpad-arrow touchpad-arrow-down"><span data-icon="chevron-down"></span></div>
-                    <div class="touchpad-arrow touchpad-arrow-left"><span data-icon="chevron-left"></span></div>
-                    <div class="touchpad-arrow touchpad-arrow-right"><span data-icon="chevron-right"></span></div>
-                </div>
-
-                <!-- Media controls -->
-                <div class="media-row">
-                    <div data-key="menu" data-tippy-content="Menu (Esc) · G for Top Menu" class="directionCircle media-btn"><span class="keyText"><span data-icon="arrow-left"></span></span><span class="keyTextAlt">Esc</span></div>
-                    <div data-key="play_pause" data-tippy-content="Play / Pause" class="directionCircle media-btn play-btn"><span class="keyText"><span data-icon="play"></span></span><span class="keyTextAlt">Space</span></div>
-                    <div data-key="home" data-tippy-content="Home (T) · L for Long-press" class="directionCircle media-btn"><span class="keyText"><span data-icon="tv"></span></span><span class="keyTextAlt">T</span></div>
-                </div>
-
-                <!-- Secondary controls -->
-                <div class="secondary-row">
-                    <div data-key="skip_backward" data-tippy-content="Skip Back" class="directionCircle secondary-btn"><span class="keyText"><span data-icon="skip-back"></span></span><span class="keyTextAlt">[</span></div>
-                    <div data-key="volume_down" data-tippy-content="Lower Volume" class="directionCircle secondary-btn vol-btn"><span class="keyText"><span data-icon="volume-1"></span></span><span class="keyTextAlt">-</span></div>
-                    <div data-key="volume_up" data-tippy-content="Raise Volume" class="directionCircle secondary-btn vol-btn"><span class="keyText"><span data-icon="volume-2"></span></span><span class="keyTextAlt">+</span></div>
-                    <div data-key="skip_forward" data-tippy-content="Skip Forward" class="directionCircle secondary-btn"><span class="keyText"><span data-icon="skip-forward"></span></span><span class="keyTextAlt">]</span></div>
-                </div>
-                <div class="shortcut-hint">Hold <kbd>&#x2325;</kbd> to show keyboard shortcuts</div>
+        <div id="pairingElements">
+          <div id="results">
+            <div class="pair-section">
+              <p class="pair-label">Select a device to pair</p>
+              <select id="atv_picker"></select>
             </div>
+          </div>
+          <div id="pairCodeElements">
+            <div class="pair-section">
+              <div class="pair-step-badge">
+                Step <span id="pairStepNum">1</span> of 2 ·
+                <span id="pairProtocolName">AirPlay</span>
+              </div>
+              <p class="pair-label">Enter the code shown on your Apple TV</p>
+              <input
+                id="pairCode"
+                type="text"
+                class="pair-code-input"
+                maxlength="4"
+                placeholder="0000"
+                inputmode="numeric"
+                autocomplete="off"
+              />
+              <button id="pairButton" class="pair-submit-btn">Continue</button>
+            </div>
+          </div>
+          <button id="cancelPairing" class="pair-cancel-btn">Cancel</button>
         </div>
+      </div>
 
-        <h2 id="statusText"></h2>
+      <!-- Remote controls -->
+      <div id="runningElements">
+        <div class="remote-body">
+          <!-- Touchpad -->
+          <div id="touchpad">
+            <div class="touchpad-hint">
+              <span data-icon="pointer"></span>
+              <span>swipe or tap</span>
+            </div>
+            <div class="touchpad-arrow touchpad-arrow-up"><span data-icon="chevron-up"></span></div>
+            <div class="touchpad-arrow touchpad-arrow-down">
+              <span data-icon="chevron-down"></span>
+            </div>
+            <div class="touchpad-arrow touchpad-arrow-left">
+              <span data-icon="chevron-left"></span>
+            </div>
+            <div class="touchpad-arrow touchpad-arrow-right">
+              <span data-icon="chevron-right"></span>
+            </div>
+          </div>
+
+          <!-- Media controls -->
+          <div class="media-row">
+            <div
+              data-key="menu"
+              data-tippy-content="Menu (Esc) · G for Top Menu"
+              class="directionCircle media-btn"
+            >
+              <span class="keyText"><span data-icon="arrow-left"></span></span
+              ><span class="keyTextAlt">Esc</span>
+            </div>
+            <div
+              data-key="play_pause"
+              data-tippy-content="Play / Pause"
+              class="directionCircle media-btn play-btn"
+            >
+              <span class="keyText"><span data-icon="play"></span></span
+              ><span class="keyTextAlt">Space</span>
+            </div>
+            <div
+              data-key="home"
+              data-tippy-content="Home (T) · L for Long-press"
+              class="directionCircle media-btn"
+            >
+              <span class="keyText"><span data-icon="tv"></span></span
+              ><span class="keyTextAlt">T</span>
+            </div>
+          </div>
+
+          <!-- Secondary controls -->
+          <div class="secondary-row">
+            <div
+              data-key="skip_backward"
+              data-tippy-content="Skip Back"
+              class="directionCircle secondary-btn"
+            >
+              <span class="keyText"><span data-icon="skip-back"></span></span
+              ><span class="keyTextAlt">[</span>
+            </div>
+            <div
+              data-key="volume_down"
+              data-tippy-content="Lower Volume"
+              class="directionCircle secondary-btn vol-btn"
+            >
+              <span class="keyText"><span data-icon="volume-1"></span></span
+              ><span class="keyTextAlt">-</span>
+            </div>
+            <div
+              data-key="volume_up"
+              data-tippy-content="Raise Volume"
+              class="directionCircle secondary-btn vol-btn"
+            >
+              <span class="keyText"><span data-icon="volume-2"></span></span
+              ><span class="keyTextAlt">+</span>
+            </div>
+            <div
+              data-key="skip_forward"
+              data-tippy-content="Skip Forward"
+              class="directionCircle secondary-btn"
+            >
+              <span class="keyText"><span data-icon="skip-forward"></span></span
+              ><span class="keyTextAlt">]</span>
+            </div>
+          </div>
+          <div class="shortcut-hint">Hold <kbd>&#x2325;</kbd> to show keyboard shortcuts</div>
+        </div>
+      </div>
+
+      <h2 id="statusText"></h2>
     </div>
     <script src="dist/renderer.js"></script>
-</body>
-
+  </body>
 </html>

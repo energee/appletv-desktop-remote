@@ -1,244 +1,257 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Change Hotkey</title>
     <style>
-        :root {
-            --bg: #e8e4e0;
-            --surface: rgba(255, 255, 255, 0.55);
-            --glass: rgba(255, 255, 255, 0.35);
-            --glass-border: rgba(255, 255, 255, 0.5);
-            --glass-hover: rgba(255, 255, 255, 0.6);
-            --text-primary: #1d1d1f;
-            --text-secondary: #6e6e73;
-            --text-tertiary: #98989d;
-            --border: rgba(0, 0, 0, 0.08);
-            --accent: #b8a99a;
-            --accent-glass: rgba(184, 169, 154, 0.25);
-            --blur: 20px;
-            --shadow-sm: 0 1px 4px rgba(0,0,0,0.06);
-            --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
-            --radius-sm: 10px;
-            --radius-md: 16px;
-            --radius-full: 50%;
-            --transition-fast: 120ms ease;
-            --transition-med: 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        }
+      :root {
+        --bg: #e8e4e0;
+        --surface: rgba(255, 255, 255, 0.55);
+        --glass: rgba(255, 255, 255, 0.35);
+        --glass-border: rgba(255, 255, 255, 0.5);
+        --glass-hover: rgba(255, 255, 255, 0.6);
+        --text-primary: #1d1d1f;
+        --text-secondary: #6e6e73;
+        --text-tertiary: #98989d;
+        --border: rgba(0, 0, 0, 0.08);
+        --accent: #b8a99a;
+        --accent-glass: rgba(184, 169, 154, 0.25);
+        --blur: 20px;
+        --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+        --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+        --radius-sm: 10px;
+        --radius-md: 16px;
+        --radius-full: 50%;
+        --transition-fast: 120ms ease;
+        --transition-med: 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      }
 
-        .darkMode {
-            --bg: #1a1816;
-            --surface: rgba(50, 48, 46, 0.6);
-            --glass: rgba(50, 48, 46, 0.4);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --glass-hover: rgba(60, 58, 56, 0.6);
-            --text-primary: #f5f5f7;
-            --text-secondary: #98989d;
-            --text-tertiary: #636366;
-            --border: rgba(255, 255, 255, 0.06);
-            --accent: #c4b5a6;
-            --accent-glass: rgba(196, 181, 166, 0.2);
-        }
+      .darkMode {
+        --bg: #1a1816;
+        --surface: rgba(50, 48, 46, 0.6);
+        --glass: rgba(50, 48, 46, 0.4);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --glass-hover: rgba(60, 58, 56, 0.6);
+        --text-primary: #f5f5f7;
+        --text-secondary: #98989d;
+        --text-tertiary: #636366;
+        --border: rgba(255, 255, 255, 0.06);
+        --accent: #c4b5a6;
+        --accent-glass: rgba(196, 181, 166, 0.2);
+      }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-            -webkit-font-smoothing: antialiased;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            background: linear-gradient(165deg, #ede9e5 0%, #ddd8d3 40%, #e5e0dc 100%);
-            color: var(--text-primary);
-            user-select: none;
-            padding: 24px 20px 20px;
-        }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        background: linear-gradient(165deg, #ede9e5 0%, #ddd8d3 40%, #e5e0dc 100%);
+        color: var(--text-primary);
+        user-select: none;
+        padding: 24px 20px 20px;
+      }
 
-        .darkMode body,
-        body.darkMode {
-            background: linear-gradient(165deg, #1e1c1a 0%, #141210 40%, #1a1816 100%);
-        }
+      .darkMode body,
+      body.darkMode {
+        background: linear-gradient(165deg, #1e1c1a 0%, #141210 40%, #1a1816 100%);
+      }
 
-        .live-hotkey {
-            background: var(--surface);
-            backdrop-filter: blur(var(--blur));
-            -webkit-backdrop-filter: blur(var(--blur));
-            border: 1px solid var(--glass-border);
-            border-radius: 20px;
-            padding: 10px 22px;
-            font-size: 17px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 22px;
-            text-align: center;
-            min-width: 120px;
-            letter-spacing: 0.03em;
-            transition: all var(--transition-med);
-        }
+      .live-hotkey {
+        background: var(--surface);
+        backdrop-filter: blur(var(--blur));
+        -webkit-backdrop-filter: blur(var(--blur));
+        border: 1px solid var(--glass-border);
+        border-radius: 20px;
+        padding: 10px 22px;
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 22px;
+        text-align: center;
+        min-width: 120px;
+        letter-spacing: 0.03em;
+        transition: all var(--transition-med);
+      }
 
-        .live-hotkey.empty {
-            color: var(--text-tertiary);
-            font-weight: 400;
-            font-size: 13px;
-        }
+      .live-hotkey.empty {
+        color: var(--text-tertiary);
+        font-weight: 400;
+        font-size: 13px;
+      }
 
-        .builder-section {
-            width: 100%;
-            max-width: 360px;
-            margin-bottom: 16px;
-        }
+      .builder-section {
+        width: 100%;
+        max-width: 360px;
+        margin-bottom: 16px;
+      }
 
-        .builder-label {
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: var(--text-tertiary);
-            margin-bottom: 8px;
-        }
+      .builder-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+        margin-bottom: 8px;
+      }
 
-        .modifier-row {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-            margin-bottom: 12px;
-        }
+      .modifier-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
 
-        .mod-pill {
-            font-family: inherit;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            background: var(--glass);
-            backdrop-filter: blur(var(--blur));
-            -webkit-backdrop-filter: blur(var(--blur));
-            border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            padding: 5px 12px;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-            outline: none;
-        }
+      .mod-pill {
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        background: var(--glass);
+        backdrop-filter: blur(var(--blur));
+        -webkit-backdrop-filter: blur(var(--blur));
+        border: 1px solid var(--glass-border);
+        border-radius: 14px;
+        padding: 5px 12px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        outline: none;
+      }
 
-        .mod-pill:hover {
-            background: var(--glass-hover);
-        }
+      .mod-pill:hover {
+        background: var(--glass-hover);
+      }
 
-        .mod-pill.active {
-            background: var(--accent-glass);
-            border-color: var(--accent);
-            color: var(--text-primary);
-        }
+      .mod-pill.active {
+        background: var(--accent-glass);
+        border-color: var(--accent);
+        color: var(--text-primary);
+      }
 
-        .key-select {
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-primary);
-            background: var(--glass);
-            backdrop-filter: blur(var(--blur));
-            -webkit-backdrop-filter: blur(var(--blur));
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-sm);
-            padding: 7px 12px;
-            width: 100%;
-            cursor: pointer;
-            outline: none;
-            appearance: none;
-            -webkit-appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e6e73'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            transition: border-color var(--transition-fast);
-        }
+      .key-select {
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-primary);
+        background: var(--glass);
+        backdrop-filter: blur(var(--blur));
+        -webkit-backdrop-filter: blur(var(--blur));
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-sm);
+        padding: 7px 12px;
+        width: 100%;
+        cursor: pointer;
+        outline: none;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e6e73'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        transition: border-color var(--transition-fast);
+      }
 
-        .darkMode .key-select {
-            background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2398989d'/%3E%3C/svg%3E");
-        }
+      .darkMode .key-select {
+        background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2398989d'/%3E%3C/svg%3E");
+      }
 
-        .key-select:focus {
-            border-color: var(--accent);
-        }
+      .key-select:focus {
+        border-color: var(--accent);
+      }
 
-        .key-select option {
-            background: var(--bg);
-            color: var(--text-primary);
-        }
+      .key-select option {
+        background: var(--bg);
+        color: var(--text-primary);
+      }
 
-        .actions {
-            display: flex;
-            gap: 10px;
-            width: 100%;
-            max-width: 360px;
-        }
+      .actions {
+        display: flex;
+        gap: 10px;
+        width: 100%;
+        max-width: 360px;
+      }
 
-        .btn {
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: 600;
-            border-radius: var(--radius-sm);
-            padding: 9px 0;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-            outline: none;
-            flex: 1;
-            text-align: center;
-        }
+      .btn {
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: var(--radius-sm);
+        padding: 9px 0;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        outline: none;
+        flex: 1;
+        text-align: center;
+      }
 
-        .btn-accent {
-            background: var(--accent);
-            color: #ffffff;
-            border: 1px solid var(--accent);
-        }
+      .btn-accent {
+        background: var(--accent);
+        color: #ffffff;
+        border: 1px solid var(--accent);
+      }
 
-        .btn-accent:hover {
-            filter: brightness(1.08);
-        }
+      .btn-accent:hover {
+        filter: brightness(1.08);
+      }
 
-        .btn-accent:active {
-            filter: brightness(0.95);
-        }
+      .btn-accent:active {
+        filter: brightness(0.95);
+      }
 
-        .btn-ghost {
-            background: transparent;
-            color: var(--text-secondary);
-            border: 1px solid var(--border);
-        }
+      .btn-ghost {
+        background: transparent;
+        color: var(--text-secondary);
+        border: 1px solid var(--border);
+      }
 
-        .btn-ghost:hover {
-            background: var(--glass);
-            border-color: var(--glass-border);
-        }
+      .btn-ghost:hover {
+        background: var(--glass);
+        border-color: var(--glass-border);
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="live-hotkey empty" id="liveHotkey">Select modifiers and a key</div>
 
     <div class="builder-section">
-        <div class="builder-label">Modifiers</div>
-        <div class="modifier-row" id="modifierRow">
-            <button class="mod-pill" data-mod="Super" data-symbol="⌘">⌘ Cmd</button>
-            <button class="mod-pill" data-mod="Ctrl" data-symbol="⌃">⌃ Ctrl</button>
-            <button class="mod-pill" data-mod="Alt" data-symbol="⌥">⌥ Alt</button>
-            <button class="mod-pill" data-mod="Shift" data-symbol="⇧">⇧ Shift</button>
-        </div>
-        <div class="builder-label">Key</div>
-        <select class="key-select" id="keySelect">
-            <option value="">Choose a key...</option>
-        </select>
+      <div class="builder-label">Modifiers</div>
+      <div class="modifier-row" id="modifierRow">
+        <button class="mod-pill" data-mod="Super" data-symbol="⌘">⌘ Cmd</button>
+        <button class="mod-pill" data-mod="Ctrl" data-symbol="⌃">⌃ Ctrl</button>
+        <button class="mod-pill" data-mod="Alt" data-symbol="⌥">⌥ Alt</button>
+        <button class="mod-pill" data-mod="Shift" data-symbol="⇧">⇧ Shift</button>
+      </div>
+      <div class="builder-label">Key</div>
+      <select class="key-select" id="keySelect">
+        <option value="">Choose a key...</option>
+      </select>
     </div>
 
     <div class="actions">
-        <button class="btn btn-accent" id="saveBtn" onclick="saveHotkey()" title="Save this shortcut and close">Save</button>
-        <button class="btn btn-ghost" onclick="resetToDefault()" title="Clear custom shortcut and use ⌘⇧R">Reset to Default</button>
+      <button
+        class="btn btn-accent"
+        id="saveBtn"
+        onclick="saveHotkey()"
+        title="Save this shortcut and close"
+      >
+        Save
+      </button>
+      <button
+        class="btn btn-ghost"
+        onclick="resetToDefault()"
+        title="Clear custom shortcut and use ⌘⇧R"
+      >
+        Reset to Default
+      </button>
     </div>
 
     <script src="dist/hotkey.js"></script>
-</body>
+  </body>
 </html>
