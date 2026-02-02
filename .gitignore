@@ -1,10 +1,7 @@
 node_modules
 app/node_modules
+app/dist
 .DS_Store
 dist
-app/dist
-old
 *.gz
-stopserver
 .env*
-old_dist
