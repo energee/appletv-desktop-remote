@@ -1,8 +1,16 @@
-const EventEmitter = require('events');
+import { EventEmitter } from 'events';
+import type { ATVCredentials, ATVKeyName, PairResult, PairingPhase } from '../shared/types';
+import type {
+  AppleTV,
+  Credentials,
+  DiscoveredDevice,
+  Key as KeyType,
+  PairingSession,
+} from 'node-appletv-remote';
 
 // node-appletv-remote is ESM-only. Use dynamic import wrapper.
-let atvLib = null;
-async function getLib() {
+let atvLib: typeof import('node-appletv-remote') | null = null;
+async function getLib(): Promise<typeof import('node-appletv-remote')> {
   if (!atvLib) {
     atvLib = await import('node-appletv-remote');
   }
@@ -10,58 +18,52 @@ async function getLib() {
 }
 
 class ATVService extends EventEmitter {
-  constructor() {
-    super();
-    this.device = null;
-    this.scanResults = {};
-    this.pairingSession = null;
-    this.pairingPhase = null; // 'airplay' or 'companion'
-    this.airplayCreds = null;
-  }
+  device: AppleTV | null = null;
+  scanResults: Record<string, DiscoveredDevice> = {};
+  pairingSession: PairingSession | null = null;
+  pairingPhase: PairingPhase = null;
+  airplayCreds: unknown = null;
 
-  async scan(timeout = 5000) {
+  async scan(timeout = 5000): Promise<string[]> {
     const { scan } = await getLib();
     const devices = await scan({ timeout });
     this.scanResults = {};
-    const results = devices.map(d => {
+    return devices.map((d) => {
       const label = `${d.name} (${d.address})`;
       this.scanResults[label] = d;
       return label;
     });
-    return results;
   }
 
-  async startPair(deviceLabel) {
+  async startPair(deviceLabel: string): Promise<void> {
     const { AppleTV } = await getLib();
     const discoveredDevice = this.scanResults[deviceLabel];
     if (!discoveredDevice) throw new Error(`Device not found: ${deviceLabel}`);
-    console.log(`startPair: device=${discoveredDevice.name}, companionPort=${discoveredDevice.companionPort}, address=${discoveredDevice.address}`);
+    console.log(
+      `startPair: device=${discoveredDevice.name}, companionPort=${discoveredDevice.companionPort}, address=${discoveredDevice.address}`,
+    );
     this.device = new AppleTV(discoveredDevice);
-    // Phase 1: AirPlay pairing
     this.pairingPhase = 'airplay';
     this.pairingSession = await this.device.startPairing();
     console.log('startPair: AirPlay pairing started, PIN should appear on TV');
   }
 
-  async finishPair(pin) {
+  async finishPair(pin: string): Promise<PairResult> {
     if (!this.pairingSession) throw new Error('No active pairing session');
     const { Credentials } = await getLib();
 
     if (this.pairingPhase === 'airplay') {
-      // Complete AirPlay pairing
-      const airplayCreds = await this.pairingSession.finish(pin);
-      this.airplayCreds = airplayCreds;
+      this.airplayCreds = await this.pairingSession.finish(pin);
       console.log('finishPair: AirPlay pairing complete, starting companion pairing...');
 
-      // Phase 2: Companion pairing
       this.pairingPhase = 'companion';
-      this.pairingSession = await this.device.startCompanionPairing();
+      this.pairingSession = await this.device!.startCompanionPairing();
       console.log('finishPair: Companion pairing started, PIN should appear on TV');
 
-      // Signal that we need another PIN
       return { needsCompanionPin: true };
-    } else if (this.pairingPhase === 'companion') {
-      // Complete companion pairing
+    }
+
+    if (this.pairingPhase === 'companion') {
       const companionCreds = await this.pairingSession.finish(pin);
       console.log('finishPair: Companion pairing complete');
 
@@ -73,18 +75,20 @@ class ATVService extends EventEmitter {
 
       return {
         credentials: serialized,
-        identifier: this.device.deviceId || 'unknown'
+        identifier: this.device!.deviceId || 'unknown',
       };
     }
+
+    return {};
   }
 
-  async connect(credsData) {
+  async connect(credsData: ATVCredentials): Promise<void> {
     const { AppleTV, Credentials, scan } = await getLib();
     const credentials = Credentials.deserialize(credsData.credentials);
 
     if (!this.device) {
       const devices = await scan({ timeout: 5000 });
-      const match = devices.find(d => d.deviceId === credsData.identifier);
+      const match = devices.find((d) => d.deviceId === credsData.identifier);
       if (!match) {
         this.emit('connection-failure');
         throw new Error('Device not found on network');
@@ -93,17 +97,15 @@ class ATVService extends EventEmitter {
     }
 
     try {
-      // Connect AirPlay (MRP) for key commands
       await this.device.connect(credentials);
-      this._setupListeners();
+      this.setupListeners();
 
-      // Also connect companion if we have those creds
       if (credentials.companionCredentials && this.device.companionPort) {
         try {
           await this.device.connectCompanion(credentials.companionCredentials);
           console.log('Companion connected');
-        } catch (err) {
-          console.error('Companion connect failed (non-fatal):', err.message);
+        } catch (err: unknown) {
+          console.error('Companion connect failed (non-fatal):', (err as Error).message);
         }
       }
 
@@ -114,7 +116,7 @@ class ATVService extends EventEmitter {
     }
   }
 
-  _setupListeners() {
+  private setupListeners(): void {
     if (!this.device) return;
     this.device.removeAllListeners();
 
@@ -140,25 +142,25 @@ class ATVService extends EventEmitter {
     });
   }
 
-  async sendKey(keyName, action) {
+  async sendKey(keyName: ATVKeyName): Promise<void> {
     if (!this.device) throw new Error('Not connected');
     const { Key } = await getLib();
 
-    const keyMap = {
-      'play_pause': Key.PlayPause,
-      'left': Key.Left,
-      'right': Key.Right,
-      'down': Key.Down,
-      'up': Key.Up,
-      'select': Key.Select,
-      'menu': Key.Menu,
-      'top_menu': Key.TopMenu,
-      'home': Key.Home,
-      'home_hold': Key.HomeHold,
-      'skip_backward': Key.SkipBackward,
-      'skip_forward': Key.SkipForward,
-      'volume_up': Key.VolumeUp,
-      'volume_down': Key.VolumeDown,
+    const keyMap: Record<ATVKeyName, KeyType> = {
+      play_pause: Key.PlayPause,
+      left: Key.Left,
+      right: Key.Right,
+      down: Key.Down,
+      up: Key.Up,
+      select: Key.Select,
+      menu: Key.Menu,
+      top_menu: Key.TopMenu,
+      home: Key.Home,
+      home_hold: Key.HomeHold,
+      skip_backward: Key.SkipBackward,
+      skip_forward: Key.SkipForward,
+      volume_up: Key.VolumeUp,
+      volume_down: Key.VolumeDown,
     };
 
     const key = keyMap[keyName];
@@ -166,7 +168,7 @@ class ATVService extends EventEmitter {
     await this.device.sendKeyCommand(key);
   }
 
-  async disconnect() {
+  async disconnect(): Promise<void> {
     if (this.device) {
       try {
         await this.device.close();
@@ -178,11 +180,11 @@ class ATVService extends EventEmitter {
     this.emit('disconnected');
   }
 
-  isConnected() {
+  isConnected(): boolean {
     return this.device !== null;
   }
 
-  async destroy() {
+  async destroy(): Promise<void> {
     await this.disconnect();
     this.scanResults = {};
     this.pairingSession = null;
@@ -192,4 +194,4 @@ class ATVService extends EventEmitter {
   }
 }
 
-module.exports = ATVService;
+export default ATVService;

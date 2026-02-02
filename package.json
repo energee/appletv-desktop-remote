@@ -1,7 +1,7 @@
 {
     "name": "appletv-desktop-remote",
     "version": "0.3.1",
-    "main": "app/main.js",
+    "main": "app/dist/main/main.js",
     "description": "Apple TV Remote",
     "productName": "Apple TV Remote",
     "build": {
@@ -17,15 +17,21 @@
         }
     },
     "scripts": {
-        "start": "electron app",
+        "build:ts": "tsc",
+        "build:renderer": "node esbuild.renderer.mjs",
+        "build:all": "pnpm build:ts && pnpm build:renderer",
+        "start": "pnpm build:all && electron app",
         "postinstall": "electron-builder install-app-deps",
-        "build": "npx electron-builder -m",
-        "build:win": "npx electron-builder -w",
-        "build-arm": "npx electron-builder -m --arm64"
+        "build": "pnpm build:all && npx electron-builder -m",
+        "build:win": "pnpm build:all && npx electron-builder -w",
+        "build-arm": "pnpm build:all && npx electron-builder -m --arm64"
     },
     "devDependencies": {
+        "@types/node": "^25.2.0",
         "electron": "^38.2.1",
-        "electron-builder": "^26.0.20"
+        "electron-builder": "^26.0.20",
+        "esbuild": "^0.27.2",
+        "typescript": "^5.9.3"
     },
     "dependencies": {
         "@electron/remote": "^2.1.2",
@@ -34,7 +40,8 @@
     "packageManager": "pnpm@10.28.0",
     "pnpm": {
         "onlyBuiltDependencies": [
-            "electron"
+            "electron",
+            "esbuild"
         ]
     }
 }

@@ -8,7 +8,7 @@
     <title>ATV Remote</title>
     <link rel="stylesheet" href="css/loaders.css">
     <link rel="stylesheet" href="css/main.css">
-    <script src="js/icons.js"></script>
+
 </head>
 
 <body>
@@ -53,15 +53,6 @@
         <!-- Remote controls -->
         <div id="runningElements">
             <div class="remote-body">
-                <!-- Inline text input (shown when ATV has text field focused) -->
-                <div id="inline-keyboard" style="display:none">
-                    <input type="text" id="inlineTextInput" class="large-text-input" placeholder="Type to search...">
-                    <span class="inline-kb-hint">Text input active on Apple TV</span>
-                </div>
-                <div id="companion-hint" class="companion-hint" style="display:none">
-                    <span data-icon="keyboard"></span> Keyboard auto-activates with text fields
-                </div>
-
                 <!-- Touchpad -->
                 <div id="touchpad">
                     <div class="touchpad-hint">
@@ -94,8 +85,7 @@
 
         <h2 id="statusText"></h2>
     </div>
-    <script src="web_remote.js"></script>
-    <script src="atv_remote.js"></script>
+    <script src="dist/renderer.js"></script>
 </body>
 
 </html>

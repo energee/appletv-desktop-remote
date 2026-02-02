@@ -9,10 +9,8 @@
     "keywords": [],
     "author": "",
     "license": "ISC",
-    "main": "main.js",
+    "main": "dist/main/main.js",
     "dependencies": {
-        "@electron/remote": "^2.1.2",
-        "menubar": "^9.0.2",
         "node-appletv-remote": "latest"
     }
 }
