@@ -196,12 +196,28 @@ function createATVDropdown(): void {
   handleContextMenu();
 }
 
+const keyElCache = new Map<string, Element>();
+function getKeyEl(key: string): Element | undefined {
+  let el = keyElCache.get(key);
+  if (!el || !el.isConnected) {
+    const found = $(`[data-key="${key}"]`);
+    if (found) {
+      keyElCache.set(key, found);
+      el = found;
+    } else {
+      keyElCache.delete(key);
+      return undefined;
+    }
+  }
+  return el;
+}
+
 export async function sendCommand(k: string, shifted = false): Promise<void> {
   console.log(`sendCommand: ${k}`);
   if (k === 'Pause') k = 'Space';
   let rcmd = keymap[k];
   if ((Object.values(keymap) as string[]).includes(k)) rcmd = k as ATVKeyName;
-  const el = $(`[data-key="${rcmd}"]`);
+  const el = getKeyEl(rcmd);
   if (el) {
     el.classList.add('invert');
     setTimeout(() => {
@@ -247,7 +263,13 @@ function showKeyboardHint(): void {
   }, 800);
 }
 
+let buttonAbort: AbortController | null = null;
+
 function showKeyMap(): void {
+  if (buttonAbort) buttonAbort.abort();
+  buttonAbort = new AbortController();
+  const { signal } = buttonAbort;
+
   $('#initText')!.style.display = 'none';
   const touchpad = document.getElementById('touchpad')!;
   touchpad.style.display = 'flex';
@@ -358,18 +380,9 @@ function showKeyMap(): void {
 
   // --- Media / secondary button long-press handlers ---
   const longPressTimers: Record<string, ReturnType<typeof setTimeout>> = {};
-  const longPressProgress: Record<string, ReturnType<typeof setInterval>> = {};
   const isLongPressing: Record<string, boolean> = {};
 
-  let dataKeyEls = $$('[data-key]');
-
-  dataKeyEls.forEach(function (button) {
-    const clone = button.cloneNode(true) as HTMLElement;
-    button.parentNode!.replaceChild(clone, button);
-  });
-
-  // Re-query after cloning
-  dataKeyEls = $$('[data-key]');
+  const dataKeyEls = $$('[data-key]');
 
   dataKeyEls.forEach(function (button) {
     button.addEventListener('mousedown', function () {
@@ -377,41 +390,15 @@ function showKeyMap(): void {
 
       if (longPressTimers[key]) {
         clearTimeout(longPressTimers[key]);
-        clearInterval(longPressProgress[key]);
       }
 
-      let progressValue = 0;
       isLongPressing[key] = true;
-
       button.classList.add('pressing');
-      longPressProgress[key] = setInterval(() => {
-        if (!isLongPressing[key]) return;
-
-        progressValue += 2;
-        const progressPercent = Math.min(progressValue, 100);
-
-        const isDarkMode = document.body.classList.contains('darkMode');
-        const ringColor = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
-
-        button.style.boxShadow = `0 0 0 3px ${ringColor.replace(
-          /[\d.]+\)$/,
-          ((progressPercent / 100) * 0.7).toFixed(2) + ')',
-        )}`;
-
-        const scale = 1 + progressPercent * 0.001;
-        button.style.transform = `scale(${scale})`;
-      }, 20);
 
       longPressTimers[key] = setTimeout(() => {
         if (!isLongPressing[key]) return;
 
-        clearInterval(longPressProgress[key]);
-
         button.classList.add('longpress-triggered');
-
-        const isDarkMode = document.body.classList.contains('darkMode');
-        const successRing = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
-        button.style.boxShadow = `0 0 0 3px ${successRing}`;
 
         console.log(`Long press triggered for: ${key}`);
         sendCommand(key, true);
@@ -420,12 +407,9 @@ function showKeyMap(): void {
 
         setTimeout(() => {
           button.classList.remove('pressing', 'longpress-triggered');
-          button.style.background = '';
-          button.style.transform = '';
-          button.style.boxShadow = '';
         }, 200);
       }, 1000);
-    });
+    }, { signal });
 
     function handleMouseUpLeave(e: Event): void {
       const key = (button as HTMLElement).dataset.key!;
@@ -435,17 +419,9 @@ function showKeyMap(): void {
           clearTimeout(longPressTimers[key]);
           delete longPressTimers[key];
         }
-        if (longPressProgress[key]) {
-          clearInterval(longPressProgress[key]);
-          delete longPressProgress[key];
-        }
 
         isLongPressing[key] = false;
-
         button.classList.remove('pressing');
-        button.style.background = '';
-        button.style.transform = '';
-        button.style.boxShadow = '';
 
         if (e.type === 'mouseup') {
           console.log(`Regular click for: ${key}`);
@@ -454,8 +430,8 @@ function showKeyMap(): void {
       }
     }
 
-    button.addEventListener('mouseup', handleMouseUpLeave);
-    button.addEventListener('mouseleave', handleMouseUpLeave);
+    button.addEventListener('mouseup', handleMouseUpLeave, { signal });
+    button.addEventListener('mouseleave', handleMouseUpLeave, { signal });
   });
 
   showKeyboardHint();
@@ -466,7 +442,8 @@ function getConnectedDeviceName(): string | null {
   if (!atvc) return null;
   const creds = JSON.parse(localStorage.getItem('remote_credentials') || '{}');
   const match = Object.entries(creds).find(([, val]) => JSON.stringify(val) === atvc);
-  return match ? match[0] : null;
+  if (!match) return null;
+  return match[0].replace(/\s*\([\d.]+\)$/, '');
 }
 
 export function updateConnectionDot(state: ConnectionDotState): void {

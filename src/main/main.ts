@@ -117,7 +117,7 @@ function createWindow(): void {
       if (blurTimeout) clearTimeout(blurTimeout);
       blurTimeout = setTimeout(() => {
         mb.hideWindow();
-      }, 400);
+      }, 200);
     });
     win!.on('focus', () => {
       if (blurTimeout) {

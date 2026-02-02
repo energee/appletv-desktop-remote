@@ -24,7 +24,7 @@ class ATVService extends EventEmitter {
   pairingPhase: PairingPhase = null;
   airplayCreds: unknown = null;
 
-  async scan(timeout = 5000): Promise<string[]> {
+  async scan(timeout = 2000): Promise<string[]> {
     const { scan } = await getLib();
     const devices = await scan({ timeout });
     this.scanResults = {};
@@ -87,7 +87,7 @@ class ATVService extends EventEmitter {
     const credentials = Credentials.deserialize(credsData.credentials);
 
     if (!this.device) {
-      const devices = await scan({ timeout: 5000 });
+      const devices = await scan({ timeout: 2000 });
       const match = devices.find((d) => d.deviceId === credsData.identifier);
       if (!match) {
         this.emit('connection-failure');

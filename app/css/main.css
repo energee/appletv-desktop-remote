@@ -707,6 +707,18 @@ a:active {
   overflow: hidden;
 }
 
+[data-key].pressing {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.6);
+  transition:
+    transform 1s ease-out,
+    box-shadow 1s ease-out;
+}
+
+.darkMode [data-key].pressing {
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.7);
+}
+
 [data-key].longpress-triggered {
   animation: longpress-glow 0.35s ease-out;
 }

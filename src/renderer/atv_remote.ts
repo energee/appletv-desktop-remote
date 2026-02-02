@@ -15,7 +15,7 @@ let connection_failure = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-const MAX_RECONNECT_DELAY = 30000;
+const MAX_RECONNECT_DELAY = 10000;
 
 // Listen for main process events
 ipcRenderer.on('atv:connected', () => {
@@ -75,7 +75,7 @@ function attemptReconnect(): void {
     return;
   }
 
-  const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
+  const delay = Math.min(500 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
   reconnectAttempt++;
   console.log(
     `Auto-reconnect: attempt ${reconnectAttempt}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`,
