@@ -267,30 +267,26 @@ a:link, a:visited, a:hover, a:active {
     font-family: inherit;
     font-size: 14px;
     font-weight: 600;
-    color: #ffffff;
-    background: #0a84ff;
-    border: none;
+    color: var(--text-primary);
+    background: var(--glass);
+    backdrop-filter: blur(var(--blur));
+    -webkit-backdrop-filter: blur(var(--blur));
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     padding: 10px 20px;
     cursor: pointer;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.2);
     transition: all var(--transition-fast);
 }
 
 .pair-submit-btn:hover {
-    background: #409cff;
+    background: var(--glass-hover);
+    box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
 .pair-submit-btn:active {
     transform: scale(0.97);
-    background: #0071e3;
-}
-
-.darkMode .pair-submit-btn {
-    background: #0a84ff;
-}
-
-.darkMode .pair-submit-btn:hover {
-    background: #409cff;
+    box-shadow: var(--shadow-inset);
 }
 
 .pair-cancel-btn {
