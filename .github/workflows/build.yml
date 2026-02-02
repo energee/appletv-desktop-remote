@@ -9,8 +9,27 @@ permissions:
   contents: write
 
 jobs:
-  build-mac:
-    runs-on: macos-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac-intel
+            build_cmd: pnpm exec electron-builder -m --publish never
+            artifact_glob: dist/*.dmg
+          - os: macos-latest
+            platform: mac-arm
+            build_cmd: pnpm exec electron-builder -m --arm64 --publish never
+            artifact_glob: dist/*.dmg
+          - os: windows-latest
+            platform: win
+            build_cmd: pnpm exec electron-builder -w --publish never
+            artifact_glob: dist/*.exe
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,57 +48,18 @@ jobs:
       - name: Build app
         run: pnpm build:all
 
-      - name: Build macOS (Intel)
-        run: pnpm exec electron-builder -m --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Build ${{ matrix.platform }}
+        run: ${{ matrix.build_cmd }}
 
-      - name: Build macOS (ARM)
-        run: pnpm exec electron-builder -m --arm64 --publish never
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-
-      - name: Upload macOS artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mac-builds
-          path: |
-            dist/*.dmg
-          if-no-files-found: error
-
-  build-win:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build app
-        run: pnpm build:all
-
-      - name: Build Windows
-        run: pnpm exec electron-builder -w --publish never
-
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: win-builds
-          path: |
-            dist/*.exe
+          name: ${{ matrix.platform }}-builds
+          path: ${{ matrix.artifact_glob }}
           if-no-files-found: error
 
   release:
-    needs: [build-mac, build-win]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
