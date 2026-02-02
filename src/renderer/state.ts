@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import type { Menubar } from 'menubar';
 import type { ATVCredentials } from '../shared/types';
 
 export function $(sel: string): HTMLElement | null {
@@ -30,12 +31,12 @@ export function setConnecting(val: boolean): void {
 }
 
 // Electron @electron/remote modules (initialized at runtime via require)
-export let nativeTheme: any = null;
-export let remote: any = null;
-export let mb: any = null;
-export let Menu: any = null;
+export let nativeTheme: Electron.NativeTheme | null = null;
+export let remote: typeof import('@electron/remote') | null = null;
+export let mb: Menubar | null = null;
+export let Menu: typeof Electron.Menu | null = null;
 
-export function setRemoteModules(r: any, nt: any, m: any, menu: any): void {
+export function setRemoteModules(r: typeof import('@electron/remote'), nt: Electron.NativeTheme, m: Menubar | null, menu: typeof Electron.Menu): void {
   remote = r;
   nativeTheme = nt;
   mb = m;

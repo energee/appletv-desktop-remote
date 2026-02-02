@@ -3,6 +3,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as util from 'util';
 import ATVService from './atv_service.js';
+import type { Menubar } from 'menubar';
+import type { ATVKeyName } from '../shared/types';
+
+declare global {
+  var atvService: ATVService;
+  var MB: Menubar | null;
+}
 
 const remoteMain = require('@electron/remote/main');
 const menubar = require('menubar').menubar;
@@ -11,7 +18,7 @@ remoteMain.initialize();
 
 let win: BrowserWindow | null = null;
 let hotkeyWindow: BrowserWindow | null = null;
-let mb: any;
+let mb!: Menubar;
 
 process.env['MYPATH'] = path.join(
   process.env.APPDATA ||
@@ -22,7 +29,7 @@ process.env['MYPATH'] = path.join(
 );
 
 const atvService = new ATVService();
-(global as any)['atvService'] = atvService;
+global.atvService = atvService;
 
 const preloadWindow = true;
 const readyEvent = preloadWindow ? 'ready' : 'after-create-window';
@@ -85,11 +92,11 @@ function createWindow(): void {
       },
     },
   });
-  (global as any)['MB'] = mb;
+  global.MB = mb;
 
   mb.on(readyEvent, () => {
-    remoteMain.enable(mb.window.webContents);
-    win = mb.window;
+    remoteMain.enable(mb.window!.webContents);
+    win = mb.window ?? null;
 
     win!.on('close', () => {
       console.log('window closed, quitting');
@@ -98,10 +105,8 @@ function createWindow(): void {
 
     // Override menubar's 100ms blur-to-hide with a longer delay
     win!.removeAllListeners('blur');
-    if (mb._blurTimeout) {
-      clearTimeout(mb._blurTimeout);
-      mb._blurTimeout = null;
-    }
+    // @ts-expect-error accessing private menubar property to clear blur timer
+    if (mb._blurTimeout) { clearTimeout(mb._blurTimeout); mb._blurTimeout = null; }
     let blurTimeout: ReturnType<typeof setTimeout> | null = null;
     win!.on('blur', () => {
       if (!win) return;
@@ -144,7 +149,7 @@ function createWindow(): void {
     ipcMain.handle('alwaysOnTop', (_event, arg: string) => {
       const tf = arg === 'true';
       console.log(`setting alwaysOnTop: ${tf}`);
-      mb.window.setAlwaysOnTop(tf);
+      mb.window!.setAlwaysOnTop(tf);
     });
     ipcMain.handle('hideWindow', () => {
       console.log('hiding window');
@@ -176,7 +181,7 @@ function createWindow(): void {
     ipcMain.handle('atv:disconnect', () => atvService.disconnect());
 
     ipcMain.handle('atv:sendKey', (_event, key: string, _action?: string) => {
-      return atvService.sendKey(key as any);
+      return atvService.sendKey(key as ATVKeyName);
     });
 
     ipcMain.handle('atv:isConnected', () => atvService.isConnected());
@@ -258,7 +263,7 @@ function registerHotkeys(): void {
     const results = hotkeys.map((hotkey) => {
       console.log(`Registering hotkey: ${hotkey}`);
       return globalShortcut.register(hotkey, () => {
-        if (mb.window.isVisible()) {
+        if (mb.window!.isVisible()) {
           hideWindow();
         } else {
           showWindow();
@@ -277,7 +282,7 @@ function registerHotkeys(): void {
   }
   if (!registered) {
     globalShortcut.registerAll(['Super+Shift+R', 'Command+Control+R'], () => {
-      if (mb.window.isVisible()) {
+      if (mb.window!.isVisible()) {
         hideWindow();
       } else {
         showWindow();

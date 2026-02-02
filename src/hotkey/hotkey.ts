@@ -3,6 +3,13 @@ import * as fs from 'fs';
 
 const remote = require('@electron/remote');
 
+declare global {
+  interface Window {
+    saveHotkey: typeof saveHotkey;
+    resetToDefault: typeof resetToDefault;
+  }
+}
+
 const MYPATH = path.join(
   process.env.APPDATA ||
     (process.platform === 'darwin'
@@ -180,8 +187,8 @@ function closeWindow(): void {
 }
 
 // Expose to HTML onclick handlers
-(window as any).saveHotkey = saveHotkey;
-(window as any).resetToDefault = resetToDefault;
+window.saveHotkey = saveHotkey;
+window.resetToDefault = resetToDefault;
 
 // Init
 loadExistingHotkey();

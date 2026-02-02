@@ -1,5 +1,5 @@
 import { ipcRenderer } from 'electron';
-import type { ATVCredentials, KeyboardKeyMap, ConnectionDotState } from '../shared/types';
+import type { ATVCredentials, ATVKeyName, KeyboardKeyMap, ConnectionDotState } from '../shared/types';
 import {
   $,
   $$,
@@ -200,7 +200,7 @@ export async function sendCommand(k: string, shifted = false): Promise<void> {
   console.log(`sendCommand: ${k}`);
   if (k === 'Pause') k = 'Space';
   let rcmd = keymap[k];
-  if (Object.values(keymap).indexOf(k as any) > -1) rcmd = k as any;
+  if ((Object.values(keymap) as string[]).includes(k)) rcmd = k as ATVKeyName;
   const el = $(`[data-key="${rcmd}"]`);
   if (el) {
     el.classList.add('invert');
@@ -541,7 +541,7 @@ function handleDarkMode(): void {
   }
 }
 
-function getCreds(nm?: string): any {
+function getCreds(nm?: string): ATVCredentials | Record<string, never> {
   const creds = JSON.parse(localStorage.getItem('remote_credentials') || '{}');
   const keys = Object.keys(creds);
   if (keys.length === 0) return {};
@@ -556,13 +556,13 @@ function setAlwaysOnTop(tf: boolean): void {
   ipcRenderer.invoke('alwaysOnTop', String(tf));
 }
 
-let lastMenuEvent: any;
+let lastMenuEvent: Electron.MenuItem | undefined;
 
-function subMenuClick(event: any): void {
+function subMenuClick(event: Electron.MenuItem): void {
   const mode = event.id;
   localStorage.setItem('uimode', mode);
   lastMenuEvent = event;
-  event.menu.items.forEach((el: any) => {
+  event.menu.items.forEach((el: Electron.MenuItem) => {
     el.checked = el.id === mode;
   });
   setTimeout(() => {
@@ -586,7 +586,7 @@ function handleContextMenu(): void {
   const creds = JSON.parse(localStorage.getItem('remote_credentials') || '{}');
   const ks = Object.keys(creds);
   const atvc = localStorage.getItem('atvcreds');
-  const deviceItems: any[] = ks.map(function (k) {
+  const deviceItems: Electron.MenuItemConstructorOptions[] = ks.map(function (k) {
     return {
       type: 'checkbox',
       label: k,
@@ -665,7 +665,7 @@ function handleContextMenu(): void {
   });
 }
 
-function toggleAlwaysOnTop(event: any): void {
+function toggleAlwaysOnTop(event: Electron.MenuItem): void {
   localStorage.setItem('alwaysOnTopChecked', String(event.checked));
   ipcRenderer.invoke('alwaysOnTop', String(event.checked));
 }
@@ -703,7 +703,7 @@ export async function init(): Promise<void> {
   const checked = JSON.parse(localStorage.getItem('alwaysOnTopChecked') || 'false');
   if (checked) setAlwaysOnTop(checked);
 
-  let creds: any;
+  let creds: ATVCredentials | false;
   try {
     creds = JSON.parse(localStorage.getItem('atvcreds') || 'false');
   } catch {
