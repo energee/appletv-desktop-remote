@@ -39,7 +39,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
-const util = __importStar(require("util"));
 const atv_service_js_1 = __importDefault(require("./atv_service.js"));
 const remoteMain = require('@electron/remote/main');
 const menubar = require('menubar').menubar;
@@ -57,11 +56,6 @@ const preloadWindow = true;
 const readyEvent = preloadWindow ? 'ready' : 'after-create-window';
 const volumeButtons = ['VolumeUp', 'VolumeDown', 'VolumeMute'];
 let handleVolumeButtonsGlobal = false;
-console.log = function (...args) {
-    const txt = util.format(...args) + '\n';
-    process.stdout.write(txt);
-    sendToRenderer('mainLog', txt);
-};
 function sendToRenderer(channel, ...args) {
     if (win && !win.isDestroyed() && win.webContents) {
         win.webContents.send(channel, ...args);
@@ -73,7 +67,6 @@ if (!gotTheLock) {
 }
 else {
     electron_1.app.on('second-instance', () => {
-        console.log('second instance tried to open');
         showWindow();
     });
 }
@@ -113,7 +106,6 @@ function createWindow() {
         remoteMain.enable(mb.window.webContents);
         win = mb.window ?? null;
         win.on('close', () => {
-            console.log('window closed, quitting');
             electron_1.app.exit();
         });
         // Override menubar's 100ms blur-to-hide with a longer delay
@@ -153,7 +145,7 @@ function createWindow() {
                 unhandleVolume();
         });
         win.webContents.on('will-navigate', (_e, url) => {
-            console.log(`will-navigate`, url);
+            // block unexpected navigations
         });
         electron_1.ipcMain.handle('loadHotkeyWindow', () => {
             createHotkeyWindow();
@@ -164,11 +156,10 @@ function createWindow() {
         });
         electron_1.ipcMain.handle('alwaysOnTop', (_event, arg) => {
             const tf = arg === 'true';
-            console.log(`setting alwaysOnTop: ${tf}`);
-            mb.window.setAlwaysOnTop(tf);
+            if (mb.window && !mb.window.isDestroyed())
+                mb.window.setAlwaysOnTop(tf);
         });
         electron_1.ipcMain.handle('hideWindow', () => {
-            console.log('hiding window');
             mb.hideWindow();
         });
         // ATV Service IPC Handlers
@@ -231,7 +222,6 @@ function hideWindow() {
 }
 function unhandleVolume() {
     for (const btn of volumeButtons) {
-        console.log(`unregister: ${btn}`);
         electron_1.globalShortcut.unregister(btn);
     }
 }
@@ -242,10 +232,8 @@ function handleVolume() {
         VolumeMute: 'volume_mute',
     };
     for (const btn of volumeButtons) {
-        console.log(`register: ${btn}`);
         electron_1.globalShortcut.register(btn, () => {
             const key = keys[btn];
-            console.log(`sending ${key} for ${btn}`);
             sendToRenderer('sendCommand', key);
         });
     }
@@ -256,7 +244,7 @@ function registerHotkeys() {
         electron_1.globalShortcut.unregisterAll();
     }
     catch (err) {
-        console.log(`Error unregistering hotkeys: ${err}`);
+        console.error('Error unregistering hotkeys:', err);
     }
     let registered = false;
     if (fs.existsSync(hotkeyPath)) {
@@ -268,11 +256,9 @@ function registerHotkeys() {
         else {
             hotkeys = [raw];
         }
-        console.log(`Registering custom hotkeys: ${hotkeys}`);
         const results = hotkeys.map((hotkey) => {
-            console.log(`Registering hotkey: ${hotkey}`);
             return electron_1.globalShortcut.register(hotkey, () => {
-                if (mb.window.isVisible()) {
+                if (mb.window && !mb.window.isDestroyed() && mb.window.isVisible()) {
                     hideWindow();
                 }
                 else {
@@ -287,14 +273,13 @@ function registerHotkeys() {
         else {
             results.forEach((ok, idx) => {
                 if (!ok)
-                    console.log(`Error registering hotkey: ${hotkeys[idx]}`);
+                    console.error(`Failed to register hotkey: ${hotkeys[idx]}`);
             });
-            console.log(`Error registering hotkeys: ${hotkeys}`);
         }
     }
     if (!registered) {
         electron_1.globalShortcut.registerAll(['Super+Shift+R', 'Command+Control+R'], () => {
-            if (mb.window.isVisible()) {
+            if (mb.window && !mb.window.isDestroyed() && mb.window.isVisible()) {
                 hideWindow();
             }
             else {

@@ -59,6 +59,14 @@ function setPairDevice(val) {
 function setConnecting(val) {
   connecting = val;
 }
+function safeParse(json, fallback) {
+  if (!json) return fallback;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
 var nativeTheme = null;
 var remote = null;
 var mb = null;
@@ -113,21 +121,28 @@ function initIPC() {
     handleDarkMode();
     toggleAltText(true);
   });
-  import_electron.ipcRenderer.on("mainLog", (_event, txt) => {
-    console.log("[ main ] %s", txt.substring(0, txt.length - 1));
-  });
   import_electron.ipcRenderer.on("powerResume", () => {
     connectToATV();
   });
   import_electron.ipcRenderer.on("sendCommand", (_event, key) => {
-    console.log(`sendCommand from main: ${key}`);
     sendCommand(key);
   });
   atv_events.on("connected", function(connected) {
-    updateConnectionDot(connected ? "connected" : "disconnected");
+    if (connected) {
+      updateConnectionDot("connected");
+      setStatus("");
+      $("#statusText").style.display = "none";
+    } else {
+      updateConnectionDot("connecting");
+      setStatus("Reconnecting...");
+    }
   });
   atv_events.on("connection_failure", function() {
     updateConnectionDot("disconnected");
+  });
+  atv_events.on("reconnect_failed", function() {
+    updateConnectionDot("disconnected");
+    setStatus("Connection lost. Right-click to reconnect.");
   });
 }
 window.addEventListener("blur", () => {
@@ -173,7 +188,6 @@ window.addEventListener("keydown", (e) => {
   if (mods.length > 0) return;
   if (key === "q") {
     qPresses++;
-    console.log(`qPresses ${qPresses}`);
     if (qPresses === 3) import_electron.ipcRenderer.invoke("quit");
   } else {
     qPresses = 0;
@@ -241,7 +255,6 @@ function getKeyEl(key) {
   return el;
 }
 async function sendCommand(k, shifted = false) {
-  console.log(`sendCommand: ${k}`);
   if (k === "Pause") k = "Space";
   let rcmd = keymap[k];
   if (Object.values(keymap).includes(k)) rcmd = k;
@@ -252,11 +265,18 @@ async function sendCommand(k, shifted = false) {
       el.classList.remove("invert");
     }, 500);
   }
-  console.log(`Keydown: ${k}, sending command: ${rcmd} (shifted: ${shifted})`);
-  if (shifted) {
-    sendKeyAction(rcmd, "Hold");
-  } else {
-    sendKey(rcmd);
+  try {
+    if (shifted) {
+      await sendKeyAction(rcmd, "Hold");
+    } else {
+      await sendKey(rcmd);
+    }
+  } catch {
+    if (el) {
+      el.classList.remove("invert");
+      el.classList.add("error-flash");
+      setTimeout(() => el.classList.remove("error-flash"), 600);
+    }
   }
 }
 function startPairing(dev) {
@@ -343,7 +363,6 @@ function showKeyMap() {
         } else {
           direction = scrollAccY > 0 ? "up" : "down";
         }
-        console.log("[touchpad] SCROLL SWIPE \u2192 " + direction);
         flashArrow(direction);
         sendCommand(direction, false);
         scrollAccX = 0;
@@ -361,7 +380,6 @@ function showKeyMap() {
     hideHint();
     clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
     longPressTimer = setTimeout(function() {
-      console.log("[touchpad] long press \u2192 select hold");
       sendCommand("select", true);
       clickStart = null;
     }, 1e3);
@@ -377,7 +395,6 @@ function showKeyMap() {
     const dist = Math.sqrt(dx * dx + dy * dy);
     const elapsed = Date.now() - clickStart.t;
     if (dist < 15 && elapsed < 300) {
-      console.log("[touchpad] TAP \u2192 select");
       sendCommand("select", false);
     }
     clickStart = null;
@@ -396,7 +413,6 @@ function showKeyMap() {
       longPressTimers[key] = setTimeout(() => {
         if (!isLongPressing[key]) return;
         button.classList.add("longpress-triggered");
-        console.log(`Long press triggered for: ${key}`);
         sendCommand(key, true);
         isLongPressing[key] = false;
         setTimeout(() => {
@@ -414,7 +430,6 @@ function showKeyMap() {
         isLongPressing[key] = false;
         button.classList.remove("pressing");
         if (e.type === "mouseup") {
-          console.log(`Regular click for: ${key}`);
           sendCommand(key, false);
         }
       }
@@ -424,11 +439,18 @@ function showKeyMap() {
   });
   showKeyboardHint();
 }
+function getActiveIdentifier() {
+  const active = safeParse(localStorage.getItem("atvcreds"), false);
+  return active ? active.identifier : null;
+}
 function getConnectedDeviceName() {
-  const atvc = localStorage.getItem("atvcreds");
-  if (!atvc) return null;
-  const creds = JSON.parse(localStorage.getItem("remote_credentials") || "{}");
-  const match = Object.entries(creds).find(([, val]) => JSON.stringify(val) === atvc);
+  const activeId = getActiveIdentifier();
+  if (!activeId) return null;
+  const creds = safeParse(localStorage.getItem("remote_credentials"), {});
+  const match = Object.entries(creds).find(([, val]) => {
+    const v = val;
+    return v && v.identifier === activeId;
+  });
   if (!match) return null;
   return match[0].replace(/\s*\([\d.]+\)$/, "");
 }
@@ -446,7 +468,7 @@ async function connectToATV() {
   updateConnectionDot("connecting");
   setStatus("Connecting to ATV...");
   $("#runningElements").style.display = "";
-  setAtvCredentials(JSON.parse(localStorage.getItem("atvcreds")));
+  setAtvCredentials(safeParse(localStorage.getItem("atvcreds"), false));
   $("#pairingElements").style.display = "none";
   try {
     await connectATV(atv_credentials);
@@ -483,7 +505,6 @@ function handleDarkMode() {
     const alwaysUseDarkMode = uimode === "darkmode";
     const neverUseDarkMode = uimode === "lightmode";
     const darkModeEnabled = (nativeTheme.shouldUseDarkColors || alwaysUseDarkMode) && !neverUseDarkMode;
-    console.log(`darkModeEnabled: ${darkModeEnabled}`);
     if (darkModeEnabled) {
       document.body.classList.add("darkMode");
     } else {
@@ -494,7 +515,7 @@ function handleDarkMode() {
   }
 }
 function getCreds(nm) {
-  const creds = JSON.parse(localStorage.getItem("remote_credentials") || "{}");
+  const creds = safeParse(localStorage.getItem("remote_credentials"), {});
   const keys = Object.keys(creds);
   if (keys.length === 0) return {};
   let result = nm !== void 0 && keys.includes(nm) ? creds[nm] : creds[keys[0]];
@@ -502,7 +523,6 @@ function getCreds(nm) {
   return result;
 }
 function setAlwaysOnTop(tf) {
-  console.log(`setAlwaysOnTop(${tf})`);
   import_electron.ipcRenderer.invoke("alwaysOnTop", String(tf));
 }
 var lastMenuEvent;
@@ -516,7 +536,6 @@ function subMenuClick(event) {
   setTimeout(() => {
     handleDarkMode();
   }, 1);
-  console.log(event);
 }
 function confirmExit() {
   remote.app.quit();
@@ -527,14 +546,15 @@ function changeHotkeyClick() {
 function handleContextMenu() {
   const tray = mb.tray;
   const mode = localStorage.getItem("uimode") || "systemmode";
-  const creds = JSON.parse(localStorage.getItem("remote_credentials") || "{}");
+  const creds = safeParse(localStorage.getItem("remote_credentials"), {});
   const ks = Object.keys(creds);
-  const atvc = localStorage.getItem("atvcreds");
+  const activeId = getActiveIdentifier();
   const deviceItems = ks.map(function(k) {
+    const v = creds[k];
     return {
       type: "checkbox",
       label: k,
-      checked: JSON.stringify(creds[k]) === atvc,
+      checked: !!(v && activeId && v.identifier === activeId),
       click: function() {
         localStorage.setItem("atvcreds", JSON.stringify(creds[k]));
         connectToATV();
@@ -584,7 +604,7 @@ function handleContextMenu() {
       checked: mode === "lightmode"
     }
   ]);
-  const topChecked = JSON.parse(localStorage.getItem("alwaysOnTopChecked") || "false");
+  const topChecked = safeParse(localStorage.getItem("alwaysOnTopChecked"), false);
   const contextMenu = Menu.buildFromTemplate([
     { label: "Devices", submenu: devicesSubMenu },
     {
@@ -633,33 +653,30 @@ async function init() {
   handleDarkMode();
   handleContextMenu();
   $("#cancelPairing").addEventListener("click", () => {
-    console.log("cancelling");
     window.location.reload();
   });
-  const checked = JSON.parse(localStorage.getItem("alwaysOnTopChecked") || "false");
+  const checked = safeParse(localStorage.getItem("alwaysOnTopChecked"), false);
   if (checked) setAlwaysOnTop(checked);
-  let creds;
-  try {
-    creds = JSON.parse(localStorage.getItem("atvcreds") || "false");
-  } catch {
-    creds = getCreds();
-    if (creds) localStorage.setItem("atvcreds", JSON.stringify(creds));
+  let creds = safeParse(localStorage.getItem("atvcreds"), false);
+  if (!creds) {
+    const fallback = getCreds();
+    if (fallback && "credentials" in fallback) {
+      creds = fallback;
+      localStorage.setItem("atvcreds", JSON.stringify(creds));
+    }
   }
   if (localStorage.getItem("firstRun") !== "false") {
     localStorage.setItem("firstRun", "false");
     mb.showWindow();
   }
-  console.log("init: creds=", JSON.stringify(creds));
   if (creds && creds.credentials && creds.identifier) {
     setAtvCredentials(creds);
     connectToATV();
   } else {
-    console.log("init: no valid creds, starting scan");
     startScan();
   }
 }
 function themeUpdated() {
-  console.log("theme style updated");
   handleDarkMode();
 }
 var tryThemeAddCount = 0;
@@ -670,7 +687,6 @@ function addThemeListener() {
       nativeTheme.on("updated", themeUpdated);
     }
   } catch (err) {
-    console.log("nativeTheme not ready yet");
     setTimeout(() => {
       tryThemeAddCount++;
       if (tryThemeAddCount < 10) addThemeListener();
@@ -724,7 +740,6 @@ function scheduleReconnect() {
 function attemptReconnect() {
   if (atv_connected || reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
     if (reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-      console.log("Auto-reconnect: max attempts reached");
       atv_events.emit("reconnect_failed");
     }
     reconnectAttempt = 0;
@@ -732,20 +747,15 @@ function attemptReconnect() {
   }
   const delay2 = Math.min(500 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
   reconnectAttempt++;
-  console.log(
-    `Auto-reconnect: attempt ${reconnectAttempt}/${MAX_RECONNECT_ATTEMPTS} in ${delay2}ms`
-  );
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     if (atv_connected) return;
     try {
-      const creds = JSON.parse(localStorage.getItem("atvcreds"));
+      const creds = safeParse(localStorage.getItem("atvcreds"), null);
       if (!creds) return;
       await connectATV(creds);
-      console.log("Auto-reconnect: success");
       reconnectAttempt = 0;
-    } catch (err) {
-      console.log("Auto-reconnect: failed -", err.message || err);
+    } catch {
       attemptReconnect();
     }
   }, delay2);
@@ -762,14 +772,10 @@ async function scanDevices() {
   }
 }
 function sendKey(cmd) {
-  import_electron2.ipcRenderer.invoke("atv:sendKey", cmd).catch((err) => {
-    console.error("sendKey failed:", err);
-  });
+  return import_electron2.ipcRenderer.invoke("atv:sendKey", cmd);
 }
 function sendKeyAction(cmd, taction) {
-  import_electron2.ipcRenderer.invoke("atv:sendKey", cmd, taction).catch((err) => {
-    console.error("sendKey failed:", err);
-  });
+  return import_electron2.ipcRenderer.invoke("atv:sendKey", cmd, taction);
 }
 function connectATV(creds) {
   return import_electron2.ipcRenderer.invoke("atv:connect", creds).catch((err) => {
@@ -791,7 +797,6 @@ async function finishPair(code) {
   try {
     const result = await import_electron2.ipcRenderer.invoke("atv:finishPair", code);
     if (result.needsCompanionPin) {
-      console.log("AirPlay paired, waiting for companion PIN...");
       $("#pairCode").value = "";
       $("#pairStepNum").textContent = "2";
       $("#pairProtocolName").textContent = "Companion";
@@ -805,14 +810,13 @@ async function finishPair(code) {
   }
 }
 function saveRemote(name, creds) {
-  const ar = JSON.parse(localStorage.getItem("remote_credentials") || "{}");
+  const ar = safeParse(localStorage.getItem("remote_credentials"), {});
   let c = creds;
   if (typeof c === "string") c = JSON.parse(c);
   ar[name] = c;
   localStorage.setItem("remote_credentials", JSON.stringify(ar));
 }
 function initRemote() {
-  console.log("atv_remote init");
 }
 
 // src/renderer/index.ts
