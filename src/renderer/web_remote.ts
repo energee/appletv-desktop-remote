@@ -1,5 +1,10 @@
-import { ipcRenderer } from 'electron';
-import type { ATVCredentials, ATVKeyName, KeyboardKeyMap, ConnectionDotState } from '../shared/types';
+import type {
+  ATVCredentials,
+  ATVKeyName,
+  KeyboardKeyMap,
+  ConnectionDotState,
+  NowPlayingInfo,
+} from '../shared/types';
 import {
   $,
   $$,
@@ -7,20 +12,13 @@ import {
   atv_credentials,
   atv_events,
   connecting,
-  pairDevice,
-  nativeTheme,
-  remote,
-  mb,
-  Menu,
   safeParse,
   setAtvConnected,
   setAtvCredentials,
   setConnecting,
-  setRemoteModules,
 } from './state';
 import {
   sendKey,
-  sendKeyAction,
   scanDevices,
   startPair,
   finishPair,
@@ -51,34 +49,26 @@ const keymap: KeyboardKeyMap = {
   _: 'volume_down',
 };
 
-function initializeRemote(): boolean {
-  try {
-    const r = require('@electron/remote');
-    const nt = r.nativeTheme;
-    const menu = r.Menu;
-    const m = r.getGlobal('MB');
-    setRemoteModules(r, nt, m, menu);
-    // Ensure menubar tray is ready before proceeding
-    if (!m || !m.tray) return false;
-    return true;
-  } catch (err) {
-    console.error('Failed to initialize remote:', err);
-    return false;
-  }
-}
-
 export function initIPC(): void {
-  ipcRenderer.on('shortcutWin', () => {
+  window.electronAPI.onShortcutWin(() => {
     handleDarkMode();
     toggleAltText(true);
   });
 
-  ipcRenderer.on('powerResume', () => {
+  window.electronAPI.onPowerResume(() => {
     connectToATV();
   });
 
-  ipcRenderer.on('sendCommand', (_event, key: string) => {
+  window.electronAPI.onSendCommand((key: string) => {
     sendCommand(key);
+  });
+
+  window.electronAPI.onErrorMessage((msg: string) => {
+    setStatus(msg);
+  });
+
+  window.electronAPI.onContextMenuAction((action: string, payload?: string) => {
+    handleContextMenuAction(action, payload);
   });
 
   atv_events.on('connected', function (connected: boolean) {
@@ -89,6 +79,7 @@ export function initIPC(): void {
     } else {
       updateConnectionDot('connecting');
       setStatus('Reconnecting...');
+      hideNowPlaying();
     }
   });
   atv_events.on('connection_failure', function () {
@@ -97,6 +88,9 @@ export function initIPC(): void {
   atv_events.on('reconnect_failed', function () {
     updateConnectionDot('disconnected');
     setStatus('Connection lost. Right-click to reconnect.');
+  });
+  atv_events.on('now-playing', function (info: NowPlayingInfo) {
+    updateNowPlaying(info);
   });
 }
 
@@ -138,21 +132,19 @@ window.addEventListener('keydown', (e) => {
   if (mods.length > 0 && mods[0] === 'Alt') {
     toggleAltText(false);
   }
-  let shifted = false;
   if (mods.length === 1 && mods[0] === 'Shift') {
-    shifted = true;
     mods = [];
   }
   if (mods.length > 0) return;
 
   if (key === 'q') {
     qPresses++;
-    if (qPresses === 3) ipcRenderer.invoke('quit');
+    if (qPresses === 3) window.electronAPI.quit();
   } else {
     qPresses = 0;
   }
   if (key === 'h') {
-    ipcRenderer.invoke('hideWindow');
+    window.electronAPI.hideWindow();
   }
   if (!atv_connected) {
     if (document.activeElement === $('#pairCode') && key === 'Enter') {
@@ -162,7 +154,7 @@ window.addEventListener('keydown', (e) => {
   }
   if ($('#cancelPairing')!.style.display !== 'none') return;
   if (keymap[key] !== undefined) {
-    sendCommand(key, shifted);
+    sendCommand(key);
     e.preventDefault();
   }
 });
@@ -218,7 +210,7 @@ function getKeyEl(key: string): Element | undefined {
   return el;
 }
 
-export async function sendCommand(k: string, shifted = false): Promise<void> {
+export async function sendCommand(k: string): Promise<void> {
   if (k === 'Pause') k = 'Space';
   let rcmd = keymap[k];
   if ((Object.values(keymap) as string[]).includes(k)) rcmd = k as ATVKeyName;
@@ -230,11 +222,7 @@ export async function sendCommand(k: string, shifted = false): Promise<void> {
     }, 500);
   }
   try {
-    if (shifted) {
-      await sendKeyAction(rcmd, 'Hold');
-    } else {
-      await sendKey(rcmd);
-    }
+    await sendKey(rcmd);
   } catch {
     if (el) {
       el.classList.remove('invert');
@@ -244,14 +232,19 @@ export async function sendCommand(k: string, shifted = false): Promise<void> {
   }
 }
 
+let pairButtonBound = false;
+
 function startPairing(dev: string): void {
   setAtvConnected(false);
   $('#initText')!.style.display = 'none';
   $('#results')!.style.display = 'none';
-  $('#pairButton')!.addEventListener('click', () => {
-    submitCode();
-    return false;
-  });
+  if (!pairButtonBound) {
+    pairButtonBound = true;
+    $('#pairButton')!.addEventListener('click', () => {
+      submitCode();
+      return false;
+    });
+  }
   $('#pairCodeElements')!.style.display = 'block';
   startPair(dev);
 }
@@ -346,7 +339,7 @@ function showKeyMap(): void {
           direction = scrollAccY > 0 ? 'up' : 'down';
         }
         flashArrow(direction);
-        sendCommand(direction, false);
+        sendCommand(direction);
 
         scrollAccX = 0;
         scrollAccY = 0;
@@ -366,7 +359,7 @@ function showKeyMap(): void {
     hideHint();
     clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
     longPressTimer = setTimeout(function () {
-      sendCommand('select', true);
+      sendCommand('select');
       clickStart = null;
     }, 1000);
   });
@@ -382,7 +375,7 @@ function showKeyMap(): void {
     const dist = Math.sqrt(dx * dx + dy * dy);
     const elapsed = Date.now() - clickStart.t;
     if (dist < 15 && elapsed < 300) {
-      sendCommand('select', false);
+      sendCommand('select');
     }
     clickStart = null;
   });
@@ -394,30 +387,34 @@ function showKeyMap(): void {
   const dataKeyEls = $$('[data-key]');
 
   dataKeyEls.forEach(function (button) {
-    button.addEventListener('mousedown', function () {
-      const key = (button as HTMLElement).dataset.key!;
+    button.addEventListener(
+      'mousedown',
+      function () {
+        const key = (button as HTMLElement).dataset.key!;
 
-      if (longPressTimers[key]) {
-        clearTimeout(longPressTimers[key]);
-      }
+        if (longPressTimers[key]) {
+          clearTimeout(longPressTimers[key]);
+        }
 
-      isLongPressing[key] = true;
-      button.classList.add('pressing');
+        isLongPressing[key] = true;
+        button.classList.add('pressing');
 
-      longPressTimers[key] = setTimeout(() => {
-        if (!isLongPressing[key]) return;
+        longPressTimers[key] = setTimeout(() => {
+          if (!isLongPressing[key]) return;
 
-        button.classList.add('longpress-triggered');
+          button.classList.add('longpress-triggered');
 
-        sendCommand(key, true);
+          sendCommand(key);
 
-        isLongPressing[key] = false;
+          isLongPressing[key] = false;
 
-        setTimeout(() => {
-          button.classList.remove('pressing', 'longpress-triggered');
-        }, 200);
-      }, 1000);
-    }, { signal });
+          setTimeout(() => {
+            button.classList.remove('pressing', 'longpress-triggered');
+          }, 200);
+        }, 1000);
+      },
+      { signal },
+    );
 
     function handleMouseUpLeave(e: Event): void {
       const key = (button as HTMLElement).dataset.key!;
@@ -432,7 +429,7 @@ function showKeyMap(): void {
         button.classList.remove('pressing');
 
         if (e.type === 'mouseup') {
-          sendCommand(key, false);
+          sendCommand(key);
         }
       }
     }
@@ -452,7 +449,10 @@ function getActiveIdentifier(): string | null {
 function getConnectedDeviceName(): string | null {
   const activeId = getActiveIdentifier();
   if (!activeId) return null;
-  const creds = safeParse(localStorage.getItem('remote_credentials'), {} as Record<string, unknown>);
+  const creds = safeParse(
+    localStorage.getItem('remote_credentials'),
+    {} as Record<string, unknown>,
+  );
   const match = Object.entries(creds).find(([, val]) => {
     const v = val as ATVCredentials;
     return v && v.identifier === activeId;
@@ -513,15 +513,14 @@ export function startScan(): void {
   scanDevices();
 }
 
-function handleDarkMode(): void {
+async function handleDarkMode(): Promise<void> {
   try {
-    if (!nativeTheme) return;
     const uimode = localStorage.getItem('uimode') || 'systemmode';
     const alwaysUseDarkMode = uimode === 'darkmode';
     const neverUseDarkMode = uimode === 'lightmode';
 
-    const darkModeEnabled =
-      (nativeTheme.shouldUseDarkColors || alwaysUseDarkMode) && !neverUseDarkMode;
+    const systemDark = await window.electronAPI.getTheme();
+    const darkModeEnabled = (systemDark || alwaysUseDarkMode) && !neverUseDarkMode;
     if (darkModeEnabled) {
       document.body.classList.add('darkMode');
     } else {
@@ -533,7 +532,10 @@ function handleDarkMode(): void {
 }
 
 function getCreds(nm?: string): ATVCredentials | Record<string, never> {
-  const creds = safeParse(localStorage.getItem('remote_credentials'), {} as Record<string, unknown>);
+  const creds = safeParse(
+    localStorage.getItem('remote_credentials'),
+    {} as Record<string, unknown>,
+  );
   const keys = Object.keys(creds);
   if (keys.length === 0) return {};
 
@@ -543,148 +545,218 @@ function getCreds(nm?: string): ATVCredentials | Record<string, never> {
 }
 
 function setAlwaysOnTop(tf: boolean): void {
-  ipcRenderer.invoke('alwaysOnTop', String(tf));
+  window.electronAPI.setAlwaysOnTop(String(tf));
 }
 
-let lastMenuEvent: Electron.MenuItem | undefined;
+// --- Now Playing ---
 
-function subMenuClick(event: Electron.MenuItem): void {
-  const mode = event.id;
-  localStorage.setItem('uimode', mode);
-  lastMenuEvent = event;
-  event.menu.items.forEach((el: Electron.MenuItem) => {
-    el.checked = el.id === mode;
+function updateNowPlaying(info: NowPlayingInfo): void {
+  const container = $('#nowPlaying');
+  if (!container) return;
+
+  const title = info.title || '';
+  const artist = info.artist || '';
+
+  if (!title && !artist) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  $('#npTitle')!.textContent = title;
+  $('#npArtist')!.textContent = artist;
+}
+
+function hideNowPlaying(): void {
+  const container = $('#nowPlaying');
+  if (container) container.style.display = 'none';
+}
+
+// --- Settings Panel ---
+
+function showSettings(): void {
+  $('#runningElements')!.style.display = 'none';
+  $('#addNewElements')!.style.display = 'none';
+  const panel = $('#settingsPanel')!;
+  panel.style.display = 'block';
+
+  // Populate theme radios
+  const currentTheme = localStorage.getItem('uimode') || 'systemmode';
+  const radios = panel.querySelectorAll<HTMLInputElement>('input[name="theme"]');
+  radios.forEach((r) => {
+    r.checked = r.value === currentTheme;
   });
-  setTimeout(() => {
-    handleDarkMode();
-  }, 1);
+
+  // Populate always-on-top
+  const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
+  ($('#settingsAlwaysOnTop') as HTMLInputElement).checked = topChecked;
+
+  // Populate device list
+  populateDeviceList();
 }
 
-function confirmExit(): void {
-  remote.app.quit();
+function hideSettings(): void {
+  $('#settingsPanel')!.style.display = 'none';
+  if (atv_connected) {
+    $('#runningElements')!.style.display = '';
+  } else {
+    $('#addNewElements')!.style.display = '';
+  }
 }
 
-function changeHotkeyClick(): void {
-  ipcRenderer.invoke('loadHotkeyWindow');
+function populateDeviceList(): void {
+  const listEl = $('#settingsDeviceList')!;
+  listEl.innerHTML = '';
+  const creds = safeParse(
+    localStorage.getItem('remote_credentials'),
+    {} as Record<string, unknown>,
+  );
+  const activeId = getActiveIdentifier();
+
+  for (const name of Object.keys(creds)) {
+    const row = document.createElement('div');
+    row.className = 'settings-device-row';
+    const label = document.createElement('span');
+    const v = creds[name] as ATVCredentials;
+    const isActive = !!(v && activeId && v.identifier === activeId);
+    label.textContent = name + (isActive ? ' (active)' : '');
+    label.className = 'settings-device-name';
+    row.appendChild(label);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove';
+    removeBtn.className = 'settings-device-remove';
+    removeBtn.addEventListener('click', () => {
+      const allCreds = safeParse(
+        localStorage.getItem('remote_credentials'),
+        {} as Record<string, unknown>,
+      );
+      delete allCreds[name];
+      localStorage.setItem('remote_credentials', JSON.stringify(allCreds));
+      if (isActive) localStorage.removeItem('atvcreds');
+      window.electronAPI.removeDevice(name);
+      populateDeviceList();
+    });
+    row.appendChild(removeBtn);
+    listEl.appendChild(row);
+  }
+
+  if (Object.keys(creds).length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'settings-empty';
+    empty.textContent = 'No saved devices';
+    listEl.appendChild(empty);
+  }
 }
+
+function initSettingsListeners(): void {
+  // Theme radios
+  const radios = document.querySelectorAll<HTMLInputElement>('#themeRadios input[name="theme"]');
+  radios.forEach((r) => {
+    r.addEventListener('change', () => {
+      localStorage.setItem('uimode', r.value);
+      handleDarkMode();
+    });
+  });
+
+  // Always on top
+  $('#settingsAlwaysOnTop')!.addEventListener('change', (e) => {
+    const checked = (e.target as HTMLInputElement).checked;
+    localStorage.setItem('alwaysOnTopChecked', String(checked));
+    setAlwaysOnTop(checked);
+  });
+
+  // Hotkey button
+  $('#settingsHotkeyBtn')!.addEventListener('click', () => {
+    window.electronAPI.loadHotkeyWindow();
+  });
+
+  // Back button
+  $('#settingsBackBtn')!.addEventListener('click', () => {
+    hideSettings();
+  });
+}
+
+// --- Context Menu ---
 
 function handleContextMenu(): void {
-  const tray = mb.tray;
-  const mode = localStorage.getItem('uimode') || 'systemmode';
-
-  const creds = safeParse(localStorage.getItem('remote_credentials'), {} as Record<string, unknown>);
+  const creds = safeParse(
+    localStorage.getItem('remote_credentials'),
+    {} as Record<string, unknown>,
+  );
   const ks = Object.keys(creds);
   const activeId = getActiveIdentifier();
-  const deviceItems: Electron.MenuItemConstructorOptions[] = ks.map(function (k) {
+  const mode = localStorage.getItem('uimode') || 'systemmode';
+  const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
+
+  const devices = ks.map((k) => {
     const v = creds[k] as ATVCredentials;
     return {
-      type: 'checkbox',
       label: k,
+      identifier: v ? v.identifier : '',
       checked: !!(v && activeId && v.identifier === activeId),
-      click: function () {
-        localStorage.setItem('atvcreds', JSON.stringify(creds[k]));
-        connectToATV();
-        handleContextMenu();
-      },
     };
   });
-  if (deviceItems.length > 0) {
-    deviceItems.push({ type: 'separator' });
-  }
-  deviceItems.push({
-    label: 'Pair new device...',
-    click: function () {
-      mb.showWindow();
-      startScan();
-    },
+
+  window.electronAPI.showContextMenu({
+    devices,
+    uiMode: mode,
+    alwaysOnTop: topChecked,
   });
-  deviceItems.push({
-    label: 'Re-pair current device',
-    click: function () {
+}
+
+function handleContextMenuAction(action: string, payload?: string): void {
+  switch (action) {
+    case 'selectDevice': {
+      const creds = safeParse(
+        localStorage.getItem('remote_credentials'),
+        {} as Record<string, unknown>,
+      );
+      if (payload && creds[payload]) {
+        localStorage.setItem('atvcreds', JSON.stringify(creds[payload]));
+        connectToATV();
+        handleContextMenu();
+      }
+      break;
+    }
+    case 'pairNew':
+      startScan();
+      break;
+    case 'repairCurrent':
       localStorage.removeItem('atvcreds');
-      mb.showWindow();
       startScan();
-    },
-  });
-
-  const devicesSubMenu = Menu.buildFromTemplate(deviceItems);
-
-  const appearanceSubMenu = Menu.buildFromTemplate([
-    {
-      type: 'checkbox',
-      id: 'systemmode',
-      click: subMenuClick,
-      label: 'Follow system settings',
-      checked: mode === 'systemmode',
-    },
-    {
-      type: 'checkbox',
-      id: 'darkmode',
-      click: subMenuClick,
-      label: 'Dark mode',
-      checked: mode === 'darkmode',
-    },
-    {
-      type: 'checkbox',
-      id: 'lightmode',
-      click: subMenuClick,
-      label: 'Light mode',
-      checked: mode === 'lightmode',
-    },
-  ]);
-
-  const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Devices', submenu: devicesSubMenu },
-    {
-      type: 'checkbox',
-      label: 'Always on-top',
-      click: toggleAlwaysOnTop,
-      checked: topChecked,
-    },
-    { type: 'separator' },
-    { label: 'Appearance', submenu: appearanceSubMenu, click: subMenuClick },
-    { label: 'Change hotkey', click: changeHotkeyClick },
-    { type: 'separator' },
-    { role: 'about', label: 'About' },
-    { label: 'Quit', click: confirmExit, accelerator: 'CommandOrControl+Q' },
-  ]);
-  tray.removeAllListeners('right-click');
-  tray.on('right-click', () => {
-    mb.tray.popUpContextMenu(contextMenu);
-  });
+      break;
+    case 'setTheme':
+      if (payload) {
+        localStorage.setItem('uimode', payload);
+        handleDarkMode();
+        handleContextMenu();
+      }
+      break;
+    case 'toggleAlwaysOnTop':
+      if (payload !== undefined) {
+        localStorage.setItem('alwaysOnTopChecked', payload);
+        window.electronAPI.setAlwaysOnTop(payload);
+        handleContextMenu();
+      }
+      break;
+    case 'openSettings':
+      window.electronAPI.showWindow();
+      showSettings();
+      break;
+  }
 }
-
-function toggleAlwaysOnTop(event: Electron.MenuItem): void {
-  localStorage.setItem('alwaysOnTopChecked', String(event.checked));
-  ipcRenderer.invoke('alwaysOnTop', String(event.checked));
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-let initRetryCount = 0;
-const MAX_INIT_RETRIES = 10;
 
 export async function init(): Promise<void> {
-  if (!initializeRemote()) {
-    initRetryCount++;
-    if (initRetryCount >= MAX_INIT_RETRIES) {
-      console.error('Failed to initialize remote after ' + MAX_INIT_RETRIES + ' attempts');
-      setStatus('Failed to initialize. Please restart the app.');
-      return;
-    }
-    console.log(
-      'Remote not ready, retrying in 100ms... (' + initRetryCount + '/' + MAX_INIT_RETRIES + ')',
-    );
-    await delay(100);
-    return await init();
-  }
-  initRetryCount = 0;
-  addThemeListener();
-  handleDarkMode();
+  // Theme listener
+  window.electronAPI.onThemeUpdated(() => {
+    handleDarkMode();
+  });
+
+  await handleDarkMode();
   handleContextMenu();
+  initSettingsListeners();
+
   $('#cancelPairing')!.addEventListener('click', () => {
     window.location.reload();
   });
@@ -702,7 +774,7 @@ export async function init(): Promise<void> {
   }
   if (localStorage.getItem('firstRun') !== 'false') {
     localStorage.setItem('firstRun', 'false');
-    mb.showWindow();
+    window.electronAPI.showWindow();
   }
 
   if (creds && creds.credentials && creds.identifier) {
@@ -710,25 +782,5 @@ export async function init(): Promise<void> {
     connectToATV();
   } else {
     startScan();
-  }
-}
-
-function themeUpdated(): void {
-  handleDarkMode();
-}
-
-let tryThemeAddCount = 0;
-
-function addThemeListener(): void {
-  try {
-    if (nativeTheme) {
-      nativeTheme.removeAllListeners();
-      nativeTheme.on('updated', themeUpdated);
-    }
-  } catch (err) {
-    setTimeout(() => {
-      tryThemeAddCount++;
-      if (tryThemeAddCount < 10) addThemeListener();
-    }, 1000);
   }
 }

@@ -22,17 +22,17 @@ macOS and Windows builds are available on the [releases page](https://github.com
 
 ### Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| Arrow keys | Navigate |
-| Enter | Select |
-| Space | Play / Pause |
-| Esc / Backspace | Menu |
-| T | Home (TV) |
-| L | Long-press Home |
-| G | Top Menu |
-| [ / ] | Skip backward / forward |
-| + / - | Volume up / down |
+| Key             | Action                  |
+| --------------- | ----------------------- |
+| Arrow keys      | Navigate                |
+| Enter           | Select                  |
+| Space           | Play / Pause            |
+| Esc / Backspace | Menu                    |
+| T               | Home (TV)               |
+| L               | Long-press Home         |
+| G               | Top Menu                |
+| [ / ]           | Skip backward / forward |
+| + / -           | Volume up / down        |
 
 ## Running from Source
 
@@ -51,11 +51,11 @@ macOS and Windows builds are available on the [releases page](https://github.com
 
 `electron-builder` is used to create standalone applications.
 
-| Command | Target |
-|---------|--------|
-| `pnpm build` | macOS (current arch) |
-| `pnpm build-arm` | macOS (ARM64) |
-| `pnpm build:win` | Windows |
+| Command          | Target               |
+| ---------------- | -------------------- |
+| `pnpm build`     | macOS (current arch) |
+| `pnpm build-arm` | macOS (ARM64)        |
+| `pnpm build:win` | Windows              |
 
 ## License
 

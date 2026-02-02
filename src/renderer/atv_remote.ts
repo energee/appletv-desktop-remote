@@ -1,51 +1,50 @@
-import { ipcRenderer } from 'electron';
 import {
   atv_connected,
   atv_events,
-  connecting,
   safeParse,
   setAtvConnected,
-  setConnecting,
   setPairDevice,
   pairDevice,
   $,
 } from './state';
 import { createDropdown, connectToATV } from './web_remote';
 
-let connection_failure = false;
+let _connection_failure = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const MAX_RECONNECT_DELAY = 10000;
 
-// Listen for main process events
-ipcRenderer.on('atv:connected', () => {
-  setAtvConnected(true);
-  connection_failure = false;
-  cancelReconnect();
-  atv_events.emit('connected', true);
-});
+export function initRemote(): void {
+  // Listen for main process events via preload API
+  window.electronAPI.onAtvConnected(() => {
+    setAtvConnected(true);
+    _connection_failure = false;
+    cancelReconnect();
+    atv_events.emit('connected', true);
+  });
 
-ipcRenderer.on('atv:connection-failure', () => {
-  setAtvConnected(false);
-  connection_failure = true;
-  atv_events.emit('connection_failure');
-});
+  window.electronAPI.onAtvConnectionFailure(() => {
+    setAtvConnected(false);
+    _connection_failure = true;
+    atv_events.emit('connection_failure');
+  });
 
-ipcRenderer.on('atv:connection-lost', () => {
-  setAtvConnected(false);
-  atv_events.emit('connected', false);
-  scheduleReconnect();
-});
+  window.electronAPI.onAtvConnectionLost(() => {
+    setAtvConnected(false);
+    atv_events.emit('connected', false);
+    scheduleReconnect();
+  });
 
-ipcRenderer.on('atv:disconnected', () => {
-  setAtvConnected(false);
-  atv_events.emit('connected', false);
-});
+  window.electronAPI.onAtvDisconnected(() => {
+    setAtvConnected(false);
+    atv_events.emit('connected', false);
+  });
 
-ipcRenderer.on('atv:now-playing', (_event, info) => {
-  atv_events.emit('now-playing', info);
-});
+  window.electronAPI.onAtvNowPlaying((info) => {
+    atv_events.emit('now-playing', info);
+  });
+}
 
 // --- Auto-reconnect ---
 
@@ -96,9 +95,9 @@ function attemptReconnect(): void {
 
 export async function scanDevices(): Promise<void> {
   cancelReconnect();
-  connection_failure = false;
+  _connection_failure = false;
   try {
-    const results = await ipcRenderer.invoke('atv:scan');
+    const results = await window.electronAPI.scan();
     createDropdown(results || []);
   } catch (err) {
     console.error('Scan failed:', err);
@@ -107,35 +106,33 @@ export async function scanDevices(): Promise<void> {
 }
 
 export function sendKey(cmd: string): Promise<void> {
-  return ipcRenderer.invoke('atv:sendKey', cmd);
-}
-
-export function sendKeyAction(cmd: string, taction: string): Promise<void> {
-  return ipcRenderer.invoke('atv:sendKey', cmd, taction);
+  return window.electronAPI.sendKey(cmd);
 }
 
 export function connectATV(creds: unknown): Promise<void> {
-  return ipcRenderer.invoke('atv:connect', creds).catch((err: Error) => {
-    connection_failure = true;
-    atv_events.emit('connection_failure');
-    throw err;
-  });
+  return window.electronAPI
+    .connect(creds as { credentials: string; identifier: string })
+    .catch((err: Error) => {
+      _connection_failure = true;
+      atv_events.emit('connection_failure');
+      throw err;
+    });
 }
 
 export function startPair(dev: string): void {
   cancelReconnect();
-  connection_failure = false;
+  _connection_failure = false;
   setPairDevice(dev);
-  ipcRenderer.invoke('atv:startPair', dev).catch((err: Error) => {
+  window.electronAPI.startPair(dev).catch((err: Error) => {
     console.error('startPair failed:', err);
   });
 }
 
 // Two-phase pairing: AirPlay first, then Companion
 export async function finishPair(code: string): Promise<void> {
-  connection_failure = false;
+  _connection_failure = false;
   try {
-    const result = await ipcRenderer.invoke('atv:finishPair', code);
+    const result = await window.electronAPI.finishPair(code);
     if (result.needsCompanionPin) {
       // AirPlay paired, now need companion PIN
       ($('#pairCode') as HTMLInputElement).value = '';
@@ -159,5 +156,3 @@ function saveRemote(name: string, creds: unknown): void {
   ar[name] = c;
   localStorage.setItem('remote_credentials', JSON.stringify(ar));
 }
-
-export function initRemote(): void {}

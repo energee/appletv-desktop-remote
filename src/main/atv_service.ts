@@ -2,7 +2,6 @@ import { EventEmitter } from 'events';
 import type { ATVCredentials, ATVKeyName, PairResult, PairingPhase } from '../shared/types';
 import type {
   AppleTV,
-  Credentials,
   DiscoveredDevice,
   Key as KeyType,
   PairingSession,
@@ -17,6 +16,15 @@ async function getLib(): Promise<typeof import('node-appletv-remote')> {
   return atvLib;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
 class ATVService extends EventEmitter {
   device: AppleTV | null = null;
   scanResults: Record<string, DiscoveredDevice> = {};
@@ -26,7 +34,11 @@ class ATVService extends EventEmitter {
 
   async scan(timeout = 2000): Promise<string[]> {
     const { scan } = await getLib();
-    const devices = await scan({ timeout });
+    const devices = await withTimeout(
+      scan({ timeout }),
+      timeout + 2000,
+      'Scan timed out. Please try again.',
+    );
     this.scanResults = {};
     return devices.map((d) => {
       const label = `${d.name} (${d.address})`;
@@ -44,7 +56,17 @@ class ATVService extends EventEmitter {
     );
     this.device = new AppleTV(discoveredDevice);
     this.pairingPhase = 'airplay';
-    this.pairingSession = await this.device.startPairing();
+    try {
+      this.pairingSession = await withTimeout(
+        this.device.startPairing(),
+        30000,
+        'Pairing timed out. Please try again.',
+      );
+    } catch (err) {
+      this.pairingSession = null;
+      this.pairingPhase = null;
+      throw err;
+    }
     console.log('startPair: AirPlay pairing started, PIN should appear on TV');
   }
 
@@ -53,7 +75,11 @@ class ATVService extends EventEmitter {
     const { Credentials } = await getLib();
 
     if (this.pairingPhase === 'airplay') {
-      this.airplayCreds = await this.pairingSession.finish(pin);
+      this.airplayCreds = await withTimeout(
+        this.pairingSession.finish(pin),
+        30000,
+        'Pairing verification timed out. Please try again.',
+      );
       console.log('finishPair: AirPlay pairing complete, starting companion pairing...');
 
       this.pairingPhase = 'companion';
@@ -64,7 +90,11 @@ class ATVService extends EventEmitter {
     }
 
     if (this.pairingPhase === 'companion') {
-      const companionCreds = await this.pairingSession.finish(pin);
+      const companionCreds = await withTimeout(
+        this.pairingSession.finish(pin),
+        30000,
+        'Companion pairing verification timed out. Please try again.',
+      );
       console.log('finishPair: Companion pairing complete');
 
       const credentials = new Credentials(this.airplayCreds, companionCreds);
@@ -87,7 +117,11 @@ class ATVService extends EventEmitter {
     const credentials = Credentials.deserialize(credsData.credentials);
 
     if (!this.device) {
-      const devices = await scan({ timeout: 2000 });
+      const devices = await withTimeout(
+        scan({ timeout: 2000 }),
+        4000,
+        'Device scan timed out during connect.',
+      );
       const match = devices.find((d) => d.deviceId === credsData.identifier);
       if (!match) {
         this.emit('connection-failure');
@@ -97,7 +131,11 @@ class ATVService extends EventEmitter {
     }
 
     try {
-      await this.device.connect(credentials);
+      await withTimeout(
+        this.device.connect(credentials),
+        15000,
+        'Connection timed out. The Apple TV may be unreachable.',
+      );
       this.setupListeners();
 
       if (credentials.companionCredentials && this.device.companionPort) {

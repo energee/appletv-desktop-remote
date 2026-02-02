@@ -1,24 +1,3 @@
-import * as path from 'path';
-import * as fs from 'fs';
-
-const remote = require('@electron/remote');
-
-declare global {
-  interface Window {
-    saveHotkey: typeof saveHotkey;
-    resetToDefault: typeof resetToDefault;
-  }
-}
-
-const MYPATH = path.join(
-  process.env.APPDATA ||
-    (process.platform === 'darwin'
-      ? process.env.HOME + '/Library/Application Support'
-      : process.env.HOME + '/.local/share'),
-  'ATV Remote',
-);
-const hotkeyPath = path.join(MYPATH, 'hotkey.txt');
-
 const DEFAULT_HOTKEY = 'Super+Shift+R';
 const symbolMap: Record<string, string> = {
   Super: '\u2318',
@@ -28,10 +7,18 @@ const symbolMap: Record<string, string> = {
 };
 const modOrder = ['Super', 'Ctrl', 'Alt', 'Shift'];
 
-// Detect dark mode
-if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-  document.body.classList.add('darkMode');
-}
+// Detect dark mode via preload API
+(async () => {
+  try {
+    const isDark = await window.hotkeyAPI.getTheme();
+    if (isDark) document.body.classList.add('darkMode');
+  } catch {
+    // Fallback to matchMedia
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.add('darkMode');
+    }
+  }
+})();
 
 // Populate key dropdown
 (function populateKeys() {
@@ -131,64 +118,37 @@ function setModifiersFromCombo(combo: string): void {
   updatePreview();
 }
 
-function loadExistingHotkey(): boolean {
-  if (fs.existsSync(hotkeyPath)) {
-    const raw = fs.readFileSync(hotkeyPath, 'utf8').trim();
-    if (raw) {
-      const hotkeys = raw
-        .split(',')
-        .map((h) => h.trim())
-        .filter((h) => h !== '');
-      if (hotkeys.length > 0) {
-        setModifiersFromCombo(hotkeys[0]);
-        return true;
-      }
+async function loadExistingHotkey(): Promise<boolean> {
+  const raw = await window.hotkeyAPI.loadHotkey();
+  if (raw) {
+    const hotkeys = raw
+      .split(',')
+      .map((h) => h.trim())
+      .filter((h) => h !== '');
+    if (hotkeys.length > 0) {
+      setModifiersFromCombo(hotkeys[0]);
+      return true;
     }
   }
   setModifiersFromCombo(DEFAULT_HOTKEY);
   return false;
 }
 
-function saveHotkey(): void {
+async function saveHotkey(): Promise<void> {
   const combo = buildComboString();
   if (!combo) return;
-
-  let existing: string[] = [];
-  if (fs.existsSync(hotkeyPath)) {
-    const raw = fs.readFileSync(hotkeyPath, 'utf8').trim();
-    if (raw) {
-      existing = raw
-        .split(',')
-        .map((h) => h.trim())
-        .filter((h) => h !== '');
-    }
-  }
-
-  if (existing.length > 1) {
-    existing[0] = combo;
-    fs.writeFileSync(hotkeyPath, existing.join(','));
-  } else {
-    fs.writeFileSync(hotkeyPath, combo);
-  }
-
-  closeWindow();
+  await window.hotkeyAPI.saveHotkey(combo);
+  await window.hotkeyAPI.closeWindow();
 }
 
-function resetToDefault(): void {
-  if (fs.existsSync(hotkeyPath)) {
-    fs.unlinkSync(hotkeyPath);
-  }
-  closeWindow();
+async function resetToDefault(): Promise<void> {
+  await window.hotkeyAPI.resetHotkey();
+  await window.hotkeyAPI.closeWindow();
 }
 
-function closeWindow(): void {
-  const win = remote.getCurrentWindow();
-  win.close();
-}
-
-// Expose to HTML onclick handlers
-window.saveHotkey = saveHotkey;
-window.resetToDefault = resetToDefault;
+// Attach click handlers via addEventListener (no inline onclick)
+document.getElementById('saveBtn')!.addEventListener('click', saveHotkey);
+document.getElementById('resetBtn')!.addEventListener('click', resetToDefault);
 
 // Init
 loadExistingHotkey();

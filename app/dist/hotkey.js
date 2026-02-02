@@ -1,36 +1,6 @@
 "use strict";
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
 
 // src/hotkey/hotkey.ts
-var path = __toESM(require("path"));
-var fs = __toESM(require("fs"));
-var remote = require("@electron/remote");
-var MYPATH = path.join(
-  process.env.APPDATA || (process.platform === "darwin" ? process.env.HOME + "/Library/Application Support" : process.env.HOME + "/.local/share"),
-  "ATV Remote"
-);
-var hotkeyPath = path.join(MYPATH, "hotkey.txt");
 var DEFAULT_HOTKEY = "Super+Shift+R";
 var symbolMap = {
   Super: "\u2318",
@@ -39,9 +9,16 @@ var symbolMap = {
   Shift: "\u21E7"
 };
 var modOrder = ["Super", "Ctrl", "Alt", "Shift"];
-if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-  document.body.classList.add("darkMode");
-}
+(async () => {
+  try {
+    const isDark = await window.hotkeyAPI.getTheme();
+    if (isDark) document.body.classList.add("darkMode");
+  } catch {
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      document.body.classList.add("darkMode");
+    }
+  }
+})();
 (function populateKeys() {
   const sel = document.getElementById("keySelect");
   for (let i = 65; i <= 90; i++) {
@@ -128,48 +105,28 @@ function setModifiersFromCombo(combo) {
   }
   updatePreview();
 }
-function loadExistingHotkey() {
-  if (fs.existsSync(hotkeyPath)) {
-    const raw = fs.readFileSync(hotkeyPath, "utf8").trim();
-    if (raw) {
-      const hotkeys = raw.split(",").map((h) => h.trim()).filter((h) => h !== "");
-      if (hotkeys.length > 0) {
-        setModifiersFromCombo(hotkeys[0]);
-        return true;
-      }
+async function loadExistingHotkey() {
+  const raw = await window.hotkeyAPI.loadHotkey();
+  if (raw) {
+    const hotkeys = raw.split(",").map((h) => h.trim()).filter((h) => h !== "");
+    if (hotkeys.length > 0) {
+      setModifiersFromCombo(hotkeys[0]);
+      return true;
     }
   }
   setModifiersFromCombo(DEFAULT_HOTKEY);
   return false;
 }
-function saveHotkey() {
+async function saveHotkey() {
   const combo = buildComboString();
   if (!combo) return;
-  let existing = [];
-  if (fs.existsSync(hotkeyPath)) {
-    const raw = fs.readFileSync(hotkeyPath, "utf8").trim();
-    if (raw) {
-      existing = raw.split(",").map((h) => h.trim()).filter((h) => h !== "");
-    }
-  }
-  if (existing.length > 1) {
-    existing[0] = combo;
-    fs.writeFileSync(hotkeyPath, existing.join(","));
-  } else {
-    fs.writeFileSync(hotkeyPath, combo);
-  }
-  closeWindow();
+  await window.hotkeyAPI.saveHotkey(combo);
+  await window.hotkeyAPI.closeWindow();
 }
-function resetToDefault() {
-  if (fs.existsSync(hotkeyPath)) {
-    fs.unlinkSync(hotkeyPath);
-  }
-  closeWindow();
+async function resetToDefault() {
+  await window.hotkeyAPI.resetHotkey();
+  await window.hotkeyAPI.closeWindow();
 }
-function closeWindow() {
-  const win = remote.getCurrentWindow();
-  win.close();
-}
-window.saveHotkey = saveHotkey;
-window.resetToDefault = resetToDefault;
+document.getElementById("saveBtn").addEventListener("click", saveHotkey);
+document.getElementById("resetBtn").addEventListener("click", resetToDefault);
 loadExistingHotkey();

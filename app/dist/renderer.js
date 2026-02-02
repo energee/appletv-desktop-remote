@@ -31,11 +31,18 @@ function renderIcons() {
   }
 }
 
-// src/renderer/atv_remote.ts
-var import_electron2 = require("electron");
-
 // src/renderer/state.ts
-var import_events = require("events");
+var SimpleEventEmitter = class {
+  listeners = {};
+  on(event, fn) {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(fn);
+  }
+  emit(event, ...args) {
+    const fns = this.listeners[event];
+    if (fns) fns.forEach((fn) => fn(...args));
+  }
+};
 function $(sel) {
   return document.querySelector(sel);
 }
@@ -46,7 +53,7 @@ var atv_connected = false;
 var atv_credentials = false;
 var pairDevice = "";
 var connecting = false;
-var atv_events = new import_events.EventEmitter();
+var atv_events = new SimpleEventEmitter();
 function setAtvConnected(val) {
   atv_connected = val;
 }
@@ -67,19 +74,8 @@ function safeParse(json, fallback) {
     return fallback;
   }
 }
-var nativeTheme = null;
-var remote = null;
-var mb = null;
-var Menu = null;
-function setRemoteModules(r, nt, m, menu) {
-  remote = r;
-  nativeTheme = nt;
-  mb = m;
-  Menu = menu;
-}
 
 // src/renderer/web_remote.ts
-var import_electron = require("electron");
 var qPresses = 0;
 var keymap = {
   ArrowUp: "up",
@@ -102,30 +98,22 @@ var keymap = {
   "-": "volume_down",
   _: "volume_down"
 };
-function initializeRemote() {
-  try {
-    const r = require("@electron/remote");
-    const nt = r.nativeTheme;
-    const menu = r.Menu;
-    const m = r.getGlobal("MB");
-    setRemoteModules(r, nt, m, menu);
-    if (!m || !m.tray) return false;
-    return true;
-  } catch (err) {
-    console.error("Failed to initialize remote:", err);
-    return false;
-  }
-}
 function initIPC() {
-  import_electron.ipcRenderer.on("shortcutWin", () => {
+  window.electronAPI.onShortcutWin(() => {
     handleDarkMode();
     toggleAltText(true);
   });
-  import_electron.ipcRenderer.on("powerResume", () => {
+  window.electronAPI.onPowerResume(() => {
     connectToATV();
   });
-  import_electron.ipcRenderer.on("sendCommand", (_event, key) => {
+  window.electronAPI.onSendCommand((key) => {
     sendCommand(key);
+  });
+  window.electronAPI.onErrorMessage((msg) => {
+    setStatus(msg);
+  });
+  window.electronAPI.onContextMenuAction((action, payload) => {
+    handleContextMenuAction(action, payload);
   });
   atv_events.on("connected", function(connected) {
     if (connected) {
@@ -135,6 +123,7 @@ function initIPC() {
     } else {
       updateConnectionDot("connecting");
       setStatus("Reconnecting...");
+      hideNowPlaying();
     }
   });
   atv_events.on("connection_failure", function() {
@@ -143,6 +132,9 @@ function initIPC() {
   atv_events.on("reconnect_failed", function() {
     updateConnectionDot("disconnected");
     setStatus("Connection lost. Right-click to reconnect.");
+  });
+  atv_events.on("now-playing", function(info) {
+    updateNowPlaying(info);
   });
 }
 window.addEventListener("blur", () => {
@@ -180,20 +172,18 @@ window.addEventListener("keydown", (e) => {
   if (mods.length > 0 && mods[0] === "Alt") {
     toggleAltText(false);
   }
-  let shifted = false;
   if (mods.length === 1 && mods[0] === "Shift") {
-    shifted = true;
     mods = [];
   }
   if (mods.length > 0) return;
   if (key === "q") {
     qPresses++;
-    if (qPresses === 3) import_electron.ipcRenderer.invoke("quit");
+    if (qPresses === 3) window.electronAPI.quit();
   } else {
     qPresses = 0;
   }
   if (key === "h") {
-    import_electron.ipcRenderer.invoke("hideWindow");
+    window.electronAPI.hideWindow();
   }
   if (!atv_connected) {
     if (document.activeElement === $("#pairCode") && key === "Enter") {
@@ -203,7 +193,7 @@ window.addEventListener("keydown", (e) => {
   }
   if ($("#cancelPairing").style.display !== "none") return;
   if (keymap[key] !== void 0) {
-    sendCommand(key, shifted);
+    sendCommand(key);
     e.preventDefault();
   }
 });
@@ -254,7 +244,7 @@ function getKeyEl(key) {
   }
   return el;
 }
-async function sendCommand(k, shifted = false) {
+async function sendCommand(k) {
   if (k === "Pause") k = "Space";
   let rcmd = keymap[k];
   if (Object.values(keymap).includes(k)) rcmd = k;
@@ -266,11 +256,7 @@ async function sendCommand(k, shifted = false) {
     }, 500);
   }
   try {
-    if (shifted) {
-      await sendKeyAction(rcmd, "Hold");
-    } else {
-      await sendKey(rcmd);
-    }
+    await sendKey(rcmd);
   } catch {
     if (el) {
       el.classList.remove("invert");
@@ -279,14 +265,18 @@ async function sendCommand(k, shifted = false) {
     }
   }
 }
+var pairButtonBound = false;
 function startPairing(dev) {
   setAtvConnected(false);
   $("#initText").style.display = "none";
   $("#results").style.display = "none";
-  $("#pairButton").addEventListener("click", () => {
-    submitCode();
-    return false;
-  });
+  if (!pairButtonBound) {
+    pairButtonBound = true;
+    $("#pairButton").addEventListener("click", () => {
+      submitCode();
+      return false;
+    });
+  }
   $("#pairCodeElements").style.display = "block";
   startPair(dev);
 }
@@ -364,7 +354,7 @@ function showKeyMap() {
           direction = scrollAccY > 0 ? "up" : "down";
         }
         flashArrow(direction);
-        sendCommand(direction, false);
+        sendCommand(direction);
         scrollAccX = 0;
         scrollAccY = 0;
         scrollCooldown = true;
@@ -380,7 +370,7 @@ function showKeyMap() {
     hideHint();
     clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
     longPressTimer = setTimeout(function() {
-      sendCommand("select", true);
+      sendCommand("select");
       clickStart = null;
     }, 1e3);
   });
@@ -395,7 +385,7 @@ function showKeyMap() {
     const dist = Math.sqrt(dx * dx + dy * dy);
     const elapsed = Date.now() - clickStart.t;
     if (dist < 15 && elapsed < 300) {
-      sendCommand("select", false);
+      sendCommand("select");
     }
     clickStart = null;
   });
@@ -403,23 +393,27 @@ function showKeyMap() {
   const isLongPressing = {};
   const dataKeyEls = $$("[data-key]");
   dataKeyEls.forEach(function(button) {
-    button.addEventListener("mousedown", function() {
-      const key = button.dataset.key;
-      if (longPressTimers[key]) {
-        clearTimeout(longPressTimers[key]);
-      }
-      isLongPressing[key] = true;
-      button.classList.add("pressing");
-      longPressTimers[key] = setTimeout(() => {
-        if (!isLongPressing[key]) return;
-        button.classList.add("longpress-triggered");
-        sendCommand(key, true);
-        isLongPressing[key] = false;
-        setTimeout(() => {
-          button.classList.remove("pressing", "longpress-triggered");
-        }, 200);
-      }, 1e3);
-    }, { signal });
+    button.addEventListener(
+      "mousedown",
+      function() {
+        const key = button.dataset.key;
+        if (longPressTimers[key]) {
+          clearTimeout(longPressTimers[key]);
+        }
+        isLongPressing[key] = true;
+        button.classList.add("pressing");
+        longPressTimers[key] = setTimeout(() => {
+          if (!isLongPressing[key]) return;
+          button.classList.add("longpress-triggered");
+          sendCommand(key);
+          isLongPressing[key] = false;
+          setTimeout(() => {
+            button.classList.remove("pressing", "longpress-triggered");
+          }, 200);
+        }, 1e3);
+      },
+      { signal }
+    );
     function handleMouseUpLeave(e) {
       const key = button.dataset.key;
       if (isLongPressing[key]) {
@@ -430,7 +424,7 @@ function showKeyMap() {
         isLongPressing[key] = false;
         button.classList.remove("pressing");
         if (e.type === "mouseup") {
-          sendCommand(key, false);
+          sendCommand(key);
         }
       }
     }
@@ -446,7 +440,10 @@ function getActiveIdentifier() {
 function getConnectedDeviceName() {
   const activeId = getActiveIdentifier();
   if (!activeId) return null;
-  const creds = safeParse(localStorage.getItem("remote_credentials"), {});
+  const creds = safeParse(
+    localStorage.getItem("remote_credentials"),
+    {}
+  );
   const match = Object.entries(creds).find(([, val]) => {
     const v = val;
     return v && v.identifier === activeId;
@@ -498,13 +495,13 @@ function startScan() {
   $("#pairingLoader").innerHTML = '<div style="text-align:center"><div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div></div>';
   scanDevices();
 }
-function handleDarkMode() {
+async function handleDarkMode() {
   try {
-    if (!nativeTheme) return;
     const uimode = localStorage.getItem("uimode") || "systemmode";
     const alwaysUseDarkMode = uimode === "darkmode";
     const neverUseDarkMode = uimode === "lightmode";
-    const darkModeEnabled = (nativeTheme.shouldUseDarkColors || alwaysUseDarkMode) && !neverUseDarkMode;
+    const systemDark = await window.electronAPI.getTheme();
+    const darkModeEnabled = (systemDark || alwaysUseDarkMode) && !neverUseDarkMode;
     if (darkModeEnabled) {
       document.body.classList.add("darkMode");
     } else {
@@ -515,7 +512,10 @@ function handleDarkMode() {
   }
 }
 function getCreds(nm) {
-  const creds = safeParse(localStorage.getItem("remote_credentials"), {});
+  const creds = safeParse(
+    localStorage.getItem("remote_credentials"),
+    {}
+  );
   const keys = Object.keys(creds);
   if (keys.length === 0) return {};
   let result = nm !== void 0 && keys.includes(nm) ? creds[nm] : creds[keys[0]];
@@ -523,135 +523,179 @@ function getCreds(nm) {
   return result;
 }
 function setAlwaysOnTop(tf) {
-  import_electron.ipcRenderer.invoke("alwaysOnTop", String(tf));
+  window.electronAPI.setAlwaysOnTop(String(tf));
 }
-var lastMenuEvent;
-function subMenuClick(event) {
-  const mode = event.id;
-  localStorage.setItem("uimode", mode);
-  lastMenuEvent = event;
-  event.menu.items.forEach((el) => {
-    el.checked = el.id === mode;
+function updateNowPlaying(info) {
+  const container = $("#nowPlaying");
+  if (!container) return;
+  const title = info.title || "";
+  const artist = info.artist || "";
+  if (!title && !artist) {
+    container.style.display = "none";
+    return;
+  }
+  container.style.display = "block";
+  $("#npTitle").textContent = title;
+  $("#npArtist").textContent = artist;
+}
+function hideNowPlaying() {
+  const container = $("#nowPlaying");
+  if (container) container.style.display = "none";
+}
+function showSettings() {
+  $("#runningElements").style.display = "none";
+  $("#addNewElements").style.display = "none";
+  const panel = $("#settingsPanel");
+  panel.style.display = "block";
+  const currentTheme = localStorage.getItem("uimode") || "systemmode";
+  const radios = panel.querySelectorAll('input[name="theme"]');
+  radios.forEach((r) => {
+    r.checked = r.value === currentTheme;
   });
-  setTimeout(() => {
-    handleDarkMode();
-  }, 1);
+  const topChecked = safeParse(localStorage.getItem("alwaysOnTopChecked"), false);
+  $("#settingsAlwaysOnTop").checked = topChecked;
+  populateDeviceList();
 }
-function confirmExit() {
-  remote.app.quit();
+function hideSettings() {
+  $("#settingsPanel").style.display = "none";
+  if (atv_connected) {
+    $("#runningElements").style.display = "";
+  } else {
+    $("#addNewElements").style.display = "";
+  }
 }
-function changeHotkeyClick() {
-  import_electron.ipcRenderer.invoke("loadHotkeyWindow");
+function populateDeviceList() {
+  const listEl = $("#settingsDeviceList");
+  listEl.innerHTML = "";
+  const creds = safeParse(
+    localStorage.getItem("remote_credentials"),
+    {}
+  );
+  const activeId = getActiveIdentifier();
+  for (const name of Object.keys(creds)) {
+    const row = document.createElement("div");
+    row.className = "settings-device-row";
+    const label = document.createElement("span");
+    const v = creds[name];
+    const isActive = !!(v && activeId && v.identifier === activeId);
+    label.textContent = name + (isActive ? " (active)" : "");
+    label.className = "settings-device-name";
+    row.appendChild(label);
+    const removeBtn = document.createElement("button");
+    removeBtn.textContent = "Remove";
+    removeBtn.className = "settings-device-remove";
+    removeBtn.addEventListener("click", () => {
+      const allCreds = safeParse(
+        localStorage.getItem("remote_credentials"),
+        {}
+      );
+      delete allCreds[name];
+      localStorage.setItem("remote_credentials", JSON.stringify(allCreds));
+      if (isActive) localStorage.removeItem("atvcreds");
+      window.electronAPI.removeDevice(name);
+      populateDeviceList();
+    });
+    row.appendChild(removeBtn);
+    listEl.appendChild(row);
+  }
+  if (Object.keys(creds).length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "settings-empty";
+    empty.textContent = "No saved devices";
+    listEl.appendChild(empty);
+  }
+}
+function initSettingsListeners() {
+  const radios = document.querySelectorAll('#themeRadios input[name="theme"]');
+  radios.forEach((r) => {
+    r.addEventListener("change", () => {
+      localStorage.setItem("uimode", r.value);
+      handleDarkMode();
+    });
+  });
+  $("#settingsAlwaysOnTop").addEventListener("change", (e) => {
+    const checked = e.target.checked;
+    localStorage.setItem("alwaysOnTopChecked", String(checked));
+    setAlwaysOnTop(checked);
+  });
+  $("#settingsHotkeyBtn").addEventListener("click", () => {
+    window.electronAPI.loadHotkeyWindow();
+  });
+  $("#settingsBackBtn").addEventListener("click", () => {
+    hideSettings();
+  });
 }
 function handleContextMenu() {
-  const tray = mb.tray;
-  const mode = localStorage.getItem("uimode") || "systemmode";
-  const creds = safeParse(localStorage.getItem("remote_credentials"), {});
+  const creds = safeParse(
+    localStorage.getItem("remote_credentials"),
+    {}
+  );
   const ks = Object.keys(creds);
   const activeId = getActiveIdentifier();
-  const deviceItems = ks.map(function(k) {
+  const mode = localStorage.getItem("uimode") || "systemmode";
+  const topChecked = safeParse(localStorage.getItem("alwaysOnTopChecked"), false);
+  const devices = ks.map((k) => {
     const v = creds[k];
     return {
-      type: "checkbox",
       label: k,
-      checked: !!(v && activeId && v.identifier === activeId),
-      click: function() {
-        localStorage.setItem("atvcreds", JSON.stringify(creds[k]));
+      identifier: v ? v.identifier : "",
+      checked: !!(v && activeId && v.identifier === activeId)
+    };
+  });
+  window.electronAPI.showContextMenu({
+    devices,
+    uiMode: mode,
+    alwaysOnTop: topChecked
+  });
+}
+function handleContextMenuAction(action, payload) {
+  switch (action) {
+    case "selectDevice": {
+      const creds = safeParse(
+        localStorage.getItem("remote_credentials"),
+        {}
+      );
+      if (payload && creds[payload]) {
+        localStorage.setItem("atvcreds", JSON.stringify(creds[payload]));
         connectToATV();
         handleContextMenu();
       }
-    };
-  });
-  if (deviceItems.length > 0) {
-    deviceItems.push({ type: "separator" });
-  }
-  deviceItems.push({
-    label: "Pair new device...",
-    click: function() {
-      mb.showWindow();
-      startScan();
+      break;
     }
-  });
-  deviceItems.push({
-    label: "Re-pair current device",
-    click: function() {
+    case "pairNew":
+      startScan();
+      break;
+    case "repairCurrent":
       localStorage.removeItem("atvcreds");
-      mb.showWindow();
       startScan();
-    }
-  });
-  const devicesSubMenu = Menu.buildFromTemplate(deviceItems);
-  const appearanceSubMenu = Menu.buildFromTemplate([
-    {
-      type: "checkbox",
-      id: "systemmode",
-      click: subMenuClick,
-      label: "Follow system settings",
-      checked: mode === "systemmode"
-    },
-    {
-      type: "checkbox",
-      id: "darkmode",
-      click: subMenuClick,
-      label: "Dark mode",
-      checked: mode === "darkmode"
-    },
-    {
-      type: "checkbox",
-      id: "lightmode",
-      click: subMenuClick,
-      label: "Light mode",
-      checked: mode === "lightmode"
-    }
-  ]);
-  const topChecked = safeParse(localStorage.getItem("alwaysOnTopChecked"), false);
-  const contextMenu = Menu.buildFromTemplate([
-    { label: "Devices", submenu: devicesSubMenu },
-    {
-      type: "checkbox",
-      label: "Always on-top",
-      click: toggleAlwaysOnTop,
-      checked: topChecked
-    },
-    { type: "separator" },
-    { label: "Appearance", submenu: appearanceSubMenu, click: subMenuClick },
-    { label: "Change hotkey", click: changeHotkeyClick },
-    { type: "separator" },
-    { role: "about", label: "About" },
-    { label: "Quit", click: confirmExit, accelerator: "CommandOrControl+Q" }
-  ]);
-  tray.removeAllListeners("right-click");
-  tray.on("right-click", () => {
-    mb.tray.popUpContextMenu(contextMenu);
-  });
-}
-function toggleAlwaysOnTop(event) {
-  localStorage.setItem("alwaysOnTopChecked", String(event.checked));
-  import_electron.ipcRenderer.invoke("alwaysOnTop", String(event.checked));
-}
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-var initRetryCount = 0;
-var MAX_INIT_RETRIES = 10;
-async function init() {
-  if (!initializeRemote()) {
-    initRetryCount++;
-    if (initRetryCount >= MAX_INIT_RETRIES) {
-      console.error("Failed to initialize remote after " + MAX_INIT_RETRIES + " attempts");
-      setStatus("Failed to initialize. Please restart the app.");
-      return;
-    }
-    console.log(
-      "Remote not ready, retrying in 100ms... (" + initRetryCount + "/" + MAX_INIT_RETRIES + ")"
-    );
-    await delay(100);
-    return await init();
+      break;
+    case "setTheme":
+      if (payload) {
+        localStorage.setItem("uimode", payload);
+        handleDarkMode();
+        handleContextMenu();
+      }
+      break;
+    case "toggleAlwaysOnTop":
+      if (payload !== void 0) {
+        localStorage.setItem("alwaysOnTopChecked", payload);
+        window.electronAPI.setAlwaysOnTop(payload);
+        handleContextMenu();
+      }
+      break;
+    case "openSettings":
+      window.electronAPI.showWindow();
+      showSettings();
+      break;
   }
-  initRetryCount = 0;
-  addThemeListener();
-  handleDarkMode();
+}
+async function init() {
+  window.electronAPI.onThemeUpdated(() => {
+    handleDarkMode();
+  });
+  await handleDarkMode();
   handleContextMenu();
+  initSettingsListeners();
   $("#cancelPairing").addEventListener("click", () => {
     window.location.reload();
   });
@@ -667,7 +711,7 @@ async function init() {
   }
   if (localStorage.getItem("firstRun") !== "false") {
     localStorage.setItem("firstRun", "false");
-    mb.showWindow();
+    window.electronAPI.showWindow();
   }
   if (creds && creds.credentials && creds.identifier) {
     setAtvCredentials(creds);
@@ -676,53 +720,38 @@ async function init() {
     startScan();
   }
 }
-function themeUpdated() {
-  handleDarkMode();
-}
-var tryThemeAddCount = 0;
-function addThemeListener() {
-  try {
-    if (nativeTheme) {
-      nativeTheme.removeAllListeners();
-      nativeTheme.on("updated", themeUpdated);
-    }
-  } catch (err) {
-    setTimeout(() => {
-      tryThemeAddCount++;
-      if (tryThemeAddCount < 10) addThemeListener();
-    }, 1e3);
-  }
-}
 
 // src/renderer/atv_remote.ts
-var connection_failure = false;
+var _connection_failure = false;
 var reconnectTimer = null;
 var reconnectAttempt = 0;
 var MAX_RECONNECT_ATTEMPTS = 5;
 var MAX_RECONNECT_DELAY = 1e4;
-import_electron2.ipcRenderer.on("atv:connected", () => {
-  setAtvConnected(true);
-  connection_failure = false;
-  cancelReconnect();
-  atv_events.emit("connected", true);
-});
-import_electron2.ipcRenderer.on("atv:connection-failure", () => {
-  setAtvConnected(false);
-  connection_failure = true;
-  atv_events.emit("connection_failure");
-});
-import_electron2.ipcRenderer.on("atv:connection-lost", () => {
-  setAtvConnected(false);
-  atv_events.emit("connected", false);
-  scheduleReconnect();
-});
-import_electron2.ipcRenderer.on("atv:disconnected", () => {
-  setAtvConnected(false);
-  atv_events.emit("connected", false);
-});
-import_electron2.ipcRenderer.on("atv:now-playing", (_event, info) => {
-  atv_events.emit("now-playing", info);
-});
+function initRemote() {
+  window.electronAPI.onAtvConnected(() => {
+    setAtvConnected(true);
+    _connection_failure = false;
+    cancelReconnect();
+    atv_events.emit("connected", true);
+  });
+  window.electronAPI.onAtvConnectionFailure(() => {
+    setAtvConnected(false);
+    _connection_failure = true;
+    atv_events.emit("connection_failure");
+  });
+  window.electronAPI.onAtvConnectionLost(() => {
+    setAtvConnected(false);
+    atv_events.emit("connected", false);
+    scheduleReconnect();
+  });
+  window.electronAPI.onAtvDisconnected(() => {
+    setAtvConnected(false);
+    atv_events.emit("connected", false);
+  });
+  window.electronAPI.onAtvNowPlaying((info) => {
+    atv_events.emit("now-playing", info);
+  });
+}
 function cancelReconnect() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -745,7 +774,7 @@ function attemptReconnect() {
     reconnectAttempt = 0;
     return;
   }
-  const delay2 = Math.min(500 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
+  const delay = Math.min(500 * Math.pow(2, reconnectAttempt), MAX_RECONNECT_DELAY);
   reconnectAttempt++;
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
@@ -758,13 +787,13 @@ function attemptReconnect() {
     } catch {
       attemptReconnect();
     }
-  }, delay2);
+  }, delay);
 }
 async function scanDevices() {
   cancelReconnect();
-  connection_failure = false;
+  _connection_failure = false;
   try {
-    const results = await import_electron2.ipcRenderer.invoke("atv:scan");
+    const results = await window.electronAPI.scan();
     createDropdown(results || []);
   } catch (err) {
     console.error("Scan failed:", err);
@@ -772,30 +801,27 @@ async function scanDevices() {
   }
 }
 function sendKey(cmd) {
-  return import_electron2.ipcRenderer.invoke("atv:sendKey", cmd);
-}
-function sendKeyAction(cmd, taction) {
-  return import_electron2.ipcRenderer.invoke("atv:sendKey", cmd, taction);
+  return window.electronAPI.sendKey(cmd);
 }
 function connectATV(creds) {
-  return import_electron2.ipcRenderer.invoke("atv:connect", creds).catch((err) => {
-    connection_failure = true;
+  return window.electronAPI.connect(creds).catch((err) => {
+    _connection_failure = true;
     atv_events.emit("connection_failure");
     throw err;
   });
 }
 function startPair(dev) {
   cancelReconnect();
-  connection_failure = false;
+  _connection_failure = false;
   setPairDevice(dev);
-  import_electron2.ipcRenderer.invoke("atv:startPair", dev).catch((err) => {
+  window.electronAPI.startPair(dev).catch((err) => {
     console.error("startPair failed:", err);
   });
 }
 async function finishPair(code) {
-  connection_failure = false;
+  _connection_failure = false;
   try {
-    const result = await import_electron2.ipcRenderer.invoke("atv:finishPair", code);
+    const result = await window.electronAPI.finishPair(code);
     if (result.needsCompanionPin) {
       $("#pairCode").value = "";
       $("#pairStepNum").textContent = "2";
@@ -815,8 +841,6 @@ function saveRemote(name, creds) {
   if (typeof c === "string") c = JSON.parse(c);
   ar[name] = c;
   localStorage.setItem("remote_credentials", JSON.stringify(ar));
-}
-function initRemote() {
 }
 
 // src/renderer/index.ts

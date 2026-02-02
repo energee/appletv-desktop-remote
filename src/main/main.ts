@@ -1,23 +1,25 @@
-import { app, BrowserWindow, powerMonitor, globalShortcut, ipcMain } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeTheme,
+  powerMonitor,
+  globalShortcut,
+  ipcMain,
+} from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import ATVService from './atv_service.js';
 import type { Menubar } from 'menubar';
 import type { ATVKeyName } from '../shared/types';
+import type { ContextMenuConfig } from '../shared/electron-api';
 
-declare global {
-  var atvService: ATVService;
-  var MB: Menubar | null;
-}
-
-const remoteMain = require('@electron/remote/main');
 const menubar = require('menubar').menubar;
-
-remoteMain.initialize();
 
 let win: BrowserWindow | null = null;
 let hotkeyWindow: BrowserWindow | null = null;
 let mb!: Menubar;
+let lastContextMenu: Electron.Menu | null = null;
 
 process.env['MYPATH'] = path.join(
   process.env.APPDATA ||
@@ -28,14 +30,12 @@ process.env['MYPATH'] = path.join(
 );
 
 const atvService = new ATVService();
-global.atvService = atvService;
 
 const preloadWindow = true;
 const readyEvent = preloadWindow ? 'ready' : 'after-create-window';
 
-const volumeButtons = ['VolumeUp', 'VolumeDown', 'VolumeMute'] as const;
-let handleVolumeButtonsGlobal = false;
-
+const preloadPath = path.join(__dirname, 'preload.js');
+const preloadHotkeyPath = path.join(__dirname, 'preload-hotkey.js');
 
 function sendToRenderer(channel: string, ...args: unknown[]): void {
   if (win && !win.isDestroyed() && win.webContents) {
@@ -58,11 +58,11 @@ function createHotkeyWindow(): void {
     width: 400,
     height: 340,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: preloadHotkeyPath,
     },
   });
-  remoteMain.enable(hotkeyWindow.webContents);
   hotkeyWindow.loadFile(path.join(__dirname, '..', 'hotkey.html'));
   hotkeyWindow.setMenu(null);
   hotkeyWindow.on('closed', () => {
@@ -80,15 +80,14 @@ function createWindow(): void {
       height: 420,
       alwaysOnTop: false,
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: preloadPath,
       },
     },
   });
-  global.MB = mb;
 
   mb.on(readyEvent, () => {
-    remoteMain.enable(mb.window!.webContents);
     win = mb.window ?? null;
 
     win!.on('close', () => {
@@ -97,8 +96,6 @@ function createWindow(): void {
 
     // Override menubar's 100ms blur-to-hide with a longer delay
     win!.removeAllListeners('blur');
-    // @ts-expect-error accessing private menubar property to clear blur timer
-    if (mb._blurTimeout) { clearTimeout(mb._blurTimeout); mb._blurTimeout = null; }
     let blurTimeout: ReturnType<typeof setTimeout> | null = null;
     win!.on('blur', () => {
       if (!win) return;
@@ -120,16 +117,13 @@ function createWindow(): void {
 
     win!.on('show', () => {
       sendToRenderer('shortcutWin');
-      if (handleVolumeButtonsGlobal) handleVolume();
     });
 
-    win!.on('hide', () => {
-      if (handleVolumeButtonsGlobal) unhandleVolume();
-    });
-
-    win!.webContents.on('will-navigate', (_e, url) => {
+    win!.webContents.on('will-navigate', () => {
       // block unexpected navigations
     });
+
+    // --- IPC Handlers ---
 
     ipcMain.handle('loadHotkeyWindow', () => {
       createHotkeyWindow();
@@ -144,6 +138,174 @@ function createWindow(): void {
     });
     ipcMain.handle('hideWindow', () => {
       mb.hideWindow();
+    });
+    ipcMain.handle('showWindow', () => {
+      showWindow();
+    });
+
+    // Theme
+    ipcMain.handle('getTheme', () => {
+      return nativeTheme.shouldUseDarkColors;
+    });
+
+    nativeTheme.on('updated', () => {
+      sendToRenderer('theme:updated', nativeTheme.shouldUseDarkColors);
+    });
+
+    // Hotkey file IPC
+    ipcMain.handle('hotkey:load', () => {
+      const hotkeyPath = path.join(process.env['MYPATH']!, 'hotkey.txt');
+      if (fs.existsSync(hotkeyPath)) {
+        return fs.readFileSync(hotkeyPath, 'utf8').trim() || null;
+      }
+      return null;
+    });
+
+    ipcMain.handle('hotkey:save', (_event, combo: string) => {
+      const hotkeyPath = path.join(process.env['MYPATH']!, 'hotkey.txt');
+      const dir = process.env['MYPATH']!;
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+      const existing = readHotkeys();
+      if (existing.length > 1) {
+        existing[0] = combo;
+        fs.writeFileSync(hotkeyPath, existing.join(','));
+      } else {
+        fs.writeFileSync(hotkeyPath, combo);
+      }
+    });
+
+    ipcMain.handle('hotkey:reset', () => {
+      const hotkeyPath = path.join(process.env['MYPATH']!, 'hotkey.txt');
+      if (fs.existsSync(hotkeyPath)) fs.unlinkSync(hotkeyPath);
+    });
+
+    ipcMain.handle('closeHotkeyWindow', () => {
+      if (hotkeyWindow && !hotkeyWindow.isDestroyed()) {
+        hotkeyWindow.close();
+      }
+    });
+
+    // Context menu (built in main process from serializable config)
+    ipcMain.on('showContextMenu', (_event, config: ContextMenuConfig) => {
+      const deviceItems: Electron.MenuItemConstructorOptions[] = config.devices.map((d) => ({
+        type: 'checkbox',
+        label: d.label,
+        checked: d.checked,
+        click: () => {
+          sendToRenderer('context-menu-action', 'selectDevice', d.label);
+        },
+      }));
+      if (deviceItems.length > 0) {
+        deviceItems.push({ type: 'separator' });
+      }
+      deviceItems.push({
+        label: 'Pair new device...',
+        click: () => {
+          showWindow();
+          sendToRenderer('context-menu-action', 'pairNew');
+        },
+      });
+      deviceItems.push({
+        label: 'Re-pair current device',
+        click: () => {
+          showWindow();
+          sendToRenderer('context-menu-action', 'repairCurrent');
+        },
+      });
+
+      const devicesSubMenu = Menu.buildFromTemplate(deviceItems);
+
+      const appearanceSubMenu = Menu.buildFromTemplate([
+        {
+          type: 'checkbox',
+          id: 'systemmode',
+          label: 'Follow system settings',
+          checked: config.uiMode === 'systemmode',
+          click: () => sendToRenderer('context-menu-action', 'setTheme', 'systemmode'),
+        },
+        {
+          type: 'checkbox',
+          id: 'darkmode',
+          label: 'Dark mode',
+          checked: config.uiMode === 'darkmode',
+          click: () => sendToRenderer('context-menu-action', 'setTheme', 'darkmode'),
+        },
+        {
+          type: 'checkbox',
+          id: 'lightmode',
+          label: 'Light mode',
+          checked: config.uiMode === 'lightmode',
+          click: () => sendToRenderer('context-menu-action', 'setTheme', 'lightmode'),
+        },
+      ]);
+
+      const contextMenu = Menu.buildFromTemplate([
+        { label: 'Devices', submenu: devicesSubMenu },
+        {
+          type: 'checkbox',
+          label: 'Always on-top',
+          checked: config.alwaysOnTop,
+          click: (menuItem) => {
+            sendToRenderer('context-menu-action', 'toggleAlwaysOnTop', String(menuItem.checked));
+          },
+        },
+        { type: 'separator' },
+        { label: 'Appearance', submenu: appearanceSubMenu },
+        {
+          label: 'Settings',
+          click: () => sendToRenderer('context-menu-action', 'openSettings'),
+        },
+        {
+          label: 'Change hotkey',
+          click: () => createHotkeyWindow(),
+        },
+        { type: 'separator' },
+        { role: 'about', label: 'About' },
+        {
+          label: 'Quit',
+          accelerator: 'CommandOrControl+Q',
+          click: () => {
+            atvService.destroy();
+            app.exit();
+          },
+        },
+      ]);
+
+      lastContextMenu = contextMenu;
+      if (mb.tray) {
+        mb.tray.popUpContextMenu(contextMenu);
+      }
+    });
+
+    // Show context menu on tray right-click
+    if (mb.tray) {
+      mb.tray.on('right-click', () => {
+        if (lastContextMenu) {
+          mb.tray.popUpContextMenu(lastContextMenu);
+        }
+      });
+    }
+
+    // Settings IPC
+    ipcMain.handle('settings:load', () => {
+      // Settings are stored in renderer localStorage, but we provide theme info from main
+      return {
+        isDark: nativeTheme.shouldUseDarkColors,
+      };
+    });
+
+    ipcMain.handle('settings:save', (_event, data: { alwaysOnTop?: boolean }) => {
+      if (data.alwaysOnTop !== undefined) {
+        if (mb.window && !mb.window.isDestroyed()) {
+          mb.window.setAlwaysOnTop(data.alwaysOnTop);
+        }
+      }
+    });
+
+    ipcMain.handle('settings:removeDevice', () => {
+      // Device removal is handled in renderer localStorage
+      // This is a hook for future main-process cleanup if needed
     });
 
     // ATV Service IPC Handlers
@@ -165,12 +327,13 @@ function createWindow(): void {
         await atvService.connect(creds);
       } catch (err: unknown) {
         console.warn('Connect failed:', (err as Error).message);
+        throw err;
       }
     });
 
     ipcMain.handle('atv:disconnect', () => atvService.disconnect());
 
-    ipcMain.handle('atv:sendKey', (_event, key: string, _action?: string) => {
+    ipcMain.handle('atv:sendKey', (_event, key: string) => {
       return atvService.sendKey(key as ATVKeyName);
     });
 
@@ -182,6 +345,9 @@ function createWindow(): void {
     atvService.on('connection-lost', () => sendToRenderer('atv:connection-lost'));
     atvService.on('disconnected', () => sendToRenderer('atv:disconnected'));
     atvService.on('now-playing', (info) => sendToRenderer('atv:now-playing', info));
+    atvService.on('error', (err) =>
+      sendToRenderer('atv:error-message', (err as Error).message || String(err)),
+    );
 
     powerMonitor.addListener('resume', () => {
       sendToRenderer('powerResume');
@@ -201,6 +367,17 @@ function showWindow(): void {
   }, 200);
 }
 
+function readHotkeys(): string[] {
+  const hotkeyPath = path.join(process.env['MYPATH']!, 'hotkey.txt');
+  if (!fs.existsSync(hotkeyPath)) return [];
+  const raw = fs.readFileSync(hotkeyPath, 'utf8').trim();
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((h) => h.trim())
+    .filter((h) => h !== '');
+}
+
 function hideWindow(): void {
   mb.hideWindow();
   try {
@@ -210,42 +387,15 @@ function hideWindow(): void {
   }
 }
 
-function unhandleVolume(): void {
-  for (const btn of volumeButtons) {
-    globalShortcut.unregister(btn);
-  }
-}
-
-function handleVolume(): void {
-  const keys: Record<string, string> = {
-    VolumeUp: 'volume_up',
-    VolumeDown: 'volume_down',
-    VolumeMute: 'volume_mute',
-  };
-  for (const btn of volumeButtons) {
-    globalShortcut.register(btn, () => {
-      const key = keys[btn];
-      sendToRenderer('sendCommand', key);
-    });
-  }
-}
-
 function registerHotkeys(): void {
-  const hotkeyPath = path.join(process.env['MYPATH']!, 'hotkey.txt');
   try {
     globalShortcut.unregisterAll();
   } catch (err) {
     console.error('Error unregistering hotkeys:', err);
   }
   let registered = false;
-  if (fs.existsSync(hotkeyPath)) {
-    const raw = fs.readFileSync(hotkeyPath, { encoding: 'utf-8' }).trim();
-    let hotkeys: string[];
-    if (raw.indexOf(',') > -1) {
-      hotkeys = raw.split(',').map((el) => el.trim());
-    } else {
-      hotkeys = [raw];
-    }
+  const hotkeys = readHotkeys();
+  if (hotkeys.length > 0) {
     const results = hotkeys.map((hotkey) => {
       return globalShortcut.register(hotkey, () => {
         if (mb.window && !mb.window.isDestroyed() && mb.window.isVisible()) {

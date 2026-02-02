@@ -1,52 +1,63 @@
 {
-    "name": "appletv-desktop-remote",
-    "version": "0.4.2",
-    "main": "app/dist/main/main.js",
-    "description": "Apple TV Remote",
-    "productName": "Apple TV Remote",
-    "build": {
-        "productName": "ATV Remote",
-        "appId": "com.electron.atvMacRemote",
-        "icon": "app/images/full.png",
-        "files": [
-            "**/*",
-            "dist/**/*"
-        ],
-        "mac": {
-            "category": "public.app-category.utilities",
-            "hardenedRuntime": true,
-            "gatekeeperAssess": false,
-            "entitlements": "build/entitlements.mac.plist",
-            "entitlementsInherit": "build/entitlements.mac.plist"
-        }
-    },
-    "scripts": {
-        "build:ts": "tsc",
-        "build:renderer": "node esbuild.renderer.mjs",
-        "build:all": "pnpm build:ts && pnpm build:renderer",
-        "start": "pnpm build:all && electron app",
-        "postinstall": "electron-builder install-app-deps",
-        "build": "pnpm build:all && npx electron-builder -m",
-        "build:win": "pnpm build:all && npx electron-builder -w",
-        "build-arm": "pnpm build:all && npx electron-builder -m --arm64"
-    },
-    "devDependencies": {
-        "@types/node": "^25.2.0",
-        "electron": "^38.2.1",
-        "electron-builder": "^26.0.20",
-        "esbuild": "^0.27.2",
-        "typescript": "^5.9.3"
-    },
-    "dependencies": {
-        "@electron/remote": "^2.1.2",
-        "menubar": "^9.5.1"
-    },
-    "license": "CC-BY-NC-SA-4.0",
-    "packageManager": "pnpm@10.28.0",
-    "pnpm": {
-        "onlyBuiltDependencies": [
-            "electron",
-            "esbuild"
-        ]
+  "name": "appletv-desktop-remote",
+  "version": "0.4.2",
+  "main": "app/dist/main/main.js",
+  "description": "Apple TV Remote",
+  "productName": "Apple TV Remote",
+  "build": {
+    "productName": "ATV Remote",
+    "appId": "com.electron.atvMacRemote",
+    "icon": "app/images/full.png",
+    "files": [
+      "**/*",
+      "dist/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     }
+  },
+  "scripts": {
+    "build:ts": "tsc",
+    "build:renderer": "node esbuild.renderer.mjs",
+    "build:all": "pnpm build:ts && pnpm build:renderer",
+    "start": "pnpm build:all && electron app",
+    "postinstall": "electron-builder install-app-deps",
+    "build": "pnpm build:all && npx electron-builder -m",
+    "build:win": "pnpm build:all && npx electron-builder -w",
+    "build-arm": "pnpm build:all && npx electron-builder -m --arm64",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^25.2.0",
+    "electron": "^38.2.1",
+    "electron-builder": "^26.0.20",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "menubar": "^9.5.1"
+  },
+  "license": "CC-BY-NC-SA-4.0",
+  "packageManager": "pnpm@10.28.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
 }

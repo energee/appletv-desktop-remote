@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="script-src 'self' 'unsafe-inline' 'unsafe-eval';"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ATV Remote</title>
@@ -154,6 +154,40 @@
             </div>
           </div>
           <div class="shortcut-hint">Hold <kbd>&#x2325;</kbd> to show keyboard shortcuts</div>
+        </div>
+
+        <!-- Now Playing -->
+        <div id="nowPlaying" class="now-playing" style="display: none">
+          <div class="now-playing-title" id="npTitle"></div>
+          <div class="now-playing-artist" id="npArtist"></div>
+        </div>
+      </div>
+
+      <!-- Settings Panel -->
+      <div id="settingsPanel" style="display: none">
+        <div class="settings-body">
+          <div class="settings-section">
+            <div class="settings-label">Appearance</div>
+            <div class="settings-radio-group" id="themeRadios">
+              <label><input type="radio" name="theme" value="systemmode" /> Follow system</label>
+              <label><input type="radio" name="theme" value="darkmode" /> Dark</label>
+              <label><input type="radio" name="theme" value="lightmode" /> Light</label>
+            </div>
+          </div>
+          <div class="settings-section">
+            <label class="settings-toggle">
+              <input type="checkbox" id="settingsAlwaysOnTop" />
+              <span>Always on top</span>
+            </label>
+          </div>
+          <div class="settings-section">
+            <div class="settings-label">Saved Devices</div>
+            <div id="settingsDeviceList"></div>
+          </div>
+          <div class="settings-section">
+            <button id="settingsHotkeyBtn" class="settings-btn">Change Hotkey</button>
+          </div>
+          <button id="settingsBackBtn" class="settings-back-btn">&larr; Back</button>
         </div>
       </div>
 

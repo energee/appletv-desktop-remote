@@ -11,7 +11,7 @@ export interface IpcInvokeChannels {
   'atv:finishPair': (pin: string) => PairResult;
   'atv:connect': (creds: ATVCredentials) => void;
   'atv:disconnect': () => void;
-  'atv:sendKey': (key: string, action?: string) => void;
+  'atv:sendKey': (key: string) => void;
   'atv:isConnected': () => boolean;
 }
 
@@ -26,4 +26,7 @@ export interface IpcSendChannels {
   'atv:connection-lost': () => void;
   'atv:disconnected': () => void;
   'atv:now-playing': (info: unknown) => void;
+  'atv:error-message': (msg: string) => void;
+  'theme:updated': (isDark: boolean) => void;
+  'context-menu-action': (action: string, payload?: string) => void;
 }

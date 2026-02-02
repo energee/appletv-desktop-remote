@@ -30,3 +30,10 @@ export type KeyboardKeyMap = Record<string, ATVKeyName>;
 export type PairingPhase = 'airplay' | 'companion' | null;
 
 export type ConnectionDotState = 'connected' | 'connecting' | 'disconnected';
+
+export interface NowPlayingInfo {
+  title?: string;
+  artist?: string;
+  album?: string;
+  playbackState?: string;
+}

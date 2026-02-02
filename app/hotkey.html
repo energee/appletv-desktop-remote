@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    />
     <title>Change Hotkey</title>
     <style>
       :root {
@@ -235,19 +239,8 @@
     </div>
 
     <div class="actions">
-      <button
-        class="btn btn-accent"
-        id="saveBtn"
-        onclick="saveHotkey()"
-        title="Save this shortcut and close"
-      >
-        Save
-      </button>
-      <button
-        class="btn btn-ghost"
-        onclick="resetToDefault()"
-        title="Clear custom shortcut and use ⌘⇧R"
-      >
+      <button class="btn btn-accent" id="saveBtn" title="Save this shortcut and close">Save</button>
+      <button class="btn btn-ghost" id="resetBtn" title="Clear custom shortcut and use ⌘⇧R">
         Reset to Default
       </button>
     </div>

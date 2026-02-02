@@ -1,6 +1,19 @@
-import { EventEmitter } from 'events';
-import type { Menubar } from 'menubar';
 import type { ATVCredentials } from '../shared/types';
+
+// Simple browser-compatible event emitter (no Node.js 'events' dependency)
+class SimpleEventEmitter {
+  private listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+
+  on(event: string, fn: (...args: unknown[]) => void): void {
+    if (!this.listeners[event]) this.listeners[event] = [];
+    this.listeners[event].push(fn);
+  }
+
+  emit(event: string, ...args: unknown[]): void {
+    const fns = this.listeners[event];
+    if (fns) fns.forEach((fn) => fn(...args));
+  }
+}
 
 export function $(sel: string): HTMLElement | null {
   return document.querySelector(sel);
@@ -15,7 +28,7 @@ export let atv_credentials: ATVCredentials | false = false;
 export let pairDevice = '';
 export let connecting = false;
 
-export const atv_events = new EventEmitter();
+export const atv_events = new SimpleEventEmitter();
 
 export function setAtvConnected(val: boolean): void {
   atv_connected = val;
@@ -37,17 +50,4 @@ export function safeParse<T>(json: string | null, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-// Electron @electron/remote modules (initialized at runtime via require)
-export let nativeTheme: Electron.NativeTheme | null = null;
-export let remote: typeof import('@electron/remote') | null = null;
-export let mb: Menubar | null = null;
-export let Menu: typeof Electron.Menu | null = null;
-
-export function setRemoteModules(r: typeof import('@electron/remote'), nt: Electron.NativeTheme, m: Menubar | null, menu: typeof Electron.Menu): void {
-  remote = r;
-  nativeTheme = nt;
-  mb = m;
-  Menu = menu;
 }
