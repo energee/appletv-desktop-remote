@@ -7,7 +7,16 @@ const menubar = require('menubar').menubar;
 const util = require('util');
 var secondWindow;
 process.env['MYPATH'] = path.join(process.env.APPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + "/.local/share"), "ATV Remote");
-const lodash = _ = require('./js/lodash.min');
+function throttle(fn, ms) {
+    var last = 0;
+    return function() {
+        var now = Date.now();
+        if (now - last >= ms) {
+            last = now;
+            fn.apply(this, arguments);
+        }
+    };
+}
 const ATVService = require('./atv_service');
 const fs = require('fs');
 const atvService = new ATVService();
@@ -216,7 +225,11 @@ function createWindow() {
         });
 
         ipcMain.handle('atv:connect', async (event, creds) => {
-            await atvService.connect(creds);
+            try {
+                await atvService.connect(creds);
+            } catch (err) {
+                console.warn('Connect failed:', err.message);
+            }
         });
 
         ipcMain.handle('atv:disconnect', async () => {
@@ -233,23 +246,23 @@ function createWindow() {
 
         // Forward ATVService events to renderer
         atvService.on('connected', () => {
-            if (win) win.webContents.send('atv:connected');
+            if (win && !win.isDestroyed()) win.webContents.send('atv:connected');
         });
         atvService.on('connection-failure', () => {
-            if (win) win.webContents.send('atv:connection-failure');
+            if (win && !win.isDestroyed()) win.webContents.send('atv:connection-failure');
         });
         atvService.on('connection-lost', () => {
-            if (win) win.webContents.send('atv:connection-lost');
+            if (win && !win.isDestroyed()) win.webContents.send('atv:connection-lost');
         });
         atvService.on('disconnected', () => {
-            if (win) win.webContents.send('atv:disconnected');
+            if (win && !win.isDestroyed()) win.webContents.send('atv:disconnected');
         });
         atvService.on('now-playing', (info) => {
-            if (win) win.webContents.send('atv:now-playing', info);
+            if (win && !win.isDestroyed()) win.webContents.send('atv:now-playing', info);
         });
 
         powerMonitor.addListener('resume', event => {
-            win.webContents.send('powerResume');
+            if (win && !win.isDestroyed()) win.webContents.send('powerResume');
         })
 
     })
@@ -265,11 +278,11 @@ function showWindow() {
     }
     mb.showWindow();
     setTimeout(() => {
-        mb.window.focus();
+        if (mb.window) mb.window.focus();
     }, 200);
 }
 
-var showWindowThrottle = lodash.throttle(showWindow, 100);
+var showWindowThrottle = throttle(showWindow, 100);
 
 function hideWindow() {
     mb.hideWindow();

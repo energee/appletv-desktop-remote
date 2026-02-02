@@ -6,11 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Search field input</title>
     <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="css/pure-min.css">
-    <link rel="stylesheet" href="css/all.css">
-    <script>
-        window.jQuery = window.$ = require('jquery');
-    </script>
     <style>
         body {
             padding: 12px 16px;
@@ -76,9 +71,9 @@
             var neverUseDarkMode = (uimode == "lightmode");
 
             if ((nativeTheme.shouldUseDarkColors || alwaysUseDarkMode) && (!neverUseDarkMode)) {
-                $("body").addClass("darkMode");
+                document.body.classList.add("darkMode");
             } else {
-                $("body").removeClass("darkMode");
+                document.body.classList.remove("darkMode");
             }
         }
         function checkATVInputState() {
@@ -96,10 +91,13 @@
 
         ipcRenderer.on('kbfocus-status', (event, arg) => {
             kbHasFocus = !!(arg);
+            var wrapper = document.querySelector(".large-text-input-wrapper");
             if (kbHasFocus) {
-                $(".large-text-input-wrapper").removeClass("bad").addClass("good");
+                wrapper.classList.remove("bad");
+                wrapper.classList.add("good");
             } else {
-                $(".large-text-input-wrapper").removeClass("good").addClass("bad");
+                wrapper.classList.remove("good");
+                wrapper.classList.add("bad");
             }
         })
 

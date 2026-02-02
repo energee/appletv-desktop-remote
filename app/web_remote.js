@@ -1,5 +1,16 @@
+var $ = (sel) => document.querySelector(sel);
+var $$ = (sel) => document.querySelectorAll(sel);
+
+function debounce(fn, ms) {
+    var id;
+    return function() {
+        clearTimeout(id);
+        var args = arguments, ctx = this;
+        id = setTimeout(function() { fn.apply(ctx, args); }, ms);
+    };
+}
+
 var atv_credentials = false;
-var lodash = _ = require('./js/lodash.min');
 var pairDevice = "";
 var electron = require('electron');
 var ipcRenderer = electron.ipcRenderer;
@@ -31,9 +42,7 @@ const path = require('path');
 var device = false;
 var qPresses = 0;
 var playstate = false;
-var previousKeys = []
-
-const ws_keymap = {
+const keymap = {
     "ArrowUp": "up",
     "ArrowDown": "down",
     "ArrowLeft": "left",
@@ -55,79 +64,20 @@ const ws_keymap = {
     "_": "volume_down"
 }
 
-const keymap = {
-    'ArrowLeft': 'Left',
-    'ArrowRight': 'Right',
-    'ArrowUp': 'Up',
-    'ArrowDown': 'Down',
-    'Enter': 'Select',
-    'Space': (latv) => {
-        var v = latv.playing;
-        latv.playing = !latv.playing;
-        if (v) {
-            return 'Pause';
-        } else {
-            return 'Play'
-        }
-    },
-    'Backspace': 'Menu',
-    'Escape': 'Menu',
-    'Next': 'Next',
-    'Previous': 'Previous',
-    'n': 'Next',
-    'p': 'Previous',
-    ']': 'Next',
-    '[': 'Previous',
-    't': 'Tv',
-    'l': 'LongTv'
-}
-
-const niceButtons = {
-    "TV": "Tv",
-    "play/pause": "play_pause",
-    'Lower Volume': 'volume_down',
-    'Raise Volume': 'volume_up'
-}
-
-const keyDesc = {
-    'Space': 'Pause/Play',
-    'ArrowLeft': 'left arrow',
-    'ArrowRight': 'right arrow',
-    'ArrowUp': 'up arrow',
-    'ArrowDown': 'down arrow',
-    'Backspace': 'Menu',
-    'Escape': 'Menu',
-    't': 'TV Button',
-    'l': 'Long-press TV Button'
-}
 function initIPC() {
     ipcRenderer.on('shortcutWin', (event) => {
         handleDarkMode();
         toggleAltText(true);
     })
-    
-    ipcRenderer.on('scanDevicesResult', (event, ks) => {
-        createDropdown(ks);
-    })
-    
-    ipcRenderer.on('pairCredentials', (event, arg) => {
-        saveRemote(pairDevice, arg);
-        localStorage.setItem('atvcreds', JSON.stringify(getCreds(pairDevice)));
-        connectToATV();
-    })
-    
-    ipcRenderer.on('gotStartPair', () => {
-        console.log('gotStartPair');
-    })
-    
+
     ipcRenderer.on('mainLog', (event, txt) => {
         console.log('[ main ] %s', txt.substring(0, txt.length - 1));
     })
-    
+
     ipcRenderer.on('powerResume', (event, arg) => {
         connectToATV();
     })
-    
+
     ipcRenderer.on('sendCommand', (event, key) => {
         console.log(`sendCommand from main: ${key}`)
         sendCommand(key);
@@ -165,25 +115,25 @@ window.addEventListener('beforeunload', async e => {
 
 function toggleAltText(tf) {
     if (tf) {
-        $(".keyText").show();
-        $(".keyTextAlt").hide();
+        $$(".keyText").forEach(el => el.style.display = '');
+        $$(".keyTextAlt").forEach(el => el.style.display = 'none');
     } else {
-        $(".keyText").hide();
-        $(".keyTextAlt").show();
+        $$(".keyText").forEach(el => el.style.display = 'none');
+        $$(".keyTextAlt").forEach(el => el.style.display = 'inline');
     }
 }
 
 function showInlineKeyboard() {
-    $("#inline-keyboard").show();
+    $("#inline-keyboard").style.display = '';
     // TODO: Re-enable when node-appletv-remote adds text input API
     // ipcRenderer.invoke('atv:getText');
     $("#inlineTextInput").focus();
 }
 
 function hideInlineKeyboard() {
-    $("#inline-keyboard").hide();
+    $("#inline-keyboard").style.display = 'none';
     $("#inlineTextInput").blur();
-    $("#inlineTextInput").val("");
+    $("#inlineTextInput").value = "";
 }
 
 window.addEventListener('keyup', e => {
@@ -230,92 +180,91 @@ window.addEventListener('keydown', e => {
         ipcRenderer.invoke('hideWindow');
     }
     if (!isConnected()) {
-        if ($("#pairCode").is(':focus') && key == 'Enter') {
+        if (document.activeElement === $("#pairCode") && key == 'Enter') {
             submitCode();
         }
         return;
     }
-    if ($("#cancelPairing").is(":visible")) return;
-    if (ws_keymap[key] !== undefined) {
+    if ($("#cancelPairing").style.display !== 'none') return;
+    if (keymap[key] !== undefined) {
         sendCommand(key, shifted);
         e.preventDefault();
     }
 })
 
 function createDropdown(ks) {
-    $("#loader").hide();
+    $("#loader").style.display = 'none';
     var txt = "";
-    $("#statusText").hide();
-    //setStatus("Select a device");
-    $("#pairingLoader").html("")
-    $("#pairStepNum").html("1");
-    $("#pairProtocolName").html("Apple TV");
-    $("#pairingElements").show();
-    var ar = ks.map(el => {
-        return {
-            id: el,
-            text: el
-        }
-    })
-    ar.unshift({
-        id: '',
-        text: 'Select a device to pair'
-    })
-    $("#atv_picker").select2({
-        data: ar,
-        placeholder: 'Select a device to pair',
-        dropdownAutoWidth: true,
-        minimumResultsForSearch: Infinity
-    }).on('change', () => {
-        var vl = $("#atv_picker").val();
+    $("#statusText").style.display = 'none';
+    $("#pairingLoader").innerHTML = "";
+    $("#pairStepNum").innerHTML = "1";
+    $("#pairProtocolName").innerHTML = "Apple TV";
+    $("#pairingElements").style.display = 'block';
+
+    var picker = $("#atv_picker");
+    picker.innerHTML = '';
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select a device to pair';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    picker.appendChild(placeholder);
+    ks.forEach(function(name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        picker.appendChild(opt);
+    });
+    picker.onchange = function() {
+        var vl = picker.value;
         if (vl) {
             pairDevice = vl;
             startPairing(vl);
         }
-    })
+    };
 }
 
 function createATVDropdown() {
-    $("#statusText").hide();
+    $("#statusText").style.display = 'none';
     handleContextMenu();
 }
 
 
 function _updatePlayState() {
-    var icon = device.playing ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+    var ic = device.playing ? icon('pause') : icon('play');
     console.log(`Update play state: ${device.playing ? "Pause" : "Play"}`)
-    $(`[data-key="play_pause"] .keyText`).html(icon);
+    var el = $('[data-key="play_pause"] .keyText');
+    if (el) el.innerHTML = ic;
 }
 
-var updatePlayState = lodash.debounce(_updatePlayState, 300);
+var updatePlayState = debounce(_updatePlayState, 300);
 
 async function sendCommand(k, shifted = false) {
     console.log(`sendCommand: ${k}`)
     if (k == 'Pause') k = 'Space';
-    var rcmd = ws_keymap[k];
-    if (Object.values(ws_keymap).indexOf(k) > -1) rcmd = k;
+    var rcmd = keymap[k];
+    if (Object.values(keymap).indexOf(k) > -1) rcmd = k;
     if (typeof(rcmd) === 'function') rcmd = rcmd(device);
 
     var classkey = rcmd;
     if (classkey == 'Play') classkey = 'Pause';
-    var el = $(`[data-key="${classkey}"]`)
-    if (el.length > 0) {
-        el.addClass('invert');
+    var el = $(`[data-key="${classkey}"]`);
+    if (el) {
+        el.classList.add('invert');
         setTimeout(() => {
-            el.removeClass('invert');
+            el.classList.remove('invert');
         }, 500);
     }
-    if (k == 'Space') {
-        var ppicon = rcmd == "Pause" ? '<i class="fas fa-play"></i>' : '<i class="fas fa-pause"></i>';
-        el.find('.keyText').html(ppicon);
+    if (k == 'Space' && el) {
+        var ppicon = rcmd == "Pause" ? icon('play') : icon('pause');
+        var keyTextEl = el.querySelector('.keyText');
+        if (keyTextEl) keyTextEl.innerHTML = ppicon;
     }
     console.log(`Keydown: ${k}, sending command: ${rcmd} (shifted: ${shifted})`)
-    previousKeys.push(rcmd);
-    if (previousKeys.length > 10) previousKeys.shift()
     if (shifted) {
-        ws_sendCommandAction(rcmd, "Hold")
+        sendKeyAction(rcmd, "Hold")
     } else {
-        ws_sendCommand(rcmd)
+        sendKey(rcmd)
     }
 }
 
@@ -338,20 +287,20 @@ async function askQuestion(msg) {
 
 function startPairing(dev) {
     atv_connected = false;
-    $("#initText").hide();
-    $("#results").hide();
-    $("#pairButton").on('click', () => {
+    $("#initText").style.display = 'none';
+    $("#results").style.display = 'none';
+    $("#pairButton").addEventListener('click', () => {
         submitCode();
         return false;
     });
-    $("#pairCodeElements").show();
-    ws_startPair(dev);
+    $("#pairCodeElements").style.display = 'block';
+    startPair(dev);
 }
 
 function submitCode() {
-    var code = $("#pairCode").val();
-    $("#pairCode").val("");
-    ws_finishPair1(code);
+    var code = $("#pairCode").value;
+    $("#pairCode").value = "";
+    finishPair(code);
 }
 
 function showKeyboardHint() {
@@ -368,11 +317,12 @@ function showKeyboardHint() {
 }
 
 function showKeyMap() {
-    $("#initText").hide();
-    $("#touchpad").css('display', 'flex').hide().fadeIn();
+    $("#initText").style.display = 'none';
+    var touchpad = document.getElementById('touchpad');
+    touchpad.style.display = 'flex';
+    touchpad.classList.add('fade-in');
 
     // --- Touchpad gesture detection ---
-    var touchpad = document.getElementById('touchpad');
     var startX, startY, startTime;
     var longPressTimer = null;
     var moved = false;
@@ -381,22 +331,24 @@ function showKeyMap() {
     function hideHint() {
         if (!hintHidden) {
             hintHidden = true;
-            $('.touchpad-hint').addClass('hidden');
+            var hint = $('.touchpad-hint');
+            if (hint) hint.classList.add('hidden');
         }
     }
 
     function flashArrow(direction) {
         var el = $('.touchpad-arrow-' + direction);
-        el.removeClass('flash');
+        if (!el) return;
+        el.classList.remove('flash');
         // Force reflow to restart animation
-        void el[0].offsetWidth;
-        el.addClass('flash');
+        void el.offsetWidth;
+        el.classList.add('flash');
 
         // Pulse the touchpad border
         var tp = $('#touchpad');
-        tp.removeClass('swipe-pulse');
-        void tp[0].offsetWidth;
-        tp.addClass('swipe-pulse');
+        tp.classList.remove('swipe-pulse');
+        void tp.offsetWidth;
+        tp.classList.add('swipe-pulse');
     }
 
     // --- Swipe detection via two-finger scroll (wheel events) ---
@@ -476,101 +428,108 @@ function showKeyMap() {
     var longPressProgress = {};
     var isLongPressing = {};
 
-    $("[data-key]").off('mousedown mouseup mouseleave');
+    var dataKeyEls = $$("[data-key]");
 
-    $("[data-key]").on('mousedown', function(e) {
-        var key = $(this).data('key');
-        var $button = $(this);
-
-        if (longPressTimers[key]) {
-            clearTimeout(longPressTimers[key]);
-            clearInterval(longPressProgress[key]);
-        }
-
-        var progressValue = 0;
-        isLongPressing[key] = true;
-
-        $button.addClass('pressing');
-        longPressProgress[key] = setInterval(() => {
-            if (!isLongPressing[key]) return;
-
-            progressValue += 2;
-            var progressPercent = Math.min(progressValue, 100);
-            var degrees = Math.round(progressPercent * 3.6);
-
-            var isDarkMode = $('body').hasClass('darkMode');
-            var ringColor = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
-            var transparentColor = isDarkMode ? 'rgba(10, 132, 255, 0.1)' : 'rgba(0, 113, 227, 0.08)';
-
-            $button.css('box-shadow', `0 0 0 3px ${ringColor.replace(/[\d.]+\)$/, (progressPercent / 100 * 0.7).toFixed(2) + ')')}`);
-
-            var scale = 1 + (progressPercent * 0.001);
-            $button.css('transform', `scale(${scale})`);
-
-        }, 20);
-
-        longPressTimers[key] = setTimeout(() => {
-            if (!isLongPressing[key]) return;
-
-            clearInterval(longPressProgress[key]);
-
-            $button.addClass('longpress-triggered');
-
-            var isDarkMode = $('body').hasClass('darkMode');
-            var successRing = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
-            $button.css('box-shadow', `0 0 0 3px ${successRing}`);
-
-            console.log(`Long press triggered for: ${key}`);
-            sendCommand(key, true);
-
-            isLongPressing[key] = false;
-
-            setTimeout(() => {
-                $button.removeClass('pressing longpress-triggered');
-                $button.css({
-                    'background': '',
-                    'transform': '',
-                    'box-shadow': ''
-                });
-            }, 200);
-
-        }, 1000);
+    dataKeyEls.forEach(function(button) {
+        // Remove old listeners by cloning
+        var clone = button.cloneNode(true);
+        button.parentNode.replaceChild(clone, button);
     });
 
-    $("[data-key]").on('mouseup mouseleave', function(e) {
-        var key = $(this).data('key');
-        var $button = $(this);
+    // Re-query after cloning
+    dataKeyEls = $$("[data-key]");
 
-        if (isLongPressing[key]) {
+    dataKeyEls.forEach(function(button) {
+        button.addEventListener('mousedown', function(e) {
+            var key = button.dataset.key;
 
             if (longPressTimers[key]) {
                 clearTimeout(longPressTimers[key]);
-                longPressTimers[key] = null;
-            }
-            if (longPressProgress[key]) {
                 clearInterval(longPressProgress[key]);
-                longPressProgress[key] = null;
             }
 
-            isLongPressing[key] = false;
+            var progressValue = 0;
+            isLongPressing[key] = true;
 
-            $button.removeClass('pressing');
-            $button.css({
-                'background': '',
-                'transform': '',
-                'box-shadow': ''
-            });
+            button.classList.add('pressing');
+            longPressProgress[key] = setInterval(() => {
+                if (!isLongPressing[key]) return;
 
-            if (e.type === 'mouseup') {
-                console.log(`Regular click for: ${key}`);
-                sendCommand(key, false);
+                progressValue += 2;
+                var progressPercent = Math.min(progressValue, 100);
+                var degrees = Math.round(progressPercent * 3.6);
+
+                var isDarkMode = document.body.classList.contains('darkMode');
+                var ringColor = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
+
+                button.style.boxShadow = `0 0 0 3px ${ringColor.replace(/[\d.]+\)$/, (progressPercent / 100 * 0.7).toFixed(2) + ')')}`;
+
+                var scale = 1 + (progressPercent * 0.001);
+                button.style.transform = `scale(${scale})`;
+
+            }, 20);
+
+            longPressTimers[key] = setTimeout(() => {
+                if (!isLongPressing[key]) return;
+
+                clearInterval(longPressProgress[key]);
+
+                button.classList.add('longpress-triggered');
+
+                var isDarkMode = document.body.classList.contains('darkMode');
+                var successRing = isDarkMode ? 'rgba(10, 132, 255, 0.7)' : 'rgba(0, 113, 227, 0.6)';
+                button.style.boxShadow = `0 0 0 3px ${successRing}`;
+
+                console.log(`Long press triggered for: ${key}`);
+                sendCommand(key, true);
+
+                isLongPressing[key] = false;
+
+                setTimeout(() => {
+                    button.classList.remove('pressing', 'longpress-triggered');
+                    button.style.background = '';
+                    button.style.transform = '';
+                    button.style.boxShadow = '';
+                }, 200);
+
+            }, 1000);
+        });
+
+        function handleMouseUpLeave(e) {
+            var key = button.dataset.key;
+
+            if (isLongPressing[key]) {
+
+                if (longPressTimers[key]) {
+                    clearTimeout(longPressTimers[key]);
+                    longPressTimers[key] = null;
+                }
+                if (longPressProgress[key]) {
+                    clearInterval(longPressProgress[key]);
+                    longPressProgress[key] = null;
+                }
+
+                isLongPressing[key] = false;
+
+                button.classList.remove('pressing');
+                button.style.background = '';
+                button.style.transform = '';
+                button.style.boxShadow = '';
+
+                if (e.type === 'mouseup') {
+                    console.log(`Regular click for: ${key}`);
+                    sendCommand(key, false);
+                }
             }
         }
+
+        button.addEventListener('mouseup', handleMouseUpLeave);
+        button.addEventListener('mouseleave', handleMouseUpLeave);
     });
 
     // Keyboard focus detection and inline text input require Companion protocol
     // support in node-appletv-remote. TODO: Re-enable when library adds these APIs.
-    $("#topTextHeader").hide();
+    $("#topTextHeader").style.display = 'none';
 
     showKeyboardHint();
 }
@@ -602,10 +561,10 @@ function handleMessage(msg) {
 
 function updateConnectionDot(state) {
     var dot = $("#connectionDot");
-    dot.removeClass("connected connecting disconnected");
-    if (state === "connected") dot.addClass("connected");
-    else if (state === "connecting") dot.addClass("connecting");
-    else if (state === "disconnected") dot.addClass("disconnected");
+    dot.classList.remove("connected", "connecting", "disconnected");
+    if (state === "connected") dot.classList.add("connected");
+    else if (state === "connecting") dot.classList.add("connecting");
+    else if (state === "disconnected") dot.classList.add("disconnected");
 }
 
 async function connectToATV() {
@@ -613,13 +572,13 @@ async function connectToATV() {
     connecting = true;
     updateConnectionDot("connecting");
     setStatus("Connecting to ATV...");
-    $("#runningElements").show();
+    $("#runningElements").style.display = '';
     atv_credentials = JSON.parse(localStorage.getItem('atvcreds'))
 
-    $("#pairingElements").hide();
+    $("#pairingElements").style.display = 'none';
 
     try {
-        await ws_connect(atv_credentials);
+        await connectATV(atv_credentials);
         createATVDropdown();
         showKeyMap();
     } catch (err) {
@@ -630,7 +589,7 @@ async function connectToATV() {
     connecting = false;
 }
 
-var _connectToATV = lodash.debounce(connectToATV, 300);
+var _connectToATV = debounce(connectToATV, 300);
 
 function saveRemote(name, creds) {
     var ar = JSON.parse(localStorage.getItem('remote_credentials') || "{}")
@@ -640,18 +599,22 @@ function saveRemote(name, creds) {
 }
 
 function setStatus(txt) {
-    $("#statusText").html(txt).show();
+    var el = $("#statusText");
+    el.innerHTML = txt;
+    el.style.display = 'block';
 }
 
 function startScan() {
-    $("#initText").hide();
-    $("#loader").fadeIn();
-    $("#topTextKBLink").hide();
-    $("#addNewElements").show();
-    $("#runningElements").hide();
+    $("#initText").style.display = 'none';
+    var loader = $("#loader");
+    loader.style.display = 'block';
+    loader.classList.add('fade-in');
+    $("#topTextKBLink").style.display = 'none';
+    $("#addNewElements").style.display = '';
+    $("#runningElements").style.display = 'none';
     setStatus("Please wait, scanning...")
-    $("#pairingLoader").html(getLoader());
-    ws_startScan();
+    $("#pairingLoader").innerHTML = '<div style="text-align:center"><div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div></div>';
+    scanDevices();
 }
 
 
@@ -661,16 +624,14 @@ function handleDarkMode() {
         var uimode = localStorage.getItem("uimode") || "systemmode";
         var alwaysUseDarkMode = (uimode == "darkmode");
         var neverUseDarkMode = (uimode == "lightmode");
-    
+
         var darkModeEnabled = (nativeTheme.shouldUseDarkColors || alwaysUseDarkMode) && (!neverUseDarkMode);
         console.log(`darkModeEnabled: ${darkModeEnabled}`)
         if (darkModeEnabled) {
-            $("body").addClass("darkMode");
-            $("#s2style-sheet").attr('href', 'css/select2-inverted.css')
+            document.body.classList.add("darkMode");
             ipcRenderer.invoke('uimode', 'darkmode');
         } else {
-            $("body").removeClass("darkMode");
-            $("#s2style-sheet").attr('href', 'css/select2.min.css')
+            document.body.classList.remove("darkMode");
             ipcRenderer.invoke('uimode', 'lightmode');
         }
     } catch (err) {
@@ -801,22 +762,26 @@ function timeoutAsync(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+var initRetryCount = 0;
+var MAX_INIT_RETRIES = 10;
+
 async function init() {
     if (!initializeRemote()) {
-        console.log('Remote not ready, retrying in 100ms...');
+        initRetryCount++;
+        if (initRetryCount >= MAX_INIT_RETRIES) {
+            console.error('Failed to initialize remote after ' + MAX_INIT_RETRIES + ' attempts');
+            setStatus("Failed to initialize. Please restart the app.");
+            return;
+        }
+        console.log('Remote not ready, retrying in 100ms... (' + initRetryCount + '/' + MAX_INIT_RETRIES + ')');
         await timeoutAsync(100);
         return await init();
     }
+    initRetryCount = 0;
     addThemeListener();
     handleDarkMode();
     handleContextMenu();
-    $("#exitLink").on('click', () => {
-        $("#exitLink").blur();
-        setTimeout(() => {
-            confirmExit();
-        }, 1)
-    })
-    $("#cancelPairing").on('click', () => {
+    $("#cancelPairing").addEventListener('click', () => {
         console.log('cancelling');
         window.location.reload();
     })
@@ -878,4 +843,4 @@ function addThemeListener() {
     }
 }
 
-// initIPC() and ws_init() are called from atv_remote.js on DOM ready
+// initIPC() and initRemote() are called from atv_remote.js on DOM ready

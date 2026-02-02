@@ -2,12 +2,8 @@ node_modules
 app/node_modules
 .DS_Store
 dist
-atv_ws_env
 old
 *.gz
-pytest
-build/pyscripts.js
 stopserver
 .env*
-pyatv
 old_dist

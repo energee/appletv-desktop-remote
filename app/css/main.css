@@ -87,6 +87,18 @@ body {
     transition: background var(--transition-med), color var(--transition-med);
 }
 
+/* ===========================
+   Lucide Icons
+   =========================== */
+
+.lucide-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
 a:link, a:visited, a:hover, a:active {
     color: var(--text-primary);
 }
@@ -94,48 +106,6 @@ a:link, a:visited, a:hover, a:active {
 .center {
     text-align: center;
 }
-
-/* ===========================
-   Top Bar
-   =========================== */
-
-.top-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px 0;
-    min-height: 28px;
-}
-
-.top-bar-hint {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    letter-spacing: 0.02em;
-}
-
-.top-bar-btn {
-    font-family: inherit;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    background: var(--glass);
-    backdrop-filter: blur(var(--blur));
-    -webkit-backdrop-filter: blur(var(--blur));
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    padding: 3px 10px;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    line-height: 1.4;
-}
-
-.top-bar-btn:hover {
-    background: var(--glass-hover);
-}
-
-/* Legacy exitLink compat */
-#exitLinkWrapper { display: none; }
-#alwaysOnTopWrapper { display: none; }
 
 /* ===========================
    Header / Title
@@ -216,8 +186,9 @@ a:link, a:visited, a:hover, a:active {
     background: var(--glass-hover);
 }
 
-#topTextKBLink i {
-    font-size: 12px;
+#topTextKBLink .lucide-icon {
+    width: 12px;
+    height: 12px;
 }
 
 /* ===========================
@@ -225,7 +196,7 @@ a:link, a:visited, a:hover, a:active {
    =========================== */
 
 #initText {
-    text-align: left;
+    text-align: center;
     padding: 10px 16px;
     font-size: 12px;
     color: var(--text-secondary);
@@ -355,34 +326,33 @@ a:link, a:visited, a:hover, a:active {
 #atv_picker {
     min-width: 200px;
     width: 100%;
-}
-
-/* ===========================
-   Simple Button (pairing, etc)
-   =========================== */
-
-.simpleButton {
     font-family: inherit;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
-    background: var(--glass);
-    backdrop-filter: blur(var(--blur));
-    -webkit-backdrop-filter: blur(var(--blur));
+    background: var(--surface);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
-    padding: 6px 16px;
+    padding: 8px 12px;
+    outline: none;
     cursor: pointer;
-    transition: all var(--transition-fast);
-    z-index: 1001;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.simpleButton span {
-    cursor: pointer;
+#atv_picker:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glass);
 }
 
-.simpleButton:hover {
-    background: var(--glass-hover);
+#atv_picker option {
+    background: var(--surface-solid);
+    color: var(--text-primary);
 }
 
 /* ===========================
@@ -446,8 +416,9 @@ a:link, a:visited, a:hover, a:active {
     transition: opacity var(--transition-med);
 }
 
-.touchpad-hint i {
-    font-size: 18px;
+.touchpad-hint .lucide-icon {
+    width: 18px;
+    height: 18px;
     opacity: 0.6;
 }
 
@@ -558,53 +529,6 @@ a:link, a:visited, a:hover, a:active {
     box-shadow: var(--shadow-inset);
 }
 
-/* Navigation arrows */
-.nav-btn {
-    font-size: 15px;
-}
-
-.nav-btn i {
-    opacity: 0.6;
-}
-
-.nav-btn:hover i {
-    opacity: 1;
-}
-
-/* Select / OK button */
-.select-btn {
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    width: 58px;
-    height: 58px;
-}
-
-.select-btn:hover {
-    background: var(--accent-glass);
-    border-color: var(--accent);
-}
-
-/* Keep legacy class working */
-.directionCircle.directionArrows {
-    background: var(--glass);
-}
-
-.selectArrow.directionCircle.directionArrows {
-    border: 1px solid var(--glass-border);
-}
-
-/* ===========================
-   Divider
-   =========================== */
-
-.remote-divider {
-    width: 50%;
-    height: 1px;
-    background: var(--border);
-    margin: 4px auto;
-}
-
 /* ===========================
    Media Row
    =========================== */
@@ -640,11 +564,11 @@ a:link, a:visited, a:hover, a:active {
     border: none;
 }
 
-.media-btn i {
+.media-btn .lucide-icon {
     opacity: 0.5;
 }
 
-.media-btn:hover i {
+.media-btn:hover .lucide-icon {
     opacity: 1;
 }
 
@@ -662,9 +586,10 @@ a:link, a:visited, a:hover, a:active {
     border-color: var(--accent);
 }
 
-.play-btn i {
+.play-btn .lucide-icon {
     opacity: 1;
-    font-size: 14px;
+    width: 14px;
+    height: 14px;
 }
 
 /* ===========================
@@ -732,10 +657,6 @@ a:link, a:visited, a:hover, a:active {
 }
 
 /* Invert flash on keypress */
-.animate {
-    transition: all 200ms ease;
-}
-
 .invert {
     background: var(--accent) !important;
     color: #ffffff !important;
@@ -779,94 +700,6 @@ a:link, a:visited, a:hover, a:active {
     font-weight: 500;
     color: var(--text-secondary);
     padding: 4px 0;
-}
-
-/* ===========================
-   Scrolling Banner
-   =========================== */
-
-.ctText {
-    font-size: 1.3em;
-}
-
-.ctText_banner {
-    text-decoration: none;
-    text-align: center;
-    white-space: nowrap;
-    display: inline-flex;
-    line-height: 1;
-    overflow: hidden;
-}
-
-.ctText_banner_animated {
-    animation: backAndForth 5s linear infinite;
-}
-
-@keyframes backAndForth {
-    0%   { transform: translateX(0); }
-    10%  { transform: translateX(0); }
-    45%  { transform: translateX(calc(-100% + 200px)); }
-    55%  { transform: translateX(calc(-100% + 200px)); }
-    90%  { transform: translateX(0); }
-    100% { transform: translateX(0); }
-}
-
-/* ===========================
-   Python Error
-   =========================== */
-
-.pythonErrorHeader {
-    font-size: 1.3em;
-    color: #ff453a;
-    font-weight: 600;
-}
-
-.pythonError {
-    display: none;
-    text-align: center;
-    margin: 0 auto;
-}
-
-/* ===========================
-   Spacer (legacy)
-   =========================== */
-
-.spacerRow {
-    height: 6px;
-}
-
-/* ===========================
-   Number Circle (legacy)
-   =========================== */
-
-.numberCircle {
-    cursor: pointer;
-    border-radius: var(--radius-full);
-    width: 52px;
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--glass);
-    backdrop-filter: blur(var(--blur));
-    -webkit-backdrop-filter: blur(var(--blur));
-    color: var(--text-primary);
-    border: 1px solid var(--glass-border);
-    font-size: 18px;
-}
-
-.darkMode .numberCircle {
-    background: var(--glass);
-    color: var(--text-primary);
-}
-
-/* ===========================
-   Keymap div
-   =========================== */
-
-.keymapDiv {
-    display: flex;
-    justify-content: space-evenly;
 }
 
 /* ===========================
@@ -947,19 +780,6 @@ a:link, a:visited, a:hover, a:active {
 }
 
 /* ===========================
-   Misc
-   =========================== */
-
-.center h3 {
-    line-height: 1.2;
-}
-
-#scanText {
-    position: absolute;
-    bottom: 10px;
-}
-
-/* ===========================
    Inline Keyboard Input
    =========================== */
 
@@ -990,8 +810,9 @@ a:link, a:visited, a:hover, a:active {
     opacity: 0.7;
 }
 
-.companion-hint i {
-    font-size: 9px;
+.companion-hint .lucide-icon {
+    width: 9px;
+    height: 9px;
 }
 
 /* ===========================
@@ -1013,16 +834,19 @@ a:link, a:visited, a:hover, a:active {
 }
 
 /* ===========================
-   Tooltips
+   Tooltips (CSS-only)
    =========================== */
 
-.atv-tooltip {
-    position: absolute;
-    z-index: 9999;
-    pointer-events: none;
+[data-tippy-content] {
+    position: relative;
 }
 
-.atv-tooltip-content {
+[data-tippy-content]::after {
+    content: attr(data-tippy-content);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
     font-size: 11px;
     font-weight: 500;
@@ -1034,4 +858,26 @@ a:link, a:visited, a:hover, a:active {
     box-shadow: var(--shadow-md);
     white-space: nowrap;
     letter-spacing: 0.01em;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 9999;
+    transition: opacity 150ms ease;
+}
+
+[data-tippy-content]:hover::after {
+    opacity: 1;
+    transition-delay: 400ms;
+}
+
+/* ===========================
+   Fade-in Animation
+   =========================== */
+
+.fade-in {
+    animation: fade-in 0.3s ease-in;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }

@@ -17,7 +17,6 @@ class ATVService extends EventEmitter {
     this.pairingSession = null;
     this.pairingPhase = null; // 'airplay' or 'companion'
     this.airplayCreds = null;
-    this.reconnecting = false;
   }
 
   async scan(timeout = 5000) {
