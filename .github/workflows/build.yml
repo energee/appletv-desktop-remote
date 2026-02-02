@@ -15,7 +15,7 @@ jobs:
         include:
           - os: macos-latest
             platform: mac-intel
-            build_cmd: pnpm exec electron-builder -m --publish never
+            build_cmd: pnpm exec electron-builder -m --x64 --publish never
             artifact_glob: dist/*.dmg
           - os: macos-latest
             platform: mac-arm
