@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build app
+        run: pnpm build:all
+
       - name: Build macOS (Intel)
         run: pnpm exec electron-builder -m --publish never
         env:
@@ -60,6 +63,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
+
+      - name: Build app
+        run: pnpm build:all
 
       - name: Build Windows
         run: pnpm exec electron-builder -w --publish never
