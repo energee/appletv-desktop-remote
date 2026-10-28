@@ -1,6 +1,6 @@
 {
   "name": "appletv-desktop-remote",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "main": "dist/main/main.js",
   "dependencies": {
     "node-appletv-remote": "^0.5.0"
