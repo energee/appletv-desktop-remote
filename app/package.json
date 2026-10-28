@@ -1,6 +1,6 @@
 {
   "name": "appletv-desktop-remote",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "main": "dist/main/main.js",
   "dependencies": {
     "menubar": "^9.5.3",
