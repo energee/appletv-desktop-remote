@@ -3,6 +3,6 @@
   "version": "0.4.2",
   "main": "dist/main/main.js",
   "dependencies": {
-    "node-appletv-remote": "^0.3.2"
+    "node-appletv-remote": "^0.5.0"
   }
 }

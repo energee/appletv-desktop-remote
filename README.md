@@ -38,7 +38,7 @@ macOS and Windows builds are available on the [releases page](https://github.com
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v20+
+- [Node.js](https://nodejs.org/) v20.19+
 - [pnpm](https://pnpm.io/)
 
 ### Setup
