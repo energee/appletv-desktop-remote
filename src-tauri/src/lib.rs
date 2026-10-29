@@ -91,7 +91,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![backend_request, desktop_action])
         .build(tauri::generate_context!())
-        .expect("error while building ATV Remote");
+        .expect("error while building Apple TV Remote");
 
     application.run(|app, event| match event {
         RunEvent::ExitRequested { .. } | RunEvent::Exit => {

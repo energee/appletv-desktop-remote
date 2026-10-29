@@ -8,7 +8,7 @@
   <key>LSUIElement</key>
   <true/>
   <key>NSLocalNetworkUsageDescription</key>
-  <string>ATV Remote discovers and controls Apple TV devices on your local network.</string>
+  <string>Apple TV Remote discovers and controls Apple TV devices on your local network.</string>
   <key>NSBonjourServices</key>
   <array>
     <string>_airplay._tcp</string>

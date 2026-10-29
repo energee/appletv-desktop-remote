@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ATV Remote",
+  "productName": "Apple TV Remote",
   "version": "0.6.0",
   "identifier": "com.electron.atvMacRemote",
   "build": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ATV Remote",
+        "title": "Apple TV Remote",
         "width": 280,
         "height": 420,
         "resizable": false,

@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
       initIPC();
       await init();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to start ATV Remote.';
+      const message = error instanceof Error ? error.message : 'Unable to start Apple TV Remote.';
       const status = document.getElementById('statusText');
       if (status) {
         status.textContent = message;
