@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Remote layer of AppIcon.icon: the icon.svg remote with its clickpad and buttons cut out,
+       on Icon Composer's full-bleed canvas (macOS applies the squircle mask), 964 pt tall with
+       30 pt margins. -->
+  <path fill="#ffffff" fill-rule="evenodd" d="M424.85 30.0 H599.15 A40.1 40.1 0 0 1 639.25 70.1 V953.9 A40.1 40.1 0 0 1 599.15 994.0 H424.85 A40.1 40.1 0 0 1 384.75 953.9 V70.1 A40.1 40.1 0 0 1 424.85 30.0 Z M512.0 111.74 a114.14 114.14 0 1 0 0.01 0 Z M458.79 347.73 a44.73 44.73 0 1 0 0.01 0 Z M560.59 347.73 a44.73 44.73 0 1 0 0.01 0 Z M458.79 452.62 a44.73 44.73 0 1 0 0.01 0 Z M458.79 557.5 a44.73 44.73 0 1 0 0.01 0 Z M515.86 497.35 A44.73 44.73 0 0 1 605.32 497.35 V602.23 A44.73 44.73 0 0 1 515.86 602.23 Z"/>
+</svg>

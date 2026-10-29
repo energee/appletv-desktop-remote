@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+  <!-- Menu bar icon source for IconTemplate.png (36 px, drawn at 2x for an 18 pt menu bar);
+       after editing, run scripts/build-icons.sh.
+       A macOS template image: only the alpha channel matters, and the menu bar tints it.
+       The app icon's remote (src-tauri/icons/icon.svg) with its clickpad and buttons cut out. -->
+  <path fill="#000" fill-rule="evenodd" d="
+    M15.5 1 H20.5 A3 3 0 0 1 23.5 4 V32 A3 3 0 0 1 20.5 35 H15.5 A3 3 0 0 1 12.5 32 V4 A3 3 0 0 1 15.5 1 Z
+    M18 4.6 a3.9 3.9 0 1 0 0.001 0 Z
+    M16.2 12.6 a1.55 1.55 0 1 0 0.001 0 Z
+    M19.8 12.6 a1.55 1.55 0 1 0 0.001 0 Z
+    M16.2 16.2 a1.55 1.55 0 1 0 0.001 0 Z
+    M16.2 19.8 a1.55 1.55 0 1 0 0.001 0 Z
+    M18.25 17.75 a1.55 1.55 0 0 1 3.1 0 V21.85 a1.55 1.55 0 0 1 -3.1 0 Z"/>
+</svg>
