@@ -68,6 +68,10 @@ function buildDisplayString(): string {
 }
 
 function updatePreview(): void {
+  // A global shortcut needs a key and a modifier other than Shift; a bare or shifted key would
+  // be taken from typing in every app.
+  (document.getElementById('saveBtn') as HTMLButtonElement).disabled =
+    !getSelectedKey() || !getActiveMods().some((mod) => mod !== 'Shift');
   const el = document.getElementById('liveHotkey')!;
   const display = buildDisplayString();
   if (display) {

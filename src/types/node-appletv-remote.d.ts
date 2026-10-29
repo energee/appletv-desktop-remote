@@ -1,6 +1,8 @@
 declare module 'node-appletv-remote' {
   export interface ScanOptions {
     timeout?: number;
+    /** Stop browsing early once a device satisfies this; `timeout` still caps the wait. */
+    until?: (device: DiscoveredDevice) => boolean;
   }
 
   export interface DiscoveredDevice {

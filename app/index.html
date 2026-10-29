@@ -49,16 +49,21 @@
           <div id="pairCodeElements">
             <div class="pair-section">
               <p class="pair-label">Enter the code shown on your Apple TV</p>
-              <input
-                id="pairCode"
-                type="text"
-                class="pair-code-input"
-                maxlength="4"
-                placeholder="0000"
-                inputmode="numeric"
-                autocomplete="off"
-              />
-              <button id="pairButton" class="pair-submit-btn">Continue</button>
+              <!-- One transparent input over four boxes; see renderPin in web_remote.ts. -->
+              <div class="pin">
+                <input
+                  id="pairCode"
+                  type="text"
+                  maxlength="4"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  aria-label="Pairing code"
+                />
+                <div class="pin-slot" aria-hidden="true"></div>
+                <div class="pin-slot" aria-hidden="true"></div>
+                <div class="pin-slot" aria-hidden="true"></div>
+                <div class="pin-slot" aria-hidden="true"></div>
+              </div>
             </div>
           </div>
           <button id="cancelPairing" class="pair-cancel-btn">Cancel</button>

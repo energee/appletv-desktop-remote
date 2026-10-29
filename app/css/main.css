@@ -297,68 +297,69 @@ a:active {
   color: var(--text-secondary);
   text-align: center;
   line-height: 1.4;
+  /* Even lines, never one orphaned word, in the narrow window. */
+  text-wrap: balance;
 }
 
-.pair-code-input {
-  width: 140px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
-  font-size: 32px;
-  font-weight: 300;
-  letter-spacing: 0.3em;
-  text-align: center;
+/* The PIN: four boxes, with a transparent input over them taking the typing, pastes, and
+   clicks. Each digit is flex-centered in its box, so the row is symmetric by construction. */
+.pin {
+  position: relative;
+  display: flex;
+  gap: 8px;
+}
+
+.pin input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  border: none;
+  cursor: text;
+}
+
+.pin-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 52px;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   background: var(--surface);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: 10px 8px;
-  outline: none;
+  /* The theme's line color, as the touchpad uses: a white border vanishes on light glass. */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   transition:
-    border-color var(--transition-med),
-    box-shadow var(--transition-med);
-  -webkit-appearance: none;
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
-.pair-code-input::placeholder {
-  color: var(--text-tertiary);
-  opacity: 0.4;
-}
-
-.pair-code-input:focus {
+/* The box the next digit goes in, with a blinking caret while it is empty. */
+.pin-slot.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glass);
-  caret-color: transparent;
 }
 
-.pair-submit-btn {
-  width: 100%;
-  max-width: 200px;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  background: var(--glass);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-sm);
-  padding: 10px 20px;
-  cursor: pointer;
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: all var(--transition-fast);
+.pin-slot.active:empty::after {
+  content: '';
+  width: 1px;
+  height: 24px;
+  background: var(--text-primary);
+  animation: pin-caret 1s step-end infinite;
 }
 
-.pair-submit-btn:hover {
-  background: var(--glass-hover);
-  box-shadow:
-    var(--shadow-md),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+@keyframes pin-caret {
+  50% {
+    opacity: 0;
+  }
 }
 
-.pair-submit-btn:active {
-  transform: scale(0.97);
-  box-shadow: var(--shadow-inset);
+/* Dimmed while the Apple TV checks the code. */
+.pin input:disabled ~ .pin-slot {
+  opacity: 0.5;
 }
 
 .pair-cancel-btn {
@@ -835,6 +836,7 @@ a:active {
 #statusText {
   display: none;
   text-align: center;
+  text-wrap: balance;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);

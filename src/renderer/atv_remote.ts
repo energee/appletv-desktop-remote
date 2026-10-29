@@ -21,15 +21,20 @@ export function startPair(dev: string): void {
   });
 }
 
-// One PIN pairs the Apple TV; save the credentials and connect, which ends pairing.
+// One PIN pairs the Apple TV; save the credentials and connect, which ends pairing. A session
+// takes one PIN, right or wrong, so a failure starts a new one and the TV shows a new PIN.
 export async function finishPair(code: string): Promise<void> {
   try {
     const result = await desktopAPI.finishPair(code);
+    // Cancelled while the TV checked the code; the remote has moved on.
+    if (!result) return;
     saveRemote(pairDevice, result);
     localStorage.setItem('atvcreds', JSON.stringify(result));
     connectToATV();
   } catch (err) {
-    setStatus(err instanceof Error ? err.message : 'Unable to finish pairing.');
+    console.error('Pairing failed:', err);
+    setStatus("That code didn't work. Enter the new code shown on your Apple TV.");
+    startPair(pairDevice);
   }
 }
 

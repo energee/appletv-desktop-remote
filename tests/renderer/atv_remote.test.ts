@@ -15,6 +15,7 @@ const desktopAPI = {
   finishPair: vi.fn(),
   showContextMenu: vi.fn(),
   showWindow: vi.fn(),
+  quit: vi.fn(),
   setAlwaysOnTop: vi.fn(),
   setWindowTheme: vi.fn(),
   importCredentials: vi.fn(),
@@ -74,10 +75,12 @@ function fakeElement(value = '') {
     textContent: '',
     value,
     checked: false,
+    disabled: false,
     classList: { add: vi.fn(), remove: vi.fn() },
     firstChild: { textContent: '' },
     appendChild: vi.fn(),
     addEventListener: vi.fn(),
+    focus: vi.fn(),
     querySelectorAll: vi.fn(() => []),
   };
 }
@@ -118,6 +121,7 @@ let nowPlaying: (info: NowPlayingInfo) => void;
 let powerResume: () => void;
 let backendLost: () => void;
 let contextMenuAction: (action: string, payload?: string) => void;
+let errorMessage: (message: string) => void;
 
 const creds = { credentials: 'c', identifier: 'tv' };
 const other = { credentials: 'o', identifier: 'tv2' };
@@ -138,6 +142,7 @@ beforeAll(async () => {
   powerResume = desktopAPI.onPowerResume.mock.calls[0][0];
   backendLost = desktopAPI.onBackendLost.mock.calls[0][0];
   contextMenuAction = desktopAPI.onContextMenuAction.mock.calls[0][0];
+  errorMessage = desktopAPI.onErrorMessage.mock.calls[0][0];
 });
 
 beforeEach(() => {
@@ -222,6 +227,44 @@ describe('screens', () => {
   });
 });
 
+describe('remote', () => {
+  afterEach(() => vi.useRealTimers());
+
+  // Holding the touchpad selects after a second; dragging off it first means "never mind".
+  it('selects nothing when a press leaves the touchpad', () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    state('connected');
+    (dom.listener('#touchpad', 'mousedown') as (event: unknown) => void)({
+      clientX: 10,
+      clientY: 10,
+    });
+    dom.listener('#touchpad', 'mouseleave')();
+    vi.advanceTimersByTime(1000);
+    expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+  });
+
+  // The hint is for a new user at launch; after a wake the window is usually hidden.
+  it('shows the keyboard hint once per launch, not after every reconnect', () => {
+    useElements();
+    for (const status of ['connected', 'connecting', 'connected'] as const) state(status);
+    const hints = storage.setItem.mock.calls.filter(([key]) => key === 'kbHintCount');
+    expect(hints.length).toBeLessThanOrEqual(1);
+  });
+
+  // A connection that survives an error needs no message; one that drops says Reconnecting.
+  it('keeps device errors off the remote while it is connected', () => {
+    useElements();
+    state('connected');
+    errorMessage('read ECONNRESET');
+    expect(statusElement.textContent).not.toBe('read ECONNRESET');
+
+    state('connecting');
+    errorMessage('connect ECONNREFUSED');
+    expect(statusElement.textContent).toBe('connect ECONNREFUSED');
+  });
+});
+
 describe('two-finger swipe', () => {
   afterEach(() => vi.useRealTimers());
 
@@ -268,9 +311,8 @@ describe('two-finger swipe', () => {
 
 describe('keys', () => {
   // Bug (a): a connect that settled during pairing used to make Enter send Select.
-  it('Enter in the PIN field submits the PIN while pairing, even right after a connection', () => {
+  it('Enter in the PIN boxes sends nothing while pairing, even right after a connection', () => {
     const dom = useElements();
-    desktopAPI.finishPair.mockReturnValue(new Promise(() => {}));
     state('connected');
     state('pairing');
     documentStub.activeElement = dom.get('#pairCode');
@@ -278,10 +320,20 @@ describe('keys', () => {
 
     press('Enter');
 
-    expect(desktopAPI.finishPair).toHaveBeenCalledWith('1234');
     expect(desktopAPI.sendKey).not.toHaveBeenCalled();
     // Pairing closed the old connection; that is not a reconnect.
     expect(statusElement.textContent).not.toBe('Reconnecting...');
+  });
+
+  // Holding Space must not toggle play/pause over and over, nor holding Q quit the app.
+  it('repeats a held key only for moving and volume', () => {
+    useElements();
+    state('connected');
+    const hold = (key: string) =>
+      keydown({ key, repeat: true, getModifierState: () => false, preventDefault: vi.fn() });
+    for (const key of ['ArrowUp', '+', ' ', 'Enter', 'q', 'q', 'q']) hold(key);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([['up'], ['volume_up']]);
+    expect(desktopAPI.quit).not.toHaveBeenCalled();
   });
 
   it('sends keys only while connected', async () => {
@@ -293,6 +345,86 @@ describe('keys', () => {
     state('connected');
     press('Enter');
     expect(desktopAPI.sendKey).toHaveBeenCalledWith('select');
+  });
+});
+
+describe('PIN entry', () => {
+  /** Opens the PIN boxes for a picked device, as choosing it in the device picker does. */
+  async function openPin() {
+    const dom = useElements();
+    await web.init();
+    state('pairing');
+    web.createDropdown(['Living Room (1.2.3.4)']);
+    const picker = dom.get('#atv_picker') as ReturnType<typeof dom.get> & { onchange(): void };
+    picker.value = 'Living Room (1.2.3.4)';
+    picker.onchange();
+    const pin = dom.get('#pairCode');
+    const type = (value: string) => {
+      pin.value = value;
+      dom.listener('#pairCode', 'input')();
+    };
+    return { pin, type };
+  }
+
+  it('focuses the boxes when they open and submits the fourth digit', async () => {
+    const { pin, type } = await openPin();
+    expect(pin.focus).toHaveBeenCalled();
+    desktopAPI.finishPair.mockReturnValue(new Promise(() => {}));
+
+    type('12a3');
+    expect(pin.value).toBe('123');
+    expect(desktopAPI.finishPair).not.toHaveBeenCalled();
+
+    type('1234');
+    expect(desktopAPI.finishPair).toHaveBeenCalledWith('1234');
+    // Locked while the TV checks the code, so typing cannot submit it twice.
+    expect(pin.disabled).toBe(true);
+  });
+
+  // A pairing session takes one PIN, right or wrong, so the user needs a new one on the TV.
+  it('starts over after a wrong code, so the TV shows a new one', async () => {
+    const { pin, type } = await openPin();
+    desktopAPI.finishPair.mockRejectedValue(new Error('M4 missing Proof (error=2)'));
+    pin.focus.mockClear();
+
+    type('0000');
+    await vi.waitFor(() => expect(desktopAPI.startPair).toHaveBeenCalledTimes(2));
+
+    expect(desktopAPI.startPair).toHaveBeenLastCalledWith('Living Room (1.2.3.4)');
+    expect(statusElement.textContent).toBe(
+      "That code didn't work. Enter the new code shown on your Apple TV.",
+    );
+    expect(pin.value).toBe('');
+    expect(pin.disabled).toBe(false);
+    expect(pin.focus).toHaveBeenCalled();
+  });
+
+  // The sidecar answers null when Cancel ended pairing while the TV checked the code.
+  it('ignores a code checked after pairing was cancelled', async () => {
+    const { pin, type } = await openPin();
+    desktopAPI.finishPair.mockResolvedValue(null);
+
+    type('1234');
+    await vi.waitFor(() => expect(pin.disabled).toBe(false));
+
+    expect(storage.getItem('remote_credentials')).toBeNull();
+    expect(desktopAPI.startPair).toHaveBeenCalledTimes(1);
+  });
+
+  // Cancel used to reload the whole window, which flashed "Starting up...".
+  it('Cancel goes back to the saved device, or scans again without one', async () => {
+    const dom = useElements();
+    await web.init();
+    desktopAPI.connect.mockClear();
+    state('pairing');
+    dom.listener('#cancelPairing', 'click')();
+    expect(desktopAPI.connect).toHaveBeenCalledWith(creds);
+
+    useStorage({});
+    desktopAPI.scan.mockClear();
+    dom.listener('#cancelPairing', 'click')();
+    expect(desktopAPI.scan).toHaveBeenCalled();
+    expect(window.location.reload).not.toHaveBeenCalled();
   });
 });
 
@@ -467,7 +599,8 @@ describe('requests', () => {
     const repaired = { credentials: 'new', identifier: 'tv' };
     contextMenuAction('repairCurrent');
     expect(desktopAPI.scan).toHaveBeenCalled();
-    expect(storage.getItem('atvcreds')).toBeNull();
+    // Kept until pairing succeeds, so Cancel goes back to it rather than the first saved device.
+    expect(storage.getItem('atvcreds')).toBe(JSON.stringify(creds));
 
     remote.startPair('Living Room (1.2.3.4)');
     desktopAPI.finishPair.mockResolvedValue(repaired);
@@ -477,6 +610,25 @@ describe('requests', () => {
     expect(JSON.parse(storage.getItem('remote_credentials'))).toEqual({
       'Living Room (1.2.3.4)': repaired,
     });
+  });
+
+  it('disconnects the active device when it is removed in Settings', async () => {
+    useElements();
+    useStorage({
+      atvcreds: JSON.stringify(creds),
+      remote_credentials: JSON.stringify({ 'Living Room': creds }),
+    });
+    await web.init();
+    contextMenuAction('openSettings');
+    // The device row's Remove button, created by the settings panel.
+    const remove = mockElement.addEventListener.mock.calls.find(
+      ([name]) => name === 'click',
+    )![1] as () => void;
+
+    remove();
+
+    expect(storage.getItem('atvcreds')).toBeNull();
+    expect(desktopAPI.disconnect).toHaveBeenCalled();
   });
 
   it('sends every saved device to the menu with a string identifier', () => {
@@ -512,6 +664,8 @@ describe('requests', () => {
     await vi.waitFor(() => expect(desktopAPI.disconnect).toHaveBeenCalled());
 
     expect(desktopAPI.connect).not.toHaveBeenCalled();
+    // No active device, so nothing is reconnecting.
+    expect(statusElement.textContent).toBe('Credentials imported.');
     expect(desktopAPI.showContextMenu).toHaveBeenLastCalledWith(
       {
         devices: [{ label: 'Living Room', identifier: 'tv', checked: false }],

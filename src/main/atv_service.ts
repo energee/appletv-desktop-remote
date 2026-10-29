@@ -88,11 +88,15 @@ class ATVService extends EventEmitter {
     });
   }
 
-  /** Starts AirPlay pairing, which makes the Apple TV show a PIN for finishPair. */
+  /**
+   * Starts AirPlay pairing, which makes the Apple TV show a PIN for finishPair. Ignored unless
+   * pairing (after scan), so a retry that arrives after the user connected cannot end it.
+   */
   async startPair(deviceLabel: string): Promise<void> {
     const discoveredDevice = this.scanResults[deviceLabel];
     if (!discoveredDevice) throw new Error(`Device not found: ${deviceLabel}`);
     const { AppleTV } = await getLib();
+    if (this.state.status !== 'pairing') return;
     console.log(`startPair: device=${discoveredDevice.name}, address=${discoveredDevice.address}`);
     void this.supersede('pairing');
     const epoch = this.epoch;
@@ -117,24 +121,33 @@ class ATVService extends EventEmitter {
   /**
    * Completes AirPlay pairing with the PIN. The credentials hold only the AirPlay part: every
    * key the remote sends and now-playing go over MRP, so Companion pairing is not needed.
-   * Pairing mode lasts until the caller connects with them.
+   * Pairing mode lasts until the caller connects with them. A session takes one PIN, right or
+   * wrong (the library closes it either way), so after a failure call startPair again. Resolves
+   * null if pairing ended (Cancel connects) while the TV checked the PIN.
    */
-  async finishPair(pin: string): Promise<PairResult> {
+  async finishPair(pin: string): Promise<PairResult | null> {
     const session = this.pairingSession;
     const device = this.device;
     if (!session || !device) throw new Error('No active pairing session');
+    this.pairingSession = null;
+    const epoch = this.epoch;
     const { Credentials } = await getLib();
-    const airplayCreds = await withTimeout(
-      session.finish(pin),
-      30000,
-      'Pairing verification timed out. Please try again.',
-    );
-    if (this.pairingSession === session) this.pairingSession = null;
-    console.log('finishPair: AirPlay pairing complete');
-    return {
-      credentials: new Credentials(airplayCreds).serialize(),
-      identifier: device.deviceId || 'unknown',
-    };
+    try {
+      const airplayCreds = await withTimeout(
+        session.finish(pin),
+        30000,
+        'Pairing verification timed out. Please try again.',
+      );
+      if (epoch !== this.epoch) return null;
+      console.log('finishPair: AirPlay pairing complete');
+      return {
+        credentials: new Credentials(airplayCreds).serialize(),
+        identifier: device.deviceId || 'unknown',
+      };
+    } catch (err) {
+      if (epoch !== this.epoch) return null;
+      throw err;
+    }
   }
 
   /**
@@ -157,8 +170,9 @@ class ATVService extends EventEmitter {
 
   /**
    * One connect attempt for `epoch`. `found` (the device from the last good connection) skips
-   * the scan; a failure schedules a retry that scans again. Companion keys in credentials
-   * saved by earlier two-PIN pairing are ignored.
+   * the scan, which otherwise ends as soon as the saved device answers; a failure schedules a
+   * retry that scans again. Companion keys in credentials saved by earlier two-PIN pairing are
+   * ignored.
    */
   private async attempt(
     epoch: number,
@@ -169,12 +183,13 @@ class ATVService extends EventEmitter {
     try {
       const { AppleTV, Credentials, scan } = await getLib();
       if (!found) {
+        const saved = (d: DiscoveredDevice) => d.deviceId === credsData.identifier;
         const devices = await withTimeout(
-          scan({ timeout: 2000 }),
+          scan({ timeout: 2000, until: saved }),
           4000,
           'Device scan timed out during connect.',
         );
-        found = devices.find((d) => d.deviceId === credsData.identifier);
+        found = devices.find(saved);
       }
       if (epoch !== this.epoch) return;
       if (!found) throw new Error('Device not found on network');
