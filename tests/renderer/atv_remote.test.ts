@@ -175,6 +175,23 @@ it('keeps discovery failures visible after rebuilding the device picker', async 
   expect(statusElement.style.display).toBe('block');
 });
 
+describe('window appearance', () => {
+  // A pinned appearance also pins the webview's prefers-color-scheme, so "Follow system" must
+  // hand the window back to the system or the remote stops following it.
+  it('pins the window only for an explicit Light or Dark choice', async () => {
+    for (const [uimode, theme] of [
+      ['systemmode', null],
+      ['darkmode', 'dark'],
+      ['lightmode', 'light'],
+    ] as const) {
+      useStorage({ atvcreds: JSON.stringify(creds), uimode });
+      useElements();
+      await web.init();
+      expect(desktopAPI.setWindowTheme).toHaveBeenLastCalledWith(theme);
+    }
+  });
+});
+
 describe('screens', () => {
   it('shows the pairing screen while pairing and the remote otherwise', () => {
     const dom = useElements();

@@ -527,8 +527,13 @@ async function handleDarkMode(): Promise<void> {
     } else {
       document.body.classList.remove('darkMode');
     }
-    // The macOS glass follows the window's appearance, not the page: keep the two in step.
-    await desktopAPI.setWindowTheme(darkModeEnabled ? 'dark' : 'light');
+    // The macOS glass follows the window's appearance, not the page, so an explicit choice pins
+    // the window too. "Follow system" hands it back to the system: a pinned window would also
+    // pin prefers-color-scheme above, and the remote would stop following the system.
+    let windowTheme: 'light' | 'dark' | null = null;
+    if (alwaysUseDarkMode) windowTheme = 'dark';
+    else if (neverUseDarkMode) windowTheme = 'light';
+    await desktopAPI.setWindowTheme(windowTheme);
   } catch (err) {
     console.log('Error setting dark mode:', err);
   }
