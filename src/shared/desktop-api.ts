@@ -108,8 +108,8 @@ export const desktopAPI = {
   hideWindow: () => action<void>('hideWindow'),
   quit: () => action<void>('quit'),
   setAlwaysOnTop: (value: boolean) => action<void>('setAlwaysOnTop', { value }),
-  /** Sets this window's appearance, which the macOS glass follows. */
-  setWindowTheme: (theme: 'light' | 'dark') => getCurrentWindow().setTheme(theme),
+  /** Sets this window's appearance, which the macOS glass follows; null follows the system. */
+  setWindowTheme: (theme: 'light' | 'dark' | null) => getCurrentWindow().setTheme(theme),
   /** Resizes this window to `height` points, keeping its width and top edge. */
   setWindowHeight: (height: number) =>
     getCurrentWindow().setSize(new LogicalSize(window.innerWidth, height)),
