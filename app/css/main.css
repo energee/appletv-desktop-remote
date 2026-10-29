@@ -462,29 +462,6 @@ a:active {
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-.touchpad-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-  transition: opacity var(--transition-med);
-}
-
-.touchpad-hint .lucide-icon {
-  width: 18px;
-  height: 18px;
-  opacity: 0.6;
-}
-
-.touchpad-hint.hidden {
-  opacity: 0;
-}
-
 /* Directional arrow indicators */
 .touchpad-arrow {
   position: absolute;
@@ -637,15 +614,6 @@ a:active {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: var(--glass);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  border: 1px solid var(--glass-border);
-  border-radius: 40px;
-  padding: 8px 20px;
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .media-btn {
@@ -709,7 +677,8 @@ a:active {
   height: 40px;
   font-size: 11px;
   background: transparent;
-  border: 1px solid var(--border);
+  /* Bare icon like the row above; the circle shows on hover. */
+  border: 1px solid transparent;
   color: var(--text-tertiary);
   box-shadow: none;
   backdrop-filter: none;
@@ -972,24 +941,6 @@ a:active {
 .companion-hint .lucide-icon {
   width: 9px;
   height: 9px;
-}
-
-/* ===========================
-   Shortcut Hint
-   =========================== */
-
-.shortcut-hint {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  text-align: center;
-  opacity: 0.6;
-  padding-top: 2px;
-}
-
-.shortcut-hint kbd {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 /* ===========================

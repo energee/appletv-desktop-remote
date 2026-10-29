@@ -282,16 +282,6 @@ function showKeyMap(): void {
 
   // --- Touchpad gesture detection ---
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  let hintHidden = false;
-
-  function hideHint(): void {
-    if (!hintHidden) {
-      hintHidden = true;
-      const hint = $('.touchpad-hint');
-      if (hint) hint.classList.add('hidden');
-    }
-  }
-
   function flashArrow(direction: string): void {
     const el = $('.touchpad-arrow-' + direction);
     if (!el) return;
@@ -330,7 +320,6 @@ function showKeyMap(): void {
     'wheel',
     function (e) {
       e.preventDefault();
-      hideHint();
 
       clearTimeout(gestureEndTimer);
       gestureEndTimer = setTimeout(endGesture, GESTURE_END_MS);
@@ -360,7 +349,6 @@ function showKeyMap(): void {
   touchpad.addEventListener(
     'mousedown',
     function (e) {
-      hideHint();
       clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
       longPressTimer = setTimeout(function () {
         sendCommand('select');
