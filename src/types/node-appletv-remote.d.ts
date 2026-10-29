@@ -3,6 +3,8 @@ declare module 'node-appletv-remote' {
     timeout?: number;
     /** Stop browsing early once a device satisfies this; `timeout` still caps the wait. */
     until?: (device: DiscoveredDevice) => boolean;
+    /** Keep only devices for which this returns true. */
+    filter?: (device: DiscoveredDevice) => boolean;
   }
 
   export interface DiscoveredDevice {
@@ -10,6 +12,8 @@ declare module 'node-appletv-remote' {
     address: string;
     port: number;
     deviceId?: string;
+    /** Such as `AppleTV6,2`; other AirPlay receivers report their own (`Mac16,12`, `7104X`). */
+    model: string;
   }
 
   export function scan(options?: ScanOptions): Promise<DiscoveredDevice[]>;

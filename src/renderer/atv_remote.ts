@@ -6,8 +6,11 @@ import { createDropdown, connectToATV, setStatus } from './web_remote';
 
 export async function scanDevices(): Promise<void> {
   try {
-    const results = await desktopAPI.scan();
-    createDropdown(results || []);
+    const results = (await desktopAPI.scan()) || [];
+    createDropdown(results);
+    if (results.length === 0) {
+      setStatus('No Apple TV found on this network. Right-click to scan again.');
+    }
   } catch (err) {
     createDropdown([]);
     setStatus(err instanceof Error ? err.message : 'Unable to scan for Apple TVs.');

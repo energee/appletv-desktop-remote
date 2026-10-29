@@ -71,12 +71,15 @@ class ATVService extends EventEmitter {
   /** The current device's last reported PlaybackState; each new device starts Unknown. */
   private playbackState: number = PlaybackState.Unknown;
 
-  /** Scanning starts pairing: it ends any connection, and none runs until connect(). */
+  /**
+   * Scanning starts pairing: it ends any connection, and none runs until connect(). Lists Apple
+   * TVs only: other AirPlay receivers (smart TVs, Macs, speakers) don't take remote commands.
+   */
   async scan(timeout = 2000): Promise<string[]> {
     void this.supersede('pairing');
     const { scan } = await getLib();
     const devices = await withTimeout(
-      scan({ timeout }),
+      scan({ timeout, filter: (d) => d.model.startsWith('AppleTV') }),
       timeout + 2000,
       'Scan timed out. Please try again.',
     );
