@@ -61,5 +61,10 @@ jobs:
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: artifacts/*
+          # Windows keeps its installers in msi/ and nsis/ subfolders; artifacts/* alone missed
+          # them in v0.6.0. Each pattern must match, so a missing installer fails the release.
+          files: |
+            artifacts/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*.exe
           fail_on_unmatched_files: true
