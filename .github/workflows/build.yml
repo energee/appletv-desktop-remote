@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual runs build every platform without publishing, to test workflow changes.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,12 +28,13 @@ jobs:
               src-tauri/target/release/bundle/**/*.exe
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+      # pnpm first: setup-node caches the packageManager's store, so pnpm must already exist.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - uses: pnpm/action-setup@v4
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
       - name: Install sidecar dependencies
@@ -39,7 +42,7 @@ jobs:
       - name: Build Tauri bundle
         run: pnpm build
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}-builds
           path: ${{ matrix.artifact_glob }}
@@ -47,15 +50,21 @@ jobs:
 
   release:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
       - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          files: artifacts/*
+          # Windows keeps its installers in msi/ and nsis/ subfolders; artifacts/* alone missed
+          # them in v0.6.0. Each pattern must match, so a missing installer fails the release.
+          files: |
+            artifacts/*.dmg
+            artifacts/**/*.msi
+            artifacts/**/*.exe
           fail_on_unmatched_files: true
