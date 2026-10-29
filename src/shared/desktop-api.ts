@@ -127,7 +127,8 @@ export const desktopAPI = {
 
   scan: () => request<string[]>('scan'),
   startPair: (deviceLabel: string) => request<void>('startPair', { deviceLabel }),
-  finishPair: (pin: string) => request<PairResult>('finishPair', { pin }),
+  /** Null if pairing was cancelled while the TV checked the PIN. */
+  finishPair: (pin: string) => request<PairResult | null>('finishPair', { pin }),
   /** Connects to `credentials`, leaving pairing; resolves at once, progress comes as state. */
   connect: (credentials: ATVCredentials) => request<void>('connect', credentials),
   /** Wake and sidecar restarts: like connect, but the sidecar ignores it while pairing. */

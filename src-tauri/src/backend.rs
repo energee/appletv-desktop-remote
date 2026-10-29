@@ -91,6 +91,12 @@ impl Inner {
             let _ = reply.send(Err(message.clone()));
         }
         if !self.closing.load(Ordering::Acquire) {
+            // It exited, or broke the protocol and must not linger: end and reap it. The next
+            // request relaunches it. (shutdown reaps a sidecar that is closing.)
+            let mut child = self.child.lock().unwrap();
+            let _ = child.kill();
+            let _ = child.wait();
+            drop(child);
             let _ = self.app.emit(
                 "backend-event",
                 json!({"event":"connection-lost","data":null}),
@@ -193,48 +199,13 @@ fn launch(app: &AppHandle) -> Result<Arc<Inner>, String> {
                 break;
             }
         }
+        // End of output means the sidecar exited (or closed stdout); fail() reaps it.
         reader.fail("Apple TV backend disconnected".into());
     });
     thread::spawn(move || {
         log_lines(BufReader::new(errors), |line| {
             eprintln!("Apple TV backend: {line}")
         })
-    });
-    let monitor = inner.clone();
-    thread::spawn(move || {
-        let mut closing_since = None;
-        loop {
-            {
-                let mut child = monitor.child.lock().unwrap();
-                match child.try_wait() {
-                    Ok(Some(status)) => {
-                        monitor.fail(format!("Apple TV backend exited: {status}"));
-                        return;
-                    }
-                    Err(error) => {
-                        monitor.fail(format!("Cannot monitor Apple TV backend: {error}"));
-                        return;
-                    }
-                    Ok(None) => {}
-                }
-                if monitor.closing.load(Ordering::Acquire) {
-                    let since = closing_since.get_or_insert_with(Instant::now);
-                    if since.elapsed() >= Duration::from_secs(3) {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return;
-                    }
-                }
-                if !monitor.closing.load(Ordering::Acquire)
-                    && monitor.failure.lock().unwrap().is_some()
-                {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return;
-                }
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
     });
     if ready_receive.recv_timeout(Duration::from_secs(10)).is_err() {
         inner.shutdown();

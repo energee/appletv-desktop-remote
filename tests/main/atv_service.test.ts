@@ -192,6 +192,17 @@ describe('ATVService', () => {
       expect(devices).toHaveLength(0);
       expect(service.state).toEqual({ status: 'pairing' });
     });
+
+    // The renderer starts pairing again after a wrong PIN; by then the user may have connected.
+    it('is ignored once pairing has ended, so a late retry cannot end a connection', async () => {
+      await service.scan();
+      const device = await connected();
+      await service.startPair('Living Room (1.2.3.4)');
+
+      expect(service.state).toEqual({ status: 'connected' });
+      expect(device.close).not.toHaveBeenCalled();
+      expect(mockStartPairing).not.toHaveBeenCalled();
+    });
   });
 
   describe('finishPair()', () => {
@@ -207,6 +218,37 @@ describe('ATVService', () => {
       expect(service.pairingSession).toBeNull();
       // Pairing mode lasts until the renderer connects with the new credentials.
       expect(service.state).toEqual({ status: 'pairing' });
+    });
+
+    // The library's finish() closes the session whether or not the PIN was right.
+    it('forgets the session after a wrong PIN, and a new one can start', async () => {
+      await service.scan();
+      await service.startPair('Living Room (1.2.3.4)');
+      mockPairingSession.finish.mockRejectedValue(new Error('M4 missing Proof (error=2)'));
+
+      await expect(service.finishPair('0000')).rejects.toThrow('M4 missing Proof');
+      expect(service.pairingSession).toBeNull();
+
+      await service.startPair('Living Room (1.2.3.4)');
+      expect(service.pairingSession).toBe(mockPairingSession);
+      expect(mockStartPairing).toHaveBeenCalledTimes(2);
+    });
+
+    // Cancel connects to the saved device; a result arriving after that is nobody's concern.
+    it('returns null, right PIN or wrong, once pairing was cancelled during the check', async () => {
+      for (const settle of ['resolve', 'reject'] as const) {
+        await service.scan();
+        await service.startPair('Living Room (1.2.3.4)');
+        const checking = Promise.withResolvers<unknown>();
+        mockPairingSession.finish.mockReturnValueOnce(checking.promise);
+
+        const result = service.finishPair('1234');
+        service.connect(tv1);
+        if (settle === 'resolve') checking.resolve('airplay-creds');
+        else checking.reject(new Error('M4 missing Proof (error=2)'));
+
+        await expect(result).resolves.toBeNull();
+      }
     });
   });
 
@@ -231,6 +273,15 @@ describe('ATVService', () => {
         serialized: 'creds-1',
       });
       expect(device.eventNames()).not.toContain('companionClose');
+    });
+
+    // A scan otherwise runs its full timeout, delaying every connect by two seconds.
+    it('stops scanning as soon as the saved device answers', async () => {
+      await connected();
+      const [{ timeout, until }] = mockScan.mock.calls[0];
+      expect(timeout).toBe(2000);
+      expect(until(living)).toBe(true);
+      expect(until(bedroom)).toBe(false);
     });
 
     it('leaves pairing mode', async () => {

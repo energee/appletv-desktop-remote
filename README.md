@@ -8,7 +8,7 @@ Control an Apple TV from your Mac or PC. A small menubar app built with Tauri; i
 
 ## Usage
 
-- On first launch, pick your Apple TV and enter the PIN it shows.
+- On first launch, pick your Apple TV and type the PIN it shows; it's sent on the fourth digit, and a wrong one brings up a new PIN.
 - Swipe with two fingers on the touchpad to move, click to select. Use the buttons or the keyboard for the rest.
 - Play/pause, the now-playing title, and a seek bar follow what's playing on the TV.
 - Hold Option (Alt on Windows) to show keyboard labels. Right-click for the device menu, and open **Settings** for the theme, always-on-top, saved remotes, and the hotkey.

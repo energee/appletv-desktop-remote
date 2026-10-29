@@ -41,6 +41,16 @@ const keymap: KeyboardKeyMap = {
   _: 'volume_down',
 };
 
+/** Keys that repeat while held down; any other key acts once per press. */
+const REPEATING_KEYS: readonly ATVKeyName[] = [
+  'up',
+  'down',
+  'left',
+  'right',
+  'volume_up',
+  'volume_down',
+];
+
 export function initIPC(): void {
   desktopAPI.onShortcutWin(() => {
     void handleDarkMode();
@@ -50,8 +60,11 @@ export function initIPC(): void {
   // connection at all. Either way the sidecar starts a fresh one unless pairing is under way.
   desktopAPI.onPowerResume(reconnectToATV);
   desktopAPI.onBackendLost(reconnectToATV);
+  // While connected an error is only logged: if the connection drops, Reconnecting says so,
+  // and if it survives, the message would sit on the remote with nothing wrong.
   desktopAPI.onErrorMessage((msg: string) => {
-    setStatus(msg);
+    if (connection.status === 'connected') console.error(msg);
+    else setStatus(msg);
   });
   desktopAPI.onContextMenuAction((action: string, payload?: string) => {
     handleContextMenuAction(action, payload);
@@ -142,6 +155,8 @@ window.addEventListener('keydown', (e) => {
     mods = [];
   }
   if (mods.length > 0) return;
+  // Holding Space must not toggle play/pause over and over, nor holding Q quit the app.
+  if (e.repeat && !REPEATING_KEYS.includes(keymap[key])) return;
 
   if (key === 'q') {
     qPresses++;
@@ -152,13 +167,7 @@ window.addEventListener('keydown', (e) => {
   if (key === 'h') {
     void desktopAPI.hideWindow();
   }
-  // The pairing screen is up exactly while the sidecar is pairing; Enter there submits the PIN.
-  if (connection.status === 'pairing') {
-    if (document.activeElement === $('#pairCode') && key === 'Enter') {
-      submitCode();
-    }
-    return;
-  }
+  // Keys go to the TV only while connected; while pairing, the PIN boxes take the typing.
   if (connection.status !== 'connected') return;
   if (keymap[key] !== undefined) {
     sendCommand(key);
@@ -233,27 +242,46 @@ export async function sendCommand(k: string): Promise<void> {
   }
 }
 
-let pairButtonBound = false;
-
+/** Shows the empty PIN boxes, ready to type in, and asks the TV for a PIN. */
 function startPairing(dev: string): void {
   $('#initText')!.style.display = 'none';
   $('#results')!.style.display = 'none';
-  if (!pairButtonBound) {
-    pairButtonBound = true;
-    $('#pairButton')!.addEventListener('click', () => {
-      submitCode();
-      return false;
-    });
-  }
   $('#pairCodeElements')!.style.display = 'block';
+  clearPin();
   startPair(dev);
 }
 
-function submitCode(): void {
+/** Empties the PIN boxes and puts the cursor in the first. */
+function clearPin(): void {
   const input = $('#pairCode') as HTMLInputElement;
-  const code = input.value;
   input.value = '';
-  finishPair(code);
+  input.disabled = false;
+  input.focus();
+  renderPin();
+}
+
+/**
+ * The PIN is typed into one transparent input laid over four boxes (as input-otp does), so
+ * paste and autofill work. Shows its digits in the boxes and rings the box the next one fills.
+ */
+function renderPin(): void {
+  const input = $('#pairCode') as HTMLInputElement;
+  const typing = !input.disabled && document.activeElement === input;
+  const next = typing ? Math.min(input.value.length, 3) : -1;
+  $$('.pin-slot').forEach((slot, i) => {
+    slot.textContent = input.value[i] ?? '';
+    slot.classList.toggle('active', i === next);
+  });
+}
+
+/** Sends the PIN once all four digits are in, locking the boxes while the TV checks it. */
+async function submitCode(): Promise<void> {
+  const input = $('#pairCode') as HTMLInputElement;
+  if (!/^\d{4}$/.test(input.value)) return;
+  input.disabled = true;
+  renderPin();
+  await finishPair(input.value);
+  clearPin();
 }
 
 function showKeyboardHint(): void {
@@ -271,6 +299,8 @@ function showKeyboardHint(): void {
 let buttonAbort: AbortController | null = null;
 
 function showKeyMap(): void {
+  // The keyboard hint is for the first connection after launch, not reconnects after a wake.
+  const firstConnection = !buttonAbort;
   if (buttonAbort) buttonAbort.abort();
   buttonAbort = new AbortController();
   const { signal } = buttonAbort;
@@ -378,6 +408,17 @@ function showKeyMap(): void {
     { signal },
   );
 
+  // Dragging off the touchpad abandons the press, so its long-press never selects.
+  touchpad.addEventListener(
+    'mouseleave',
+    function () {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+      clickStart = null;
+    },
+    { signal },
+  );
+
   // --- Media / secondary button long-press handlers ---
   const longPressTimers: Record<string, ReturnType<typeof setTimeout>> = {};
   const isLongPressing: Record<string, boolean> = {};
@@ -436,7 +477,7 @@ function showKeyMap(): void {
     button.addEventListener('mouseleave', handleMouseUpLeave, { signal });
   });
 
-  showKeyboardHint();
+  if (firstConnection) showKeyboardHint();
 }
 
 function getActiveIdentifier(): string | null {
@@ -644,10 +685,14 @@ async function importCredentials(): Promise<void> {
   setAlwaysOnTop(safeParse(localStorage.getItem('alwaysOnTopChecked'), false));
   refreshSettings();
   handleContextMenu();
-  setStatus('Credentials imported. Reconnecting...');
   // connect replaces the old connection; without an active device, just drop it.
-  if (localStorage.getItem('atvcreds')) connectToATV();
-  else await desktopAPI.disconnect();
+  if (localStorage.getItem('atvcreds')) {
+    setStatus('Credentials imported. Reconnecting...');
+    connectToATV();
+  } else {
+    setStatus('Credentials imported.');
+    await desktopAPI.disconnect();
+  }
 }
 
 // --- Now Playing ---
@@ -730,8 +775,10 @@ function initSeekBar(): void {
       setStatus(error instanceof Error ? error.message : String(error));
     });
   });
-  // The TV reports the position only when it changes, so the clock advances it in between.
-  setInterval(renderSeekBar, 1000);
+  // The TV reports the position only when it changes, so while playing the clock advances it.
+  setInterval(() => {
+    if (position.rate) renderSeekBar();
+  }, 1000);
 }
 
 /** Shows the title, artist, and position, and a pause icon on the play button while playing. */
@@ -843,7 +890,11 @@ function populateDeviceList(): void {
       );
       delete allCreds[name];
       localStorage.setItem('remote_credentials', JSON.stringify(allCreds));
-      if (isActive) localStorage.removeItem('atvcreds');
+      if (isActive) {
+        localStorage.removeItem('atvcreds');
+        void desktopAPI.disconnect();
+        setStatus('No device selected. Right-click to choose one.');
+      }
       populateDeviceList();
       handleContextMenu();
     });
@@ -945,13 +996,10 @@ function handleContextMenuAction(action: string, payload?: string): void {
       }
       break;
     }
-    // Pairing is an explicit navigation, so it leaves Settings (which would stay in front).
+    // Pairing is an explicit navigation, so it leaves Settings (which would stay in front). The
+    // active device stays active until a pairing succeeds, so Cancel goes back to it.
     case 'pairNew':
-      hideSettings();
-      startScan();
-      break;
     case 'repairCurrent':
-      localStorage.removeItem('atvcreds');
       hideSettings();
       startScan();
       break;
@@ -989,9 +1037,19 @@ export async function init(): Promise<void> {
   initSettingsListeners();
   initSeekBar();
 
+  // Back to the saved device, or, with none, a fresh scan; connecting ends pairing.
   $('#cancelPairing')!.addEventListener('click', () => {
-    window.location.reload();
+    if (localStorage.getItem('atvcreds')) connectToATV();
+    else startScan();
   });
+  const pin = $('#pairCode') as HTMLInputElement;
+  pin.addEventListener('input', () => {
+    pin.value = pin.value.replace(/\D/g, '');
+    renderPin();
+    void submitCode();
+  });
+  pin.addEventListener('focus', renderPin);
+  pin.addEventListener('blur', renderPin);
 
   const checked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
   if (checked) setAlwaysOnTop(checked);
