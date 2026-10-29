@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- App icon source. To regenerate: `pnpm tauri icon src-tauri/icons/icon.svg -o <tmp dir>`, then
-       copy the files listed under bundle.icon in tauri.conf.json into this folder.
+  <!-- Flat app icon source (Windows, macOS 15 and older); AppIcon.icon is the Liquid Glass
+       version. After editing either, run scripts/build-icons.sh.
        Two colors: a graphite macOS icon squircle and a white Siri Remote with its clickpad and
        buttons cut out. Shapes traced from the 2nd-generation remote, scaled 1.12x and centered. -->
   <rect x="100" y="100" width="824" height="824" rx="185" fill="#1c1f26"/>

@@ -49,6 +49,7 @@
     "macOS": {
       "minimumSystemVersion": "13.5",
       "signingIdentity": "-",
+      "files": { "Resources/Assets.car": "icons/Assets.car" },
       "entitlements": "entitlements.plist",
       "infoPlist": "Info.plist"
     }

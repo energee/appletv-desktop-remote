@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
-  <!-- Menu bar icon source for IconTemplate.png (36 px, drawn at 2x for an 18 pt menu bar).
+  <!-- Menu bar icon source for IconTemplate.png (36 px, drawn at 2x for an 18 pt menu bar);
+       after editing, run scripts/build-icons.sh.
        A macOS template image: only the alpha channel matters, and the menu bar tints it.
        The app icon's remote (src-tauri/icons/icon.svg) with its clickpad and buttons cut out. -->
   <path fill="#000" fill-rule="evenodd" d="
