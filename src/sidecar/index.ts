@@ -1,5 +1,11 @@
 // Node sidecar entrypoint: serves ATVService over line-delimited JSON on stdin/stdout for the
-// Tauri host (src-tauri/src/backend.rs). See "Sidecar protocol" in README.md.
+// Tauri host (src-tauri/src/backend.rs).
+//
+// Protocol: one JSON object per line. Requests are `{ id, method, params }` and are handled
+// concurrently, so replies `{ id, result }` or `{ id, error }` can arrive in any order. Events
+// are `{ event, data }`: `state` (ConnectionState), `now-playing`, and `error`. `connect` and
+// `reconnect` reply at once and report progress as `state`. Logs go only to stderr. When stdin
+// closes, requests that finish within a second are still answered, then the process exits.
 import { Console } from 'node:console';
 import { createInterface } from 'node:readline';
 import ATVService from '../main/atv_service';
