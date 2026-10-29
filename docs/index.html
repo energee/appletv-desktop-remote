@@ -38,6 +38,11 @@
       * {
         box-sizing: border-box;
       }
+      @media (prefers-reduced-motion: no-preference) {
+        html {
+          scroll-behavior: smooth;
+        }
+      }
       body {
         margin: 0;
         background: var(--bg);
@@ -206,6 +211,53 @@
         border-radius: 7px;
       }
 
+      /* Setup */
+      .setup {
+        padding-block: 112px;
+      }
+      .setup h2 {
+        font-size: clamp(32px, 5vw, 48px);
+        line-height: 1.08;
+        letter-spacing: -0.003em;
+      }
+      .steps {
+        list-style: none;
+        counter-reset: step;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 40px;
+        padding: 0;
+        margin: 56px 0 0;
+      }
+      .steps li {
+        counter-increment: step;
+        color: var(--muted);
+      }
+      .steps li::before {
+        content: counter(step);
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        margin-bottom: 16px;
+        border: 1.5px solid var(--text);
+        border-radius: 50%;
+        color: var(--text);
+        font-weight: 600;
+      }
+      .steps h3 {
+        color: var(--text);
+      }
+
+      /* Platform-specific copy: Mac text by default, Windows text when the script detects Windows. */
+      .win,
+      .is-windows .mac {
+        display: none;
+      }
+      .is-windows .win {
+        display: revert;
+      }
+
       footer.wrap {
         padding-block: 32px 48px;
         font-size: 12px;
@@ -223,11 +275,16 @@
         .keys {
           padding-block: 72px;
         }
+        .setup {
+          padding-block: 72px;
+        }
         .grid,
-        .shortcuts {
+        .shortcuts,
+        .steps {
           grid-template-columns: 1fr;
         }
-        .grid {
+        .grid,
+        .steps {
           gap: 28px;
           margin-top: 36px;
         }
@@ -241,12 +298,16 @@
         <h1>Apple TV Remote</h1>
         <p class="lede">Your Apple TV, one click away in the menu bar.</p>
         <div class="actions">
-          <a class="button" href="https://github.com/energee/appletv-desktop-remote/releases/latest"
+          <a
+            id="download"
+            class="button"
+            data-download
+            href="https://github.com/energee/appletv-desktop-remote/releases/latest"
             >Download</a
           >
-          <a href="https://github.com/energee/appletv-desktop-remote">View the source</a>
+          <a href="#setup">How to set it up</a>
         </div>
-        <p class="note">Free for macOS and Windows.</p>
+        <p id="note" class="note">Free for macOS and Windows.</p>
         <img
           class="shot"
           src="remote.png"
@@ -273,8 +334,9 @@
           <div>
             <h3>Always handy</h3>
             <p>
-              Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> to show or hide it from any app. Keep it on
-              top, or let it tuck away.
+              Press <span class="mac"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd></span
+              ><span class="win"><kbd>Win</kbd><kbd>Shift</kbd><kbd>R</kbd></span> to show or hide
+              it from any app. Keep it on top, or let it tuck away.
             </p>
           </div>
         </div>
@@ -284,7 +346,8 @@
         <div class="wrap">
           <h2>Or just use the keyboard.</h2>
           <p class="intro">
-            Hold Option (Alt on Windows) and the remote labels every button with its key.
+            Hold <span class="mac">Option</span><span class="win">Alt</span> and the remote labels
+            every button with its key.
           </p>
           <dl class="shortcuts">
             <div>
@@ -322,6 +385,38 @@
           </dl>
         </div>
       </section>
+
+      <section id="setup" class="setup wrap">
+        <h2>Set up in a minute.</h2>
+        <ol class="steps">
+          <li>
+            <h3>Download</h3>
+            <p>
+              <a
+                data-download
+                href="https://github.com/energee/appletv-desktop-remote/releases/latest"
+                >Get the installer</a
+              ><span class="mac">, open it, and drag Apple TV Remote to Applications.</span
+              ><span class="win"> and run it.</span>
+            </p>
+          </li>
+          <li>
+            <h3>Open it</h3>
+            <p class="mac">
+              The app isn't notarized yet, so macOS blocks the first launch. Open System Settings,
+              go to Privacy &amp; Security, and click Open Anyway.
+            </p>
+            <p class="win">If Windows SmartScreen appears, click More info, then Run anyway.</p>
+          </li>
+          <li>
+            <h3>Pair</h3>
+            <p>
+              Pick your Apple TV and type the code it shows on screen. Your computer and Apple TV
+              need to be on the same network.
+            </p>
+          </li>
+        </ol>
+      </section>
     </main>
 
     <footer class="wrap">
@@ -335,5 +430,59 @@
         with Apple.
       </p>
     </footer>
+
+    <script>
+      // Point the download links at the right installer for this computer. Without JavaScript, or if
+      // the GitHub API is unreachable, they stay on the releases page.
+      const installers = {
+        // ponytail: Apple silicon is the default; browsers can't reliably tell Intel Macs apart.
+        mac: {
+          label: 'Download for Mac',
+          suffix: '_aarch64.dmg',
+          alternateSuffix: '_x64.dmg',
+          alternateLabel: 'Intel Mac version',
+          requirement: 'macOS 13.5 or later',
+        },
+        windows: {
+          label: 'Download for Windows',
+          suffix: '-setup.exe',
+          alternateSuffix: '.msi',
+          alternateLabel: 'MSI installer',
+          requirement: '64-bit Windows',
+        },
+      };
+
+      const platform = navigator.userAgentData?.platform ?? navigator.platform;
+      let os = null;
+      if (/win/i.test(platform)) os = 'windows';
+      else if (/mac/i.test(platform) && navigator.maxTouchPoints < 2) os = 'mac'; // iPads report Mac too; Chrome says "macOS"
+      if (os === 'windows') document.documentElement.classList.add('is-windows');
+
+      if (os) {
+        const installer = installers[os];
+        fetch('https://api.github.com/repos/energee/appletv-desktop-remote/releases/latest')
+          .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
+          .then((release) => {
+            const assetUrl = (suffix) =>
+              release.assets.find((asset) => asset.name.endsWith(suffix))?.browser_download_url;
+            const main = assetUrl(installer.suffix);
+            if (!main) return;
+            document.querySelectorAll('[data-download]').forEach((a) => (a.href = main));
+            document.getElementById('download').textContent = installer.label;
+
+            const note = document.getElementById('note');
+            const version = release.tag_name.replace(/^v/, '');
+            note.replaceChildren(`Version ${version} for ${installer.requirement}.`);
+            const alternate = assetUrl(installer.alternateSuffix);
+            if (alternate) {
+              const link = document.createElement('a');
+              link.href = alternate;
+              link.textContent = installer.alternateLabel;
+              note.append(' ', link);
+            }
+          })
+          .catch(() => {});
+      }
+    </script>
   </body>
 </html>
