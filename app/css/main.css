@@ -7,6 +7,9 @@
   --surface: rgba(255, 255, 255, 0.55);
   --surface-raised: rgba(255, 255, 255, 0.7);
   --surface-solid: #ffffff;
+  /* The touchpad is a faint tint so the window behind it shows through. */
+  --touchpad: rgba(255, 255, 255, 0.22);
+  --touchpad-pressed: rgba(255, 255, 255, 0.4);
   --glass: rgba(255, 255, 255, 0.35);
   --glass-border: rgba(255, 255, 255, 0.5);
   --glass-hover: rgba(255, 255, 255, 0.6);
@@ -25,7 +28,6 @@
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 24px;
-  --radius-xl: 32px;
   --radius-full: 50%;
   --transition-fast: 120ms ease;
   --transition-med: 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -38,6 +40,8 @@
   --surface: rgba(50, 48, 46, 0.6);
   --surface-raised: rgba(60, 58, 56, 0.7);
   --surface-solid: #2c2a28;
+  --touchpad: rgba(255, 255, 255, 0.06);
+  --touchpad-pressed: rgba(255, 255, 255, 0.12);
   --glass: rgba(50, 48, 46, 0.4);
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-hover: rgba(60, 58, 56, 0.6);
@@ -104,10 +108,17 @@ html.glass {
   --border: rgba(0, 0, 0, 0.15);
 }
 
+/* Dark mode mirrors light mode on glass: fills are faint light tints, as in light mode, not dark
+   ones, which would turn controls into heavy discs. White shifts dark glass far more than it
+   shifts light glass, so a few percent here matches light mode's 35-70%. */
 html.glass .darkMode {
   --text-secondary: rgba(255, 255, 255, 0.7);
   --text-tertiary: rgba(255, 255, 255, 0.5);
   --border: rgba(255, 255, 255, 0.18);
+  --glass: rgba(255, 255, 255, 0.05);
+  --glass-hover: rgba(255, 255, 255, 0.1);
+  --surface: rgba(255, 255, 255, 0.08);
+  --surface-raised: rgba(255, 255, 255, 0.12);
 }
 
 /* The tan accent reads well only on the opaque background: on glass the play button is
@@ -122,6 +133,12 @@ html.glass .play-btn:hover {
   background: var(--glass-hover);
   border-color: var(--glass-border);
   color: var(--text-primary);
+}
+
+/* The touchpad's white border vanishes on light glass; the theme's line color outlines it in
+   both modes. */
+html.glass #touchpad {
+  border-color: var(--border);
 }
 
 /* Text fields stay editable: WebKit blocks typing where text selection is off. */
@@ -436,13 +453,11 @@ a:active {
   position: relative;
   width: 220px;
   height: 220px;
-  background: var(--surface);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
+  background: var(--touchpad);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-md);
   box-shadow:
-    var(--shadow-md),
+    var(--shadow-sm),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
   cursor: pointer;
   touch-action: none;
@@ -456,10 +471,8 @@ a:active {
 }
 
 #touchpad:active {
-  background: var(--surface-raised);
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background: var(--touchpad-pressed);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 /* Directional arrow indicators */
@@ -520,19 +533,19 @@ a:active {
 @keyframes touchpad-pulse {
   0% {
     box-shadow:
-      var(--shadow-md),
+      var(--shadow-sm),
       inset 0 1px 0 rgba(255, 255, 255, 0.3),
       0 0 0 0 var(--accent-glass);
   }
   50% {
     box-shadow:
-      var(--shadow-md),
+      var(--shadow-sm),
       inset 0 1px 0 rgba(255, 255, 255, 0.3),
       0 0 0 5px var(--accent-glass);
   }
   100% {
     box-shadow:
-      var(--shadow-md),
+      var(--shadow-sm),
       inset 0 1px 0 rgba(255, 255, 255, 0.3),
       0 0 0 0 transparent;
   }
@@ -545,19 +558,19 @@ a:active {
 @keyframes touchpad-pulse-dark {
   0% {
     box-shadow:
-      var(--shadow-md),
+      var(--shadow-sm),
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
       0 0 0 0 var(--accent-glass);
   }
   50% {
     box-shadow:
-      var(--shadow-md),
+      var(--shadow-sm),
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
       0 0 0 5px var(--accent-glass);
   }
   100% {
     box-shadow:
-      var(--shadow-md),
+      var(--shadow-sm),
       inset 0 1px 0 rgba(255, 255, 255, 0.05),
       0 0 0 0 transparent;
   }
