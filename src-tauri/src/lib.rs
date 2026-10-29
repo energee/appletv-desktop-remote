@@ -1,11 +1,19 @@
 //! Tauri entry point: wires the plugins, the sidecar backend, tray and hotkeys, wake
-//! observers, and the `backend_request` / `desktop_action` commands the webview invokes.
+//! observers, the macOS scroll gesture monitor, and the `backend_request` /
+//! `desktop_action` commands the webview invokes.
 mod backend;
 mod desktop;
+#[cfg(target_os = "macos")]
+mod macos_gesture;
 #[cfg(target_os = "macos")]
 mod macos_wake;
 #[cfg(windows)]
 mod windows_wake;
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn atv_round_window_corners(ns_window: *mut std::ffi::c_void, radius: f64);
+}
 
 use backend::Backend;
 use serde_json::Value;
@@ -51,6 +59,13 @@ pub fn run() {
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             macos_wake::install(app.handle()).map_err(std::io::Error::other)?;
+            #[cfg(target_os = "macos")]
+            macos_gesture::install(app.handle()).map_err(std::io::Error::other)?;
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                // Same radius as windowEffects in tauri.conf.json; see corners.m.
+                unsafe { atv_round_window_corners(window.ns_window()?, 16.0) };
+            }
             // Wake reconnect is a convenience: the sidecar still reconnects after a dropped connection.
             #[cfg(windows)]
             if let Err(error) = windows_wake::install(app.handle()) {

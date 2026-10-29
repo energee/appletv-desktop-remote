@@ -90,6 +90,40 @@ body {
     color var(--transition-med);
 }
 
+/* macOS: the window is Liquid Glass (or the popover material before macOS 26), so the page lets
+   it show through instead of painting its own background. */
+html.glass body {
+  background: transparent;
+}
+
+/* Glass takes on the colors behind it, so secondary text uses translucent label colors, as
+   macOS does, instead of fixed greys picked for the opaque background. */
+html.glass {
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --text-tertiary: rgba(0, 0, 0, 0.45);
+  --border: rgba(0, 0, 0, 0.15);
+}
+
+html.glass .darkMode {
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --border: rgba(255, 255, 255, 0.18);
+}
+
+/* The tan accent reads well only on the opaque background: on glass the play button is
+   neutral like the other buttons. */
+html.glass .play-btn {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  color: var(--text-primary);
+}
+
+html.glass .play-btn:hover {
+  background: var(--glass-hover);
+  border-color: var(--glass-border);
+  color: var(--text-primary);
+}
+
 /* Text fields stay editable: WebKit blocks typing where text selection is off. */
 input,
 textarea {
@@ -428,29 +462,6 @@ a:active {
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-.touchpad-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  pointer-events: none;
-  transition: opacity var(--transition-med);
-}
-
-.touchpad-hint .lucide-icon {
-  width: 18px;
-  height: 18px;
-  opacity: 0.6;
-}
-
-.touchpad-hint.hidden {
-  opacity: 0;
-}
-
 /* Directional arrow indicators */
 .touchpad-arrow {
   position: absolute;
@@ -603,15 +614,6 @@ a:active {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: var(--glass);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  border: 1px solid var(--glass-border);
-  border-radius: 40px;
-  padding: 8px 20px;
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .media-btn {
@@ -675,7 +677,8 @@ a:active {
   height: 40px;
   font-size: 11px;
   background: transparent;
-  border: 1px solid var(--border);
+  /* Bare icon like the row above; the circle shows on hover. */
+  border: 1px solid transparent;
   color: var(--text-tertiary);
   box-shadow: none;
   backdrop-filter: none;
@@ -938,24 +941,6 @@ a:active {
 .companion-hint .lucide-icon {
   width: 9px;
   height: 9px;
-}
-
-/* ===========================
-   Shortcut Hint
-   =========================== */
-
-.shortcut-hint {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  text-align: center;
-  opacity: 0.6;
-  padding-top: 2px;
-}
-
-.shortcut-hint kbd {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 /* ===========================

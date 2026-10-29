@@ -2,6 +2,9 @@ import { desktopAPI } from '../shared/desktop-api';
 import { renderIcons } from './icons';
 import { initIPC, init } from './web_remote';
 
+// The macOS window is glass (tauri.conf.json windowEffects); other platforms paint the page.
+if (navigator.userAgent.includes('Mac')) document.documentElement.classList.add('glass');
+
 /** Keeps the window as tall as the page, up to the screen; past that the page scrolls. */
 function fitWindowToPage(): void {
   new ResizeObserver(() => {

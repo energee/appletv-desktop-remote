@@ -89,6 +89,7 @@ export const desktopAPI = {
         }),
         listen('shortcutWin', () => emit('shortcutWin', undefined)),
         listen('powerResume', () => emit('powerResume', undefined)),
+        listen('scrollGestureBegan', () => emit('scrollGestureBegan', undefined)),
         listen<{ action: string; payload?: string }>('context-menu-action', ({ payload }) => {
           emit('context-menu-action', payload);
         }),
@@ -107,6 +108,8 @@ export const desktopAPI = {
   hideWindow: () => action<void>('hideWindow'),
   quit: () => action<void>('quit'),
   setAlwaysOnTop: (value: boolean) => action<void>('setAlwaysOnTop', { value }),
+  /** Sets this window's appearance, which the macOS glass follows. */
+  setWindowTheme: (theme: 'light' | 'dark') => getCurrentWindow().setTheme(theme),
   /** Resizes this window to `height` points, keeping its width and top edge. */
   setWindowHeight: (height: number) =>
     getCurrentWindow().setSize(new LogicalSize(window.innerWidth, height)),
@@ -137,6 +140,8 @@ export const desktopAPI = {
 
   onShortcutWin: (callback: () => void) => subscribe('shortcutWin', callback),
   onPowerResume: (callback: () => void) => subscribe('powerResume', callback),
+  /** macOS only: fingers started a new trackpad scroll (momentum after lifting never does). */
+  onScrollGestureBegan: (callback: () => void) => subscribe('scrollGestureBegan', callback),
   onAtvState: (callback: (state: ConnectionState) => void) =>
     subscribe('backend:state', (data) => {
       const state = connectionState(data);
