@@ -3,8 +3,7 @@
 Control an Apple TV from your Mac or PC. A small menubar app built with Tauri; it talks to the Apple TV through a bundled Node backend using [node-appletv-remote](https://github.com/energee/node-appletv-remote), so there's nothing else to install.
 
 <p align="center">
-  <img src="screenshots/light.png" alt="ATV Remote in light mode" width="270"/>
-  <img src="screenshots/dark.png" alt="ATV Remote in dark mode" width="270"/>
+  <img src="screenshots/remote.png" alt="ATV Remote open from the menu bar" width="295"/>
 </p>
 
 ## Usage
