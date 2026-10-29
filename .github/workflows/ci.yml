@@ -15,17 +15,18 @@ jobs:
     # macOS: the host links the Objective-C wake observer and needs no extra system packages.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - uses: actions/setup-node@v4
+      # pnpm first: setup-node caches the packageManager's store, so pnpm must already exist.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir app install --frozen-lockfile
       - run: pnpm typecheck
