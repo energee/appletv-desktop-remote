@@ -22,6 +22,7 @@ const desktopAPI = {
   onBackendLost: vi.fn(),
   onShortcutWin: vi.fn(),
   onPowerResume: vi.fn(),
+  onScrollGestureBegan: vi.fn(() => () => {}),
   onErrorMessage: vi.fn(),
   onContextMenuAction: vi.fn(),
 };
@@ -200,6 +201,50 @@ describe('screens', () => {
     dom.listener('#settingsBackBtn', 'click')();
     expect(dom.get('#addNewElements').style.display).toBe('');
     expect(dom.get('#runningElements').style.display).toBe('none');
+  });
+});
+
+describe('two-finger swipe', () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** Scroll events every 16 ms, as a trackpad sends them, including momentum after lifting. */
+  function scroll(wheel: (event: unknown) => void, count: number, deltaX: number): void {
+    for (let i = 0; i < count; i++) {
+      wheel({ deltaX, deltaY: 0, preventDefault: vi.fn() });
+      vi.advanceTimersByTime(16);
+    }
+  }
+
+  it('moves once per gesture, however long its momentum lasts', () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    state('connected');
+    const wheel = dom.listener('#touchpad', 'wheel') as (event: unknown) => void;
+
+    // About 0.8 s of scrolling: the swipe, then momentum tailing off.
+    scroll(wheel, 20, 30);
+    scroll(wheel, 30, 4);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([['left']]);
+
+    // Once the events stop, the next swipe moves again.
+    vi.advanceTimersByTime(200);
+    scroll(wheel, 5, 30);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([['left'], ['left']]);
+  });
+
+  // macOS reports when fingers start a new gesture, so a swipe during the last one's momentum
+  // moves at once.
+  it('moves again as soon as the fingers start a new gesture', () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    state('connected');
+    const wheel = dom.listener('#touchpad', 'wheel') as (event: unknown) => void;
+    const gestureBegan = desktopAPI.onScrollGestureBegan.mock.lastCall![0] as () => void;
+
+    scroll(wheel, 20, 30);
+    gestureBegan();
+    scroll(wheel, 5, -30);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([['left'], ['right']]);
   });
 });
 

@@ -89,6 +89,7 @@ export const desktopAPI = {
         }),
         listen('shortcutWin', () => emit('shortcutWin', undefined)),
         listen('powerResume', () => emit('powerResume', undefined)),
+        listen('scrollGestureBegan', () => emit('scrollGestureBegan', undefined)),
         listen<{ action: string; payload?: string }>('context-menu-action', ({ payload }) => {
           emit('context-menu-action', payload);
         }),
@@ -137,6 +138,8 @@ export const desktopAPI = {
 
   onShortcutWin: (callback: () => void) => subscribe('shortcutWin', callback),
   onPowerResume: (callback: () => void) => subscribe('powerResume', callback),
+  /** macOS only: fingers started a new trackpad scroll (momentum after lifting never does). */
+  onScrollGestureBegan: (callback: () => void) => subscribe('scrollGestureBegan', callback),
   onAtvState: (callback: (state: ConnectionState) => void) =>
     subscribe('backend:state', (data) => {
       const state = connectionState(data);

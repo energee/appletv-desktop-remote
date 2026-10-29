@@ -1,7 +1,10 @@
 //! Tauri entry point: wires the plugins, the sidecar backend, tray and hotkeys, wake
-//! observers, and the `backend_request` / `desktop_action` commands the webview invokes.
+//! observers, the macOS scroll gesture monitor, and the `backend_request` /
+//! `desktop_action` commands the webview invokes.
 mod backend;
 mod desktop;
+#[cfg(target_os = "macos")]
+mod macos_gesture;
 #[cfg(target_os = "macos")]
 mod macos_wake;
 #[cfg(windows)]
@@ -51,6 +54,8 @@ pub fn run() {
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             macos_wake::install(app.handle()).map_err(std::io::Error::other)?;
+            #[cfg(target_os = "macos")]
+            macos_gesture::install(app.handle()).map_err(std::io::Error::other)?;
             // Wake reconnect is a convenience: the sidecar still reconnects after a dropped connection.
             #[cfg(windows)]
             if let Err(error) = windows_wake::install(app.handle()) {

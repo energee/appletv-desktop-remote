@@ -306,13 +306,25 @@ function showKeyMap(): void {
   }
 
   // --- Swipe detection via two-finger scroll (wheel events) ---
+  // One move per gesture: a trackpad keeps sending events (momentum) after the fingers lift,
+  // so after a move the rest of the gesture is ignored. It ends when macOS reports fingers
+  // starting a new gesture or, for mouse wheels and other platforms, when events stop.
   let scrollAccX = 0;
   let scrollAccY = 0;
-  let scrollCooldown = false;
-  let scrollResetTimer: ReturnType<typeof setTimeout> | null = null;
+  let gestureMoved = false;
+  let gestureEndTimer: ReturnType<typeof setTimeout> | undefined;
   const SCROLL_THRESHOLD = 90;
-  const SCROLL_COOLDOWN = 200;
-  const SCROLL_RESET = 300;
+  /** Quiet time that ends a gesture; events arrive about every 16 ms until momentum stops. */
+  const GESTURE_END_MS = 150;
+
+  function endGesture(): void {
+    clearTimeout(gestureEndTimer);
+    scrollAccX = 0;
+    scrollAccY = 0;
+    gestureMoved = false;
+  }
+  const stopGestureListener = desktopAPI.onScrollGestureBegan(endGesture);
+  signal.addEventListener('abort', stopGestureListener);
 
   touchpad.addEventListener(
     'wheel',
@@ -320,16 +332,12 @@ function showKeyMap(): void {
       e.preventDefault();
       hideHint();
 
-      if (scrollCooldown) return;
+      clearTimeout(gestureEndTimer);
+      gestureEndTimer = setTimeout(endGesture, GESTURE_END_MS);
+      if (gestureMoved) return;
 
       scrollAccX += e.deltaX;
       scrollAccY += e.deltaY;
-
-      if (scrollResetTimer) clearTimeout(scrollResetTimer);
-      scrollResetTimer = setTimeout(function () {
-        scrollAccX = 0;
-        scrollAccY = 0;
-      }, SCROLL_RESET);
 
       if (Math.abs(scrollAccX) >= SCROLL_THRESHOLD || Math.abs(scrollAccY) >= SCROLL_THRESHOLD) {
         let direction: string;
@@ -339,14 +347,8 @@ function showKeyMap(): void {
           direction = scrollAccY > 0 ? 'up' : 'down';
         }
         flashArrow(direction);
-        sendCommand(direction);
-
-        scrollAccX = 0;
-        scrollAccY = 0;
-        scrollCooldown = true;
-        setTimeout(function () {
-          scrollCooldown = false;
-        }, SCROLL_COOLDOWN);
+        void sendCommand(direction);
+        gestureMoved = true;
       }
     },
     { passive: false, signal },
