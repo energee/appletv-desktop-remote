@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- App icon source. To regenerate: `pnpm tauri icon src-tauri/icons/icon.svg -o <tmp dir>`, then
+       copy the files listed under bundle.icon in tauri.conf.json into this folder.
+       Two colors: a graphite macOS icon squircle and a white Siri Remote with its clickpad and
+       buttons cut out. Shapes traced from the 2nd-generation remote, scaled 1.12x and centered. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#1c1f26"/>
+  <g transform="translate(88.1 89.2) scale(1.12)">
+    <rect x="296" y="65" width="165" height="625" rx="26" fill="#ffffff"/>
+    <g fill="#1c1f26">
+      <circle cx="378.5" cy="192" r="74"/>
+      <circle cx="344" cy="300" r="29"/>
+      <circle cx="410" cy="300" r="29"/>
+      <circle cx="344" cy="368" r="29"/>
+      <circle cx="344" cy="436" r="29"/>
+      <rect x="381" y="339" width="58" height="126" rx="29"/>
+    </g>
+  </g>
+</svg>
