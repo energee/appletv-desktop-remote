@@ -1,0 +1,40 @@
+[package]
+name = "atv-desktop-remote"
+version = "0.5.3"
+description = "Apple TV Remote"
+authors = ["Ted Slesinski"]
+edition = "2021"
+rust-version = "1.90"
+
+[lib]
+name = "atv_desktop_remote_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "atv-desktop-remote"
+path = "src/main.rs"
+
+[build-dependencies]
+cc = "1"
+tauri-build = { version = "2", features = [] }
+[dependencies]
+rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tokio = { version = "1", features = ["sync", "time"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "test-util"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

@@ -1,34 +1,17 @@
 {
   "name": "appletv-desktop-remote",
   "version": "0.5.3",
-  "main": "app/dist/main/main.js",
   "description": "Apple TV Remote",
-  "productName": "Apple TV Remote",
-  "build": {
-    "productName": "ATV Remote",
-    "appId": "com.electron.atvMacRemote",
-    "icon": "app/images/full.png",
-    "files": [
-      "**/*",
-      "dist/**/*"
-    ],
-    "mac": {
-      "category": "public.app-category.utilities",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
-    }
-  },
+  "productName": "ATV Remote",
   "scripts": {
-    "build:ts": "tsc",
+    "typecheck": "tsc",
     "build:renderer": "node esbuild.renderer.mjs",
-    "build:all": "pnpm build:ts && pnpm build:renderer",
-    "start": "pnpm build:all && electron app",
-    "postinstall": "electron-builder install-app-deps",
-    "build": "pnpm build:all && npx electron-builder -m",
-    "build:win": "pnpm build:all && npx electron-builder -w",
-    "build-arm": "pnpm build:all && npx electron-builder -m --arm64",
+    "build:sidecar": "node scripts/build-sidecar.mjs",
+    "build:all": "pnpm typecheck && pnpm build:renderer && pnpm build:sidecar",
+    "start": "tauri dev",
+    "build": "tauri build",
+    "build:mac": "tauri build --target aarch64-apple-darwin",
+    "build:win": "tauri build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -36,11 +19,13 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@tauri-apps/cli": "^2.9.0",
     "@types/node": "^25.2.0",
-    "electron": "^38.2.1",
-    "electron-builder": "^26.0.20",
     "esbuild": "^0.27.2",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
@@ -49,14 +34,10 @@
     "typescript-eslint": "^8.54.0",
     "vitest": "^4.0.18"
   },
-  "dependencies": {
-    "menubar": "^9.5.1"
-  },
   "license": "CC-BY-NC-SA-4.0",
   "packageManager": "pnpm@10.28.0",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "electron",
       "esbuild"
     ]
   }

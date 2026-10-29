@@ -1,59 +1,47 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// ATVService state machine: it alone owns the Apple TV connection (connect, backoff reconnect,
+// device switching, wake, pairing), so stale work must never change state.
+import { EventEmitter } from 'node:events';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
+import { PlaybackState, type ConnectionState } from '../../src/shared/types';
 
-// Mock the node-appletv-remote module
 const mockScan = vi.fn();
-const mockDevice = {
-  startPairing: vi.fn(),
-  startCompanionPairing: vi.fn(),
-  connect: vi.fn(),
-  connectCompanion: vi.fn(),
-  sendKeyCommand: vi.fn(),
-  close: vi.fn(),
-  removeAllListeners: vi.fn(),
-  on: vi.fn(),
-  deviceId: 'test-device-id',
-  companionPort: 1234,
-};
-const _mockCredentials = {
-  serialize: vi.fn().mockReturnValue('serialized-creds'),
-  companionCredentials: 'companion-creds',
-};
-const mockPairingSession = {
-  finish: vi.fn(),
-};
+const mockConnect = vi.fn();
+const mockStartPairing = vi.fn();
+const mockSendKeyCommand = vi.fn();
+const mockPairingSession = { finish: vi.fn() };
+/** Every AppleTV the service created, in order, so tests can tell old devices from new. */
+let devices: MockAppleTV[] = [];
 
-// Use a proper class for AppleTV mock so it can be used with `new`
-class MockAppleTV {
-  startPairing = mockDevice.startPairing;
-  startCompanionPairing = mockDevice.startCompanionPairing;
-  connect = mockDevice.connect;
-  connectCompanion = mockDevice.connectCompanion;
-  sendKeyCommand = mockDevice.sendKeyCommand;
-  close = mockDevice.close;
-  removeAllListeners = mockDevice.removeAllListeners;
-  on = mockDevice.on;
-  deviceId = 'test-device-id';
-  companionPort = 1234;
+class MockAppleTV extends EventEmitter {
+  deviceId?: string;
+  connect = vi.fn((credentials: unknown) => mockConnect(credentials));
+  startPairing = vi.fn(() => mockStartPairing());
+  sendKeyCommand = vi.fn((key: unknown) => mockSendKeyCommand(key));
+  setPosition = vi.fn(async (_seconds: number) => {});
+  close = vi.fn(async () => {});
+  constructor(discovered: { deviceId?: string }) {
+    super();
+    this.deviceId = discovered.deviceId;
+    devices.push(this);
+  }
 }
 
 class MockCredentials {
-  airplay: unknown;
-  companion: unknown;
-  companionCredentials: unknown;
-  constructor(airplay: unknown, companion: unknown) {
-    this.airplay = airplay;
-    this.companion = companion;
-    this.companionCredentials = 'companion-creds';
+  static constructorArgs: unknown[][] = [];
+  constructor(...args: unknown[]) {
+    MockCredentials.constructorArgs.push(args);
   }
   serialize() {
     return 'serialized-creds';
   }
-  static deserialize(_data: unknown) {
-    return {
-      companionCredentials: 'companion-creds',
-    };
+  // Like credentials saved before single-PIN pairing, which include Companion keys.
+  static deserialize(data: unknown) {
+    return { companionCredentials: 'companion-creds', serialized: data };
   }
 }
+
+const mockHidKeyMap = { play_pause: { usagePage: 12, usage: 0xb0 } };
+vi.mock('node-appletv-remote/dist/mrp/messages.js', () => ({ HID_KEY_MAP: mockHidKeyMap }));
 
 vi.mock('node-appletv-remote', () => ({
   scan: (...args: unknown[]) => mockScan(...args),
@@ -74,182 +62,304 @@ vi.mock('node-appletv-remote', () => ({
     SkipForward: 11,
     VolumeUp: 12,
     VolumeDown: 13,
+    Play: 14,
+    Pause: 15,
   },
 }));
 
-// Dynamic import to get the module after mocks are set up
+const living = { name: 'Living Room', address: '1.2.3.4', port: 7000, deviceId: 'tv1' };
+const bedroom = { name: 'Bedroom', address: '1.2.3.5', port: 7000, deviceId: 'tv2' };
+const tv1 = { credentials: 'creds-1', identifier: 'tv1' };
+const tv2 = { credentials: 'creds-2', identifier: 'tv2' };
+
+/** Runs due timers and lets every pending promise continuation settle. */
+const flush = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
+
 let ATVService: typeof import('../../src/main/atv_service').default;
 
-beforeEach(async () => {
-  vi.clearAllMocks();
-  const mod = await import('../../src/main/atv_service');
-  ATVService = mod.default;
+beforeAll(async () => {
+  ATVService = (await import('../../src/main/atv_service')).default;
 });
 
 describe('ATVService', () => {
   let service: InstanceType<typeof ATVService>;
+  let states: ConnectionState['status'][];
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    devices = [];
+    MockCredentials.constructorArgs = [];
+    mockScan.mockResolvedValue([living, bedroom]);
+    mockConnect.mockResolvedValue(undefined);
+    mockStartPairing.mockResolvedValue(mockPairingSession);
+    mockSendKeyCommand.mockResolvedValue(undefined);
     service = new ATVService();
+    states = [];
+    service.on('state', (state: ConnectionState) => states.push(state.status));
+    service.on('error', () => {});
   });
 
   afterEach(async () => {
     await service.destroy();
+    vi.useRealTimers();
   });
 
+  async function connected(creds = tv1): Promise<MockAppleTV> {
+    service.connect(creds);
+    await flush();
+    expect(service.state).toEqual({ status: 'connected' });
+    return devices.at(-1)!;
+  }
+
   describe('scan()', () => {
-    it('returns formatted device labels', async () => {
-      mockScan.mockResolvedValue([
-        { name: 'Living Room', address: '192.168.1.10', port: 7000, deviceId: 'dev1' },
-        { name: 'Bedroom', address: '192.168.1.11', port: 7000, deviceId: 'dev2' },
+    it('returns formatted device labels and keeps them for pairing', async () => {
+      await expect(service.scan(1000)).resolves.toEqual([
+        'Living Room (1.2.3.4)',
+        'Bedroom (1.2.3.5)',
       ]);
-
-      const results = await service.scan(1000);
-      expect(results).toEqual(['Living Room (192.168.1.10)', 'Bedroom (192.168.1.11)']);
+      expect(service.scanResults['Living Room (1.2.3.4)']).toBe(living);
     });
 
-    it('stores scan results for later pairing', async () => {
-      mockScan.mockResolvedValue([
-        { name: 'Living Room', address: '192.168.1.10', port: 7000, deviceId: 'dev1' },
-      ]);
+    it('times out with a safety net', async () => {
+      mockScan.mockReturnValue(new Promise(() => {}));
+      const scanning = expect(service.scan(100)).rejects.toThrow('Scan timed out');
+      await flush(2100);
+      await scanning;
+    });
 
+    it('starts pairing mode: closes the connection and stops reconnecting', async () => {
+      const device = await connected();
       await service.scan();
-      expect(service.scanResults['Living Room (192.168.1.10)']).toBeDefined();
-    });
 
-    it('times out with safety net', async () => {
-      mockScan.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve([]), 10000)),
-      );
-
-      await expect(service.scan(100)).rejects.toThrow('Scan timed out');
+      expect(device.close).toHaveBeenCalledTimes(1);
+      expect(service.state).toEqual({ status: 'pairing' });
+      // The closed connection's own close event must not start a reconnect.
+      device.emit('close');
+      await flush(60_000);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      expect(service.state).toEqual({ status: 'pairing' });
     });
   });
 
   describe('startPair()', () => {
-    it('throws on unknown device', async () => {
+    it('throws on an unknown device', async () => {
       await expect(service.startPair('Unknown Device')).rejects.toThrow('Device not found');
     });
 
-    it('sets pairing phase to airplay', async () => {
-      mockScan.mockResolvedValue([
-        { name: 'Test', address: '1.2.3.4', port: 7000, deviceId: 'dev1' },
-      ]);
+    it('starts an AirPlay pairing session, listening for device errors first', async () => {
       await service.scan();
+      await service.startPair('Living Room (1.2.3.4)');
 
-      mockDevice.startPairing.mockResolvedValue(mockPairingSession);
-      await service.startPair('Test (1.2.3.4)');
-
-      expect(service.pairingPhase).toBe('airplay');
       expect(service.pairingSession).toBe(mockPairingSession);
+      // An unhandled EventEmitter 'error' would crash the sidecar process.
+      const [device] = devices;
+      expect(device.listenerCount('error')).toBe(1);
+      expect(() => device.emit('error', new Error('socket'))).not.toThrow();
+    });
+
+    // Bugs (a) and (b): an older connect finishing during pairing must not mark the remote
+    // connected (Enter would send Select) nor attach to the pairing device.
+    it('ignores a connect that completes after pairing started, and closes its device', async () => {
+      const pending = Promise.withResolvers<void>();
+      mockConnect.mockReturnValueOnce(pending.promise);
+      service.connect(tv1);
+      await flush();
+      const [stale] = devices;
+
+      await service.scan();
+      await service.startPair('Living Room (1.2.3.4)');
+      pending.resolve();
+      await flush();
+
+      expect(stale.close).toHaveBeenCalled();
+      expect(service.state).toEqual({ status: 'pairing' });
+      expect(states).not.toContain('connected');
+      const pairingDevice = devices[1];
+      expect(service.device).toBe(pairingDevice);
+      expect(pairingDevice.listenerCount('close')).toBe(0);
+      await expect(service.sendKey('select')).rejects.toThrow('Not connected');
+    });
+
+    it('ignores a connect whose device scan finishes after pairing started', async () => {
+      const scanning = Promise.withResolvers<(typeof living)[]>();
+      mockScan.mockReturnValueOnce(scanning.promise);
+      service.connect(tv1);
+      await service.scan();
+      scanning.resolve([living]);
+      await flush();
+
+      expect(devices).toHaveLength(0);
+      expect(service.state).toEqual({ status: 'pairing' });
     });
   });
 
   describe('finishPair()', () => {
-    beforeEach(async () => {
-      mockScan.mockResolvedValue([
-        { name: 'Test', address: '1.2.3.4', port: 7000, deviceId: 'dev1' },
-      ]);
+    it('returns AirPlay-only credentials after the one PIN', async () => {
       await service.scan();
-      mockDevice.startPairing.mockResolvedValue(mockPairingSession);
-      await service.startPair('Test (1.2.3.4)');
-    });
-
-    it('handles airplay phase and requests companion pin', async () => {
+      await service.startPair('Living Room (1.2.3.4)');
       mockPairingSession.finish.mockResolvedValue('airplay-creds');
-      mockDevice.startCompanionPairing.mockResolvedValue(mockPairingSession);
 
       const result = await service.finishPair('1234');
-      expect(result.needsCompanionPin).toBe(true);
-      expect(service.pairingPhase).toBe('companion');
-    });
 
-    it('handles companion phase and returns credentials', async () => {
-      // First phase - airplay
-      mockPairingSession.finish.mockResolvedValue('airplay-creds');
-      mockDevice.startCompanionPairing.mockResolvedValue(mockPairingSession);
-      await service.finishPair('1234');
-
-      // Second phase - companion
-      mockPairingSession.finish.mockResolvedValue('companion-creds');
-      const result = await service.finishPair('5678');
-
-      expect(result.credentials).toBe('serialized-creds');
-      expect(result.identifier).toBe('test-device-id');
+      expect(result).toEqual({ credentials: 'serialized-creds', identifier: 'tv1' });
+      expect(MockCredentials.constructorArgs).toEqual([['airplay-creds']]);
       expect(service.pairingSession).toBeNull();
-      expect(service.pairingPhase).toBeNull();
+      // Pairing mode lasts until the renderer connects with the new credentials.
+      expect(service.state).toEqual({ status: 'pairing' });
     });
   });
 
   describe('connect()', () => {
-    it('emits connected on success', async () => {
-      const connectedSpy = vi.fn();
-      service.on('connected', connectedSpy);
+    it('returns before the connection completes and reports progress as state', async () => {
+      const pending = Promise.withResolvers<void>();
+      mockConnect.mockReturnValueOnce(pending.promise);
 
-      mockScan.mockResolvedValue([
-        { name: 'Test', address: '1.2.3.4', port: 7000, deviceId: 'dev1', companionPort: 1234 },
-      ]);
-      mockDevice.connect.mockResolvedValue(undefined);
-      mockDevice.connectCompanion.mockResolvedValue(undefined);
+      expect(service.connect(tv1)).toBeUndefined();
+      expect(service.state).toEqual({ status: 'connecting' });
+      pending.resolve();
+      await flush();
 
-      await service.connect({ credentials: 'test-creds', identifier: 'dev1' });
-      expect(connectedSpy).toHaveBeenCalled();
+      expect(states).toEqual(['connecting', 'connected']);
+      expect(service.isConnected()).toBe(true);
     });
 
-    it('emits connection-failure when device not found', async () => {
-      const failSpy = vi.fn();
-      service.on('connection-failure', failSpy);
+    it('connects over MRP only, ignoring Companion keys in older saved credentials', async () => {
+      const device = await connected();
+      expect(device.connect).toHaveBeenCalledWith({
+        companionCredentials: 'companion-creds',
+        serialized: 'creds-1',
+      });
+      expect(device.eventNames()).not.toContain('companionClose');
+    });
 
+    it('leaves pairing mode', async () => {
+      await service.scan();
+      await connected();
+    });
+
+    it('lets the latest device win over a connect still in flight', async () => {
+      const pending = Promise.withResolvers<void>();
+      mockConnect.mockReturnValueOnce(pending.promise);
+      service.connect(tv1);
+      await flush();
+      const [first] = devices;
+
+      service.connect(tv2);
+      await flush();
+      expect(first.close).toHaveBeenCalled();
+      expect(service.device?.deviceId).toBe('tv2');
+
+      pending.resolve();
+      await flush();
+      expect(service.device?.deviceId).toBe('tv2');
+      expect(service.state).toEqual({ status: 'connected' });
+      first.emit('close');
+      await flush(60_000);
+      expect(service.state).toEqual({ status: 'connected' });
+    });
+
+    it('forwards now-playing only from the current device', async () => {
+      const nowPlaying = vi.fn();
+      service.on('now-playing', nowPlaying);
+      const first = await connected(tv1);
+      const second = await connected(tv2);
+
+      first.emit('nowPlaying', { title: 'old' });
+      second.emit('nowPlaying', { title: 'new' });
+      expect(nowPlaying.mock.calls).toEqual([[{ title: 'new' }]]);
+    });
+
+    it('reconnects with backoff after the connection drops, reusing the found device', async () => {
+      const device = await connected();
+      mockConnect.mockRejectedValueOnce(new Error('refused'));
+
+      device.emit('close');
+      expect(service.state).toEqual({ status: 'connecting' });
+      await flush(499);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+      await flush(1);
+      // The first retry skips the 2 s scan; after it fails, the next one scans again.
+      expect(mockConnect).toHaveBeenCalledTimes(2);
+      expect(mockScan).toHaveBeenCalledTimes(1);
+      await flush(999);
+      expect(mockConnect).toHaveBeenCalledTimes(2);
+      await flush(1);
+      expect(mockScan).toHaveBeenCalledTimes(2);
+      expect(mockConnect).toHaveBeenCalledTimes(3);
+      expect(service.state).toEqual({ status: 'connected' });
+      expect(states).toEqual(['connecting', 'connected', 'connecting', 'connecting', 'connected']);
+    });
+
+    it('gives up after five retries and reports disconnected', async () => {
       mockScan.mockResolvedValue([]);
+      service.connect(tv1);
+      await flush();
+      for (const delay of [500, 1000, 2000, 4000]) {
+        await flush(delay);
+        expect(service.state).toEqual({ status: 'connecting' });
+      }
+      await flush(8000);
 
-      await expect(
-        service.connect({ credentials: 'test-creds', identifier: 'nonexistent' }),
-      ).rejects.toThrow('Device not found on network');
-      expect(failSpy).toHaveBeenCalled();
+      expect(mockScan).toHaveBeenCalledTimes(6);
+      expect(service.state).toEqual({ status: 'disconnected' });
+      await flush(60_000);
+      expect(mockScan).toHaveBeenCalledTimes(6);
     });
 
-    it('emits connection-failure on connect timeout', { timeout: 20000 }, async () => {
-      const failSpy = vi.fn();
-      service.on('connection-failure', failSpy);
+    it('retries after a connect timeout, closing the device that timed out', async () => {
+      mockConnect.mockReturnValueOnce(new Promise(() => {}));
+      service.connect(tv1);
+      await flush(15_000);
 
-      mockScan.mockResolvedValue([
-        { name: 'Test', address: '1.2.3.4', port: 7000, deviceId: 'dev1' },
-      ]);
-      mockDevice.connect.mockImplementation(
-        () => new Promise((resolve) => setTimeout(resolve, 20000)),
-      );
+      expect(devices[0].close).toHaveBeenCalled();
+      expect(service.state).toEqual({ status: 'connecting' });
+      await flush(500);
+      expect(service.state).toEqual({ status: 'connected' });
+    });
+  });
 
-      await expect(
-        service.connect({ credentials: 'test-creds', identifier: 'dev1' }),
-      ).rejects.toThrow('Connection timed out');
-      expect(failSpy).toHaveBeenCalled();
+  describe('reconnect()', () => {
+    it('forces a fresh connection, even while the old one still looks connected (wake)', async () => {
+      const stale = await connected();
+      service.reconnect(tv1);
+      await flush();
+
+      expect(stale.close).toHaveBeenCalled();
+      expect(mockScan).toHaveBeenCalledTimes(2);
+      expect(devices).toHaveLength(2);
+      expect(service.device).toBe(devices[1]);
+      expect(service.state).toEqual({ status: 'connected' });
+    });
+
+    it('does nothing while pairing', async () => {
+      await service.scan();
+      service.reconnect(tv1);
+      await flush();
+
+      expect(mockConnect).not.toHaveBeenCalled();
+      expect(service.state).toEqual({ status: 'pairing' });
     });
   });
 
   describe('sendKey()', () => {
-    it('throws when not connected', async () => {
+    it('throws when not connected, including while connecting', async () => {
+      await expect(service.sendKey('play_pause')).rejects.toThrow('Not connected');
+      mockConnect.mockReturnValueOnce(new Promise(() => {}));
+      service.connect(tv1);
+      await flush();
       await expect(service.sendKey('play_pause')).rejects.toThrow('Not connected');
     });
 
-    it('throws on unknown key', async () => {
-      // Set up a connected device via startPair (which creates the device)
-      mockScan.mockResolvedValue([
-        { name: 'Test', address: '1.2.3.4', port: 7000, deviceId: 'dev1' },
-      ]);
-      mockDevice.connect.mockResolvedValue(undefined);
-      await service.connect({ credentials: 'creds', identifier: 'dev1' });
-
+    it('rejects unknown keys, including inherited object properties', async () => {
+      const device = await connected();
       await expect(service.sendKey('invalid_key' as never)).rejects.toThrow('Unknown key');
+      await expect(service.sendKey('toString' as never)).rejects.toThrow('Unknown key: toString');
+      expect(device.sendKeyCommand).not.toHaveBeenCalled();
     });
 
-    it('sends key command for all valid keys', async () => {
-      mockScan.mockResolvedValue([
-        { name: 'Test', address: '1.2.3.4', port: 7000, deviceId: 'dev1' },
-      ]);
-      mockDevice.connect.mockResolvedValue(undefined);
-      mockDevice.sendKeyCommand.mockResolvedValue(undefined);
-      await service.connect({ credentials: 'creds', identifier: 'dev1' });
-
+    it('sends every valid key', async () => {
+      const device = await connected();
       const keys = [
         'play_pause',
         'left',
@@ -266,35 +376,200 @@ describe('ATVService', () => {
         'volume_up',
         'volume_down',
       ] as const;
+      for (const key of keys) await service.sendKey(key);
+      expect(device.sendKeyCommand.mock.calls).toEqual(keys.map((_key, index) => [index]));
+    });
 
-      for (const key of keys) {
-        await service.sendKey(key);
+    describe('play_pause', () => {
+      /** The key play_pause sent after the device reported `playbackState`. */
+      async function sentAfter(device: MockAppleTV, playbackState?: number): Promise<unknown> {
+        if (playbackState !== undefined) device.emit('nowPlaying', { playbackState });
+        device.sendKeyCommand.mockClear();
+        await service.sendKey('play_pause');
+        return device.sendKeyCommand.mock.calls[0][0];
       }
-      expect(mockDevice.sendKeyCommand).toHaveBeenCalledTimes(keys.length);
+
+      // Some apps (Plex) treat the play/pause key as play only, so a known state picks the
+      // explicit command.
+      it('pauses while playing and plays while paused, stopped, or interrupted', async () => {
+        const device = await connected();
+        expect(await sentAfter(device, PlaybackState.Playing)).toBe(15);
+        expect(await sentAfter(device, PlaybackState.Paused)).toBe(14);
+        expect(await sentAfter(device, PlaybackState.Stopped)).toBe(14);
+        expect(await sentAfter(device, PlaybackState.Interrupted)).toBe(14);
+      });
+
+      it('sends the play/pause toggle while the state is unknown or seeking', async () => {
+        const device = await connected();
+        expect(await sentAfter(device)).toBe(0);
+        expect(await sentAfter(device, PlaybackState.Unknown)).toBe(0);
+        expect(await sentAfter(device, PlaybackState.Seeking)).toBe(0);
+      });
+
+      // Plex never registers as the now-playing app: the TV reports its empty default player,
+      // which accepts play/pause commands and does nothing with them.
+      // The library maps the key to consumer usage 0xB0 (Play); 0xCD is the Play/Pause toggle.
+      it('makes the toggle key press send Play/Pause, not Play', async () => {
+        await connected();
+        expect(mockHidKeyMap.play_pause.usage).toBe(0xcd);
+      });
+
+      it('sends the toggle while the TV reports its default player', async () => {
+        const device = await connected();
+        device.emit('nowPlaying', {
+          playerIdentifier: 'MediaRemote-DefaultPlayer',
+          playbackState: PlaybackState.Paused,
+        });
+        expect(await sentAfter(device)).toBe(0);
+      });
+
+      it('forgets the state when the device changes or the connection is replaced', async () => {
+        const first = await connected(tv1);
+        first.emit('nowPlaying', { playbackState: PlaybackState.Playing });
+        const second = await connected(tv2);
+        expect(await sentAfter(second)).toBe(0);
+
+        second.emit('nowPlaying', { playbackState: PlaybackState.Playing });
+        service.reconnect(tv2);
+        await flush();
+        expect(await sentAfter(devices.at(-1)!)).toBe(0);
+      });
+
+      it('forgets the state when the connection drops and comes back', async () => {
+        const device = await connected();
+        device.emit('nowPlaying', { playbackState: PlaybackState.Playing });
+        device.emit('close');
+        await flush(500);
+        expect(service.state).toEqual({ status: 'connected' });
+        expect(await sentAfter(devices.at(-1)!)).toBe(0);
+      });
+
+      it('ignores now-playing from a replaced device', async () => {
+        const first = await connected(tv1);
+        const second = await connected(tv2);
+        first.emit('nowPlaying', { playbackState: PlaybackState.Playing });
+        expect(await sentAfter(second)).toBe(0);
+      });
+    });
+
+    it('times out when the Apple TV does not answer', async () => {
+      await connected();
+      mockSendKeyCommand.mockReturnValueOnce(new Promise(() => {}));
+      const sending = expect(service.sendKey('up')).rejects.toThrow('did not respond');
+      await flush(5000);
+      await sending;
+    });
+  });
+
+  describe('seek()', () => {
+    it('moves the playing item to the position', async () => {
+      const device = await connected();
+      await service.seek(90.5);
+      expect(device.setPosition).toHaveBeenCalledWith(90.5);
+    });
+
+    it('throws when not connected or the position is not a time', async () => {
+      await expect(service.seek(10)).rejects.toThrow('Not connected');
+      const device = await connected();
+      await expect(service.seek(-1)).rejects.toThrow('Invalid position');
+      await expect(service.seek(Number.NaN)).rejects.toThrow('Invalid position');
+      expect(device.setPosition).not.toHaveBeenCalled();
+    });
+
+    it('times out when the Apple TV does not answer', async () => {
+      const device = await connected();
+      device.setPosition.mockReturnValueOnce(new Promise(() => {}));
+      const seeking = expect(service.seek(10)).rejects.toThrow('did not respond');
+      await flush(5000);
+      await seeking;
     });
   });
 
   describe('disconnect()', () => {
-    it('emits disconnected event', async () => {
-      const disconnectedSpy = vi.fn();
-      service.on('disconnected', disconnectedSpy);
-
+    it('closes the device, stops reconnecting, and reports idle', async () => {
+      const device = await connected();
       await service.disconnect();
-      expect(disconnectedSpy).toHaveBeenCalled();
+
+      expect(device.close).toHaveBeenCalled();
+      expect(service.state).toEqual({ status: 'idle' });
+      device.emit('close');
+      await flush(60_000);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+    });
+
+    it('times out when closing the device hangs', async () => {
+      const device = await connected();
+      device.close.mockReturnValueOnce(new Promise(() => {}));
+      const disconnecting = expect(service.disconnect()).rejects.toThrow('Disconnect timed out');
+      await flush(5000);
+      await disconnecting;
+      expect(service.state).toEqual({ status: 'idle' });
     });
   });
 
-  describe('destroy()', () => {
-    it('cleans up all state', async () => {
-      service.scanResults = { test: {} as never };
-      service.pairingPhase = 'airplay';
+  it('destroy() clears scan results and the pairing session', async () => {
+    await service.scan();
+    await service.startPair('Living Room (1.2.3.4)');
+    await service.destroy();
 
-      await service.destroy();
+    expect(service.scanResults).toEqual({});
+    expect(service.pairingSession).toBeNull();
+    expect(service.state).toEqual({ status: 'idle' });
+  });
+});
 
-      expect(service.scanResults).toEqual({});
-      expect(service.pairingSession).toBeNull();
-      expect(service.pairingPhase).toBeNull();
-      expect(service.airplayCreds).toBeNull();
-    });
+// The library's real Credentials, not the mock above: saved credentials must survive the move
+// from two-PIN (AirPlay + Companion) to one-PIN (AirPlay only) pairing.
+describe('saved credentials format', () => {
+  const hap = (id: string) => ({
+    clientId: `${id}-client`,
+    clientLTSK: Buffer.from(`${id}-ltsk`),
+    clientLTPK: Buffer.from(`${id}-ltpk`),
+    serverLTPK: Buffer.from(`${id}-server-ltpk`),
+    serverId: `${id}-server`,
+  });
+  const hexFields = (id: string) => {
+    const c = hap(id);
+    return {
+      clientId: c.clientId,
+      clientLTSK: c.clientLTSK.toString('hex'),
+      clientLTPK: c.clientLTPK.toString('hex'),
+      serverLTPK: c.serverLTPK.toString('hex'),
+      serverId: c.serverId,
+    };
+  };
+  let Credentials: typeof import('../../app/node_modules/node-appletv-remote/dist/credentials.js').Credentials;
+
+  beforeAll(async () => {
+    ({ Credentials } =
+      await import('../../app/node_modules/node-appletv-remote/dist/credentials.js'));
+  });
+
+  it('serializes AirPlay-only credentials without a Companion part and reads them back', () => {
+    const serialized = new Credentials(hap('airplay')).serialize();
+    expect(JSON.parse(serialized)).toEqual(hexFields('airplay'));
+
+    const restored = Credentials.deserialize(serialized);
+    expect(restored).toMatchObject(hap('airplay'));
+    expect(restored.companionCredentials).toBeUndefined();
+  });
+
+  it('still reads credentials saved with a Companion part by two-PIN pairing', () => {
+    const saved = JSON.stringify({ ...hexFields('airplay'), companion: hexFields('companion') });
+
+    const restored = Credentials.deserialize(saved);
+    expect(restored).toMatchObject(hap('airplay'));
+    expect(restored.companionCredentials).toEqual(hap('companion'));
+  });
+});
+
+// PlaybackState in shared/types copies the library's enum, because the webview cannot load the
+// library; this keeps the copy honest.
+describe('PlaybackState', () => {
+  it('matches the library enum', async () => {
+    const lib = await import('../../app/node_modules/node-appletv-remote/dist/now-playing-info.js');
+    for (const [name, value] of Object.entries(PlaybackState)) {
+      expect(lib.PlaybackState[name as keyof typeof lib.PlaybackState]).toBe(value);
+    }
   });
 });

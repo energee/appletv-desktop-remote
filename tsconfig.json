@@ -7,12 +7,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "app/dist",
+    "noEmit": true,
     "rootDir": "src",
-    "resolveJsonModule": true,
-    "declaration": false,
-    "sourceMap": false
+    "resolveJsonModule": true
   },
-  "include": ["src/main/**/*.ts", "src/shared/**/*.ts", "src/types/**/*.d.ts"],
-  "exclude": ["node_modules", "app/dist"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

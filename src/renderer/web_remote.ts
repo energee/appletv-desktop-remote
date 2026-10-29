@@ -1,31 +1,23 @@
-import type {
-  ATVCredentials,
-  ATVKeyName,
-  KeyboardKeyMap,
-  ConnectionDotState,
-  NowPlayingInfo,
+// The remote window's UI. It renders the sidecar's connection state (which screen, status
+// text, connection dot) and forwards user actions; the sidecar owns connecting, reconnecting,
+// and pairing mode.
+import {
+  PlaybackState,
+  type ATVCredentials,
+  type ATVKeyName,
+  type KeyboardKeyMap,
+  type ConnectionDotState,
+  type ConnectionState,
+  type NowPlayingInfo,
 } from '../shared/types';
-import {
-  $,
-  $$,
-  atv_connected,
-  atv_credentials,
-  atv_events,
-  connecting,
-  safeParse,
-  setAtvConnected,
-  setAtvCredentials,
-  setConnecting,
-} from './state';
-import {
-  sendKey,
-  scanDevices,
-  startPair,
-  finishPair,
-  connectATV,
-} from './atv_remote';
+import { desktopAPI } from '../shared/desktop-api';
+import { icon } from './icons';
+import { $, $$, safeParse } from './state';
+import { scanDevices, startPair, finishPair } from './atv_remote';
 
 let qPresses = 0;
+/** The sidecar's latest connection state. */
+let connection: ConnectionState = { status: 'idle' };
 
 const keymap: KeyboardKeyMap = {
   ArrowUp: 'up',
@@ -50,48 +42,62 @@ const keymap: KeyboardKeyMap = {
 };
 
 export function initIPC(): void {
-  window.electronAPI.onShortcutWin(() => {
-    handleDarkMode();
+  desktopAPI.onShortcutWin(() => {
+    void handleDarkMode();
     toggleAltText(true);
   });
-
-  window.electronAPI.onPowerResume(() => {
-    connectToATV();
-  });
-
-  window.electronAPI.onSendCommand((key: string) => {
-    sendCommand(key);
-  });
-
-  window.electronAPI.onErrorMessage((msg: string) => {
+  // After sleep the old socket is usually dead but not yet closed; a relaunched sidecar has no
+  // connection at all. Either way the sidecar starts a fresh one unless pairing is under way.
+  desktopAPI.onPowerResume(reconnectToATV);
+  desktopAPI.onBackendLost(reconnectToATV);
+  desktopAPI.onErrorMessage((msg: string) => {
     setStatus(msg);
   });
-
-  window.electronAPI.onContextMenuAction((action: string, payload?: string) => {
+  desktopAPI.onContextMenuAction((action: string, payload?: string) => {
     handleContextMenuAction(action, payload);
   });
 
-  atv_events.on('connected', function (connected: boolean) {
-    if (connected) {
+  desktopAPI.onAtvState(renderState);
+  desktopAPI.onAtvNowPlaying(updateNowPlaying);
+}
+
+/** Shows the sidecar's connection state: the screen, the connection dot, and status text. */
+function renderState(next: ConnectionState): void {
+  const previous = connection.status;
+  connection = next;
+  showScreen();
+  if (next.status !== 'connected') hideNowPlaying();
+  switch (next.status) {
+    case 'connected':
       updateConnectionDot('connected');
-      setStatus('');
       $('#statusText')!.style.display = 'none';
-    } else {
+      handleContextMenu();
+      showKeyMap();
+      break;
+    case 'connecting':
       updateConnectionDot('connecting');
-      setStatus('Reconnecting...');
-      hideNowPlaying();
-    }
-  });
-  atv_events.on('connection_failure', function () {
-    updateConnectionDot('disconnected');
-  });
-  atv_events.on('reconnect_failed', function () {
-    updateConnectionDot('disconnected');
-    setStatus('Connection lost. Right-click to reconnect.');
-  });
-  atv_events.on('now-playing', function (info: NowPlayingInfo) {
-    updateNowPlaying(info);
-  });
+      // Retries report 'connecting' again; keep the text from the start of the attempt.
+      if (previous !== 'connecting') {
+        setStatus(previous === 'connected' ? 'Reconnecting...' : 'Connecting to ATV...');
+      }
+      break;
+    case 'disconnected':
+      $('#initText')!.style.display = 'none';
+      updateConnectionDot('disconnected');
+      setStatus('Connection lost. Right-click to reconnect.');
+      break;
+    default:
+      // idle, or pairing, whose screen shows its own status.
+      updateConnectionDot('disconnected');
+  }
+}
+
+/** Shows the pairing screen while pairing and the remote otherwise, behind Settings if open. */
+function showScreen(): void {
+  if (settingsOpen()) return;
+  const pairing = connection.status === 'pairing';
+  $('#addNewElements')!.style.display = pairing ? '' : 'none';
+  $('#runningElements')!.style.display = pairing ? 'none' : '';
 }
 
 window.addEventListener('blur', () => {
@@ -139,20 +145,21 @@ window.addEventListener('keydown', (e) => {
 
   if (key === 'q') {
     qPresses++;
-    if (qPresses === 3) window.electronAPI.quit();
+    if (qPresses === 3) void desktopAPI.quit();
   } else {
     qPresses = 0;
   }
   if (key === 'h') {
-    window.electronAPI.hideWindow();
+    void desktopAPI.hideWindow();
   }
-  if (!atv_connected) {
+  // The pairing screen is up exactly while the sidecar is pairing; Enter there submits the PIN.
+  if (connection.status === 'pairing') {
     if (document.activeElement === $('#pairCode') && key === 'Enter') {
       submitCode();
     }
     return;
   }
-  if ($('#cancelPairing')!.style.display !== 'none') return;
+  if (connection.status !== 'connected') return;
   if (keymap[key] !== undefined) {
     sendCommand(key);
     e.preventDefault();
@@ -163,8 +170,6 @@ export function createDropdown(ks: string[]): void {
   $('#loader')!.style.display = 'none';
   $('#statusText')!.style.display = 'none';
   $('#pairingLoader')!.innerHTML = '';
-  $('#pairStepNum')!.innerHTML = '1';
-  $('#pairProtocolName')!.innerHTML = 'Apple TV';
   $('#pairingElements')!.style.display = 'block';
 
   const picker = $('#atv_picker') as HTMLSelectElement;
@@ -187,11 +192,6 @@ export function createDropdown(ks: string[]): void {
       startPairing(vl);
     }
   };
-}
-
-function createATVDropdown(): void {
-  $('#statusText')!.style.display = 'none';
-  handleContextMenu();
 }
 
 const keyElCache = new Map<string, Element>();
@@ -221,8 +221,9 @@ export async function sendCommand(k: string): Promise<void> {
       el.classList.remove('invert');
     }, 500);
   }
+  if (rcmd === 'play_pause') flipPlayPauseIcon();
   try {
-    await sendKey(rcmd);
+    await desktopAPI.sendKey(rcmd);
   } catch {
     if (el) {
       el.classList.remove('invert');
@@ -235,7 +236,6 @@ export async function sendCommand(k: string): Promise<void> {
 let pairButtonBound = false;
 
 function startPairing(dev: string): void {
-  setAtvConnected(false);
   $('#initText')!.style.display = 'none';
   $('#results')!.style.display = 'none';
   if (!pairButtonBound) {
@@ -349,36 +349,44 @@ function showKeyMap(): void {
         }, SCROLL_COOLDOWN);
       }
     },
-    { passive: false },
+    { passive: false, signal },
   );
 
   // --- Tap (click) and long-press ---
   let clickStart: { x: number; y: number; t: number } | null = null;
 
-  touchpad.addEventListener('mousedown', function (e) {
-    hideHint();
-    clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
-    longPressTimer = setTimeout(function () {
-      sendCommand('select');
-      clickStart = null;
-    }, 1000);
-  });
+  touchpad.addEventListener(
+    'mousedown',
+    function (e) {
+      hideHint();
+      clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+      longPressTimer = setTimeout(function () {
+        sendCommand('select');
+        clickStart = null;
+      }, 1000);
+    },
+    { signal },
+  );
 
-  touchpad.addEventListener('mouseup', function (e) {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-    if (!clickStart) return;
-    const dx = e.clientX - clickStart.x;
-    const dy = e.clientY - clickStart.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const elapsed = Date.now() - clickStart.t;
-    if (dist < 15 && elapsed < 300) {
-      sendCommand('select');
-    }
-    clickStart = null;
-  });
+  touchpad.addEventListener(
+    'mouseup',
+    function (e) {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      if (!clickStart) return;
+      const dx = e.clientX - clickStart.x;
+      const dy = e.clientY - clickStart.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const elapsed = Date.now() - clickStart.t;
+      if (dist < 15 && elapsed < 300) {
+        sendCommand('select');
+      }
+      clickStart = null;
+    },
+    { signal },
+  );
 
   // --- Media / secondary button long-press handlers ---
   const longPressTimers: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -471,42 +479,45 @@ export function updateConnectionDot(state: ConnectionDotState): void {
   header.firstChild!.textContent = (showName && getConnectedDeviceName()) || 'ATV Remote';
 }
 
-export async function connectToATV(): Promise<void> {
-  if (connecting) return;
-  setConnecting(true);
-  updateConnectionDot('connecting');
-  setStatus('Connecting to ATV...');
-  $('#runningElements')!.style.display = '';
-  setAtvCredentials(safeParse(localStorage.getItem('atvcreds'), false as const));
+/**
+ * Asks the sidecar to connect to the saved device (`atvcreds`), replacing any connection,
+ * connect, or pairing in progress. Progress arrives as `state` events.
+ */
+export function connectToATV(): void {
+  const creds = safeParse<ATVCredentials | null>(localStorage.getItem('atvcreds'), null);
+  if (creds) desktopAPI.connect(creds).catch(showRequestError);
+}
 
-  $('#pairingElements')!.style.display = 'none';
+/** Like connectToATV, but the sidecar ignores it while pairing. */
+function reconnectToATV(): void {
+  const creds = safeParse<ATVCredentials | null>(localStorage.getItem('atvcreds'), null);
+  if (creds) desktopAPI.reconnect(creds).catch(showRequestError);
+}
 
-  try {
-    await connectATV(atv_credentials);
-    createATVDropdown();
-    showKeyMap();
-  } catch (err) {
-    console.error('Connection failed:', err);
-    updateConnectionDot('disconnected');
-    startScan();
-  }
-  setConnecting(false);
+function showRequestError(err: unknown): void {
+  setStatus(err instanceof Error ? err.message : 'Unable to reach the Apple TV backend.');
 }
 
 export function setStatus(txt: string): void {
   const el = $('#statusText')!;
-  el.innerHTML = txt;
+  el.textContent = txt;
   el.style.display = 'block';
 }
 
+/**
+ * Scans for Apple TVs to pair. The scan puts the sidecar in pairing mode, and that state
+ * shows this screen.
+ */
 export function startScan(): void {
   $('#initText')!.style.display = 'none';
   const loader = $('#loader')!;
   loader.style.display = 'block';
   loader.classList.add('fade-in');
   $('#topTextKBLink')!.style.display = 'none';
-  $('#addNewElements')!.style.display = '';
-  $('#runningElements')!.style.display = 'none';
+  // Start from the device picker, even after an earlier pairing in this window.
+  $('#pairingElements')!.style.display = 'none';
+  $('#results')!.style.display = '';
+  $('#pairCodeElements')!.style.display = 'none';
   setStatus('Please wait, scanning...');
   $('#pairingLoader')!.innerHTML =
     '<div style="text-align:center"><div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div></div>';
@@ -519,7 +530,7 @@ async function handleDarkMode(): Promise<void> {
     const alwaysUseDarkMode = uimode === 'darkmode';
     const neverUseDarkMode = uimode === 'lightmode';
 
-    const systemDark = await window.electronAPI.getTheme();
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const darkModeEnabled = (systemDark || alwaysUseDarkMode) && !neverUseDarkMode;
     if (darkModeEnabled) {
       document.body.classList.add('darkMode');
@@ -532,9 +543,10 @@ async function handleDarkMode(): Promise<void> {
 }
 
 function getCreds(nm?: string): ATVCredentials | Record<string, never> {
+  // Older releases stored some entries as (repeatedly) JSON-encoded strings.
   const creds = safeParse(
     localStorage.getItem('remote_credentials'),
-    {} as Record<string, unknown>,
+    {} as Record<string, ATVCredentials | string>,
   );
   const keys = Object.keys(creds);
   if (keys.length === 0) return {};
@@ -545,12 +557,199 @@ function getCreds(nm?: string): ATVCredentials | Record<string, never> {
 }
 
 function setAlwaysOnTop(tf: boolean): void {
-  window.electronAPI.setAlwaysOnTop(String(tf));
+  void desktopAPI.setAlwaysOnTop(tf);
+}
+
+// The webview cannot download blobs, so the host writes the file from a native save dialog.
+async function exportCredentials(): Promise<void> {
+  const backup = {
+    version: 1,
+    atvcreds: localStorage.getItem('atvcreds'),
+    remote_credentials: localStorage.getItem('remote_credentials'),
+    uimode: localStorage.getItem('uimode'),
+    alwaysOnTopChecked: localStorage.getItem('alwaysOnTopChecked'),
+  };
+  if (await desktopAPI.exportCredentials(JSON.stringify(backup, null, 2))) {
+    setStatus('Credentials exported.');
+  }
+}
+
+function isStoredValue(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+// Picked from a native dialog, like the export, so the window stays up to show the result.
+async function importCredentials(): Promise<void> {
+  const contents = await desktopAPI.importCredentials();
+  if (contents === null) return;
+  const parsed: unknown = JSON.parse(contents);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('atvcreds' in parsed) ||
+    !('remote_credentials' in parsed) ||
+    !isStoredValue(parsed.atvcreds) ||
+    !isStoredValue(parsed.remote_credentials) ||
+    ('uimode' in parsed && !isStoredValue(parsed.uimode)) ||
+    ('alwaysOnTopChecked' in parsed && !isStoredValue(parsed.alwaysOnTopChecked))
+  ) {
+    throw new Error('This is not an ATV Remote credential export.');
+  }
+  // Validate the complete backup before changing any existing saved state.
+  function storedObject(value: string): Record<string, unknown> {
+    let decoded: unknown = JSON.parse(value);
+    while (typeof decoded === 'string') decoded = JSON.parse(decoded);
+    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+      throw new Error('Credential data must contain an object.');
+    }
+    return decoded as Record<string, unknown>;
+  }
+  function validateCredential(value: unknown): void {
+    const credential = typeof value === 'string' ? storedObject(value) : value;
+    if (
+      typeof credential !== 'object' ||
+      credential === null ||
+      !('credentials' in credential) ||
+      typeof credential.credentials !== 'string' ||
+      credential.credentials.length === 0 ||
+      !('identifier' in credential) ||
+      typeof credential.identifier !== 'string' ||
+      credential.identifier.length === 0
+    ) {
+      throw new Error('Each saved device must contain credentials and an identifier.');
+    }
+  }
+  if (parsed.atvcreds !== null) validateCredential(storedObject(parsed.atvcreds));
+  if (parsed.remote_credentials !== null) {
+    Object.values(storedObject(parsed.remote_credentials)).forEach(validateCredential);
+  }
+  if (
+    'uimode' in parsed &&
+    parsed.uimode !== null &&
+    !['systemmode', 'darkmode', 'lightmode'].includes(parsed.uimode as string)
+  ) {
+    throw new Error('Invalid appearance setting in credential export.');
+  }
+  if (
+    'alwaysOnTopChecked' in parsed &&
+    parsed.alwaysOnTopChecked !== null &&
+    !['true', 'false'].includes(parsed.alwaysOnTopChecked as string)
+  ) {
+    throw new Error('Invalid always-on-top setting in credential export.');
+  }
+  for (const key of ['atvcreds', 'remote_credentials', 'uimode', 'alwaysOnTopChecked'] as const) {
+    // Validated above: each key is absent, null, or a string.
+    const value = (parsed as Record<string, unknown>)[key];
+    if (typeof value === 'string') localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  }
+  await handleDarkMode();
+  setAlwaysOnTop(safeParse(localStorage.getItem('alwaysOnTopChecked'), false));
+  refreshSettings();
+  handleContextMenu();
+  setStatus('Credentials imported. Reconnecting...');
+  // connect replaces the old connection; without an active device, just drop it.
+  if (localStorage.getItem('atvcreds')) connectToATV();
+  else await desktopAPI.disconnect();
 }
 
 // --- Now Playing ---
 
+/** How long a press's icon flip outlasts reports that disagree with it. */
+const FLIP_HOLD_MS = 3000;
+/** What the play button shows, what the TV last reported, and the pending flip's timer. */
+let iconPlaying = false;
+let reportedPlaying = false;
+let flipTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Flips the play button as the key is sent. After a press the TV repeats its old state for a
+ * moment (Plex reports a change up to seconds late), so until a report agrees or the hold ends,
+ * reports do not move the icon; then it shows the last reported state.
+ */
+function flipPlayPauseIcon(): void {
+  showPlayPauseIcon(!iconPlaying);
+  clearTimeout(flipTimer);
+  flipTimer = setTimeout(() => {
+    flipTimer = undefined;
+    showPlayPauseIcon(reportedPlaying);
+  }, FLIP_HOLD_MS);
+}
+
+function cancelFlip(): void {
+  clearTimeout(flipTimer);
+  flipTimer = undefined;
+}
+
+/** Seconds from the Unix epoch to 2001-01-01, the epoch of the TV's MRP timestamps. */
+const MRP_EPOCH_OFFSET = 978307200;
+/** The playing item: `elapsed` seconds in at `at` (ms since the Unix epoch), moving at `rate`. */
+const NO_POSITION = { duration: 0, elapsed: 0, at: 0, rate: 0 };
+let position = NO_POSITION;
+/** True while the seek bar is being dragged, so the clock does not move it. */
+let dragging = false;
+
+function formatTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+/** Moves the bar's thumb, its played fill (the first background layer), and the elapsed time. */
+function setSeekBar(bar: HTMLInputElement, seconds: number): void {
+  bar.value = String(Math.round(seconds));
+  const played = ((seconds / position.duration) * 100).toFixed(1);
+  bar.style.backgroundSize = `${played}% 100%, 100% 100%`;
+  $('#npElapsed')!.textContent = formatTime(seconds);
+}
+
+/** Shows the bar at the current position, or hides it when the item has no length. */
+function renderSeekBar(): void {
+  const seek = $('#seek');
+  if (!seek) return;
+  seek.style.display = position.duration > 0 ? '' : 'none';
+  if (position.duration <= 0 || dragging) return;
+  const now = position.elapsed + (position.rate * (Date.now() - position.at)) / 1000;
+  const seconds = Math.min(position.duration, Math.max(0, now));
+  const bar = $('#seekBar') as HTMLInputElement;
+  bar.max = String(Math.round(position.duration));
+  setSeekBar(bar, seconds);
+  $('#npDuration')!.textContent = formatTime(position.duration);
+}
+
+function initSeekBar(): void {
+  const bar = $('#seekBar') as HTMLInputElement;
+  bar.addEventListener('input', () => {
+    dragging = true;
+    setSeekBar(bar, Number(bar.value));
+  });
+  bar.addEventListener('change', () => {
+    dragging = false;
+    const seconds = Number(bar.value);
+    position = { ...position, elapsed: seconds, at: Date.now() };
+    void desktopAPI.seek(seconds).catch((error: unknown) => {
+      setStatus(error instanceof Error ? error.message : String(error));
+    });
+  });
+  // The TV reports the position only when it changes, so the clock advances it in between.
+  setInterval(renderSeekBar, 1000);
+}
+
+/** Shows the title, artist, and position, and a pause icon on the play button while playing. */
 function updateNowPlaying(info: NowPlayingInfo): void {
+  reportedPlaying = info.playbackState === PlaybackState.Playing;
+  position = {
+    duration: info.duration ?? 0,
+    elapsed: info.elapsedTime ?? 0,
+    at: info.timestamp ? (info.timestamp + MRP_EPOCH_OFFSET) * 1000 : Date.now(),
+    // The TV can report rate 1 for a moment after pausing; only a playing item moves.
+    rate: reportedPlaying ? (info.playbackRate ?? 1) : 0,
+  };
+  renderSeekBar();
+  if (reportedPlaying === iconPlaying) cancelFlip();
+  if (!flipTimer) showPlayPauseIcon(reportedPlaying);
   const container = $('#nowPlaying');
   if (!container) return;
 
@@ -567,9 +766,21 @@ function updateNowPlaying(info: NowPlayingInfo): void {
   $('#npArtist')!.textContent = artist;
 }
 
+/** Not connected: hides the title and artist, and the play button shows play. */
 function hideNowPlaying(): void {
+  position = NO_POSITION;
+  renderSeekBar();
+  cancelFlip();
+  reportedPlaying = false;
+  showPlayPauseIcon(false);
   const container = $('#nowPlaying');
   if (container) container.style.display = 'none';
+}
+
+function showPlayPauseIcon(playing: boolean): void {
+  iconPlaying = playing;
+  const el = $('#playPauseIcon');
+  if (el) el.innerHTML = icon(playing ? 'pause' : 'play');
 }
 
 // --- Settings Panel ---
@@ -577,31 +788,33 @@ function hideNowPlaying(): void {
 function showSettings(): void {
   $('#runningElements')!.style.display = 'none';
   $('#addNewElements')!.style.display = 'none';
-  const panel = $('#settingsPanel')!;
-  panel.style.display = 'block';
+  $('#settingsPanel')!.style.display = 'block';
+  refreshSettings();
+}
 
-  // Populate theme radios
+/** Shows the stored theme, always-on-top choice, and saved devices in the settings panel. */
+function refreshSettings(): void {
   const currentTheme = localStorage.getItem('uimode') || 'systemmode';
-  const radios = panel.querySelectorAll<HTMLInputElement>('input[name="theme"]');
+  const radios = document.querySelectorAll<HTMLInputElement>('#themeRadios input[name="theme"]');
   radios.forEach((r) => {
     r.checked = r.value === currentTheme;
   });
 
-  // Populate always-on-top
   const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
   ($('#settingsAlwaysOnTop') as HTMLInputElement).checked = topChecked;
 
-  // Populate device list
   populateDeviceList();
+}
+
+// Connection changes (wake, reconnect, import) must not draw the remote or the pairing screen
+// over Settings; hideSettings shows whichever is current on the way out.
+function settingsOpen(): boolean {
+  return $('#settingsPanel')!.style.display === 'block';
 }
 
 function hideSettings(): void {
   $('#settingsPanel')!.style.display = 'none';
-  if (atv_connected) {
-    $('#runningElements')!.style.display = '';
-  } else {
-    $('#addNewElements')!.style.display = '';
-  }
+  showScreen();
 }
 
 function populateDeviceList(): void {
@@ -634,8 +847,8 @@ function populateDeviceList(): void {
       delete allCreds[name];
       localStorage.setItem('remote_credentials', JSON.stringify(allCreds));
       if (isActive) localStorage.removeItem('atvcreds');
-      window.electronAPI.removeDevice(name);
       populateDeviceList();
+      handleContextMenu();
     });
     row.appendChild(removeBtn);
     listEl.appendChild(row);
@@ -656,6 +869,7 @@ function initSettingsListeners(): void {
     r.addEventListener('change', () => {
       localStorage.setItem('uimode', r.value);
       handleDarkMode();
+      handleContextMenu();
     });
   });
 
@@ -664,11 +878,23 @@ function initSettingsListeners(): void {
     const checked = (e.target as HTMLInputElement).checked;
     localStorage.setItem('alwaysOnTopChecked', String(checked));
     setAlwaysOnTop(checked);
+    handleContextMenu();
   });
 
   // Hotkey button
   $('#settingsHotkeyBtn')!.addEventListener('click', () => {
-    window.electronAPI.loadHotkeyWindow();
+    void desktopAPI.loadHotkeyWindow();
+  });
+
+  $('#settingsExportCredentialsBtn')!.addEventListener('click', () => {
+    void exportCredentials().catch((error: unknown) => {
+      setStatus(error instanceof Error ? error.message : 'Unable to export credentials.');
+    });
+  });
+  $('#settingsImportCredentialsBtn')!.addEventListener('click', () => {
+    void importCredentials().catch((error: unknown) => {
+      setStatus(error instanceof Error ? error.message : 'Unable to import credentials.');
+    });
   });
 
   // Back button
@@ -679,7 +905,7 @@ function initSettingsListeners(): void {
 
 // --- Context Menu ---
 
-function handleContextMenu(): void {
+function handleContextMenu(popup = false): void {
   const creds = safeParse(
     localStorage.getItem('remote_credentials'),
     {} as Record<string, unknown>,
@@ -690,19 +916,22 @@ function handleContextMenu(): void {
   const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
 
   const devices = ks.map((k) => {
-    const v = creds[k] as ATVCredentials;
-    return {
-      label: k,
-      identifier: v ? v.identifier : '',
-      checked: !!(v && activeId && v.identifier === activeId),
-    };
+    // Older releases stored some devices as JSON strings, which have no identifier.
+    const v = creds[k] as ATVCredentials | null;
+    const identifier = typeof v?.identifier === 'string' ? v.identifier : '';
+    return { label: k, identifier, checked: !!(activeId && identifier === activeId) };
   });
 
-  window.electronAPI.showContextMenu({
-    devices,
-    uiMode: mode,
-    alwaysOnTop: topChecked,
-  });
+  void desktopAPI
+    .showContextMenu(
+      {
+        devices,
+        uiMode: mode,
+        alwaysOnTop: topChecked,
+      },
+      popup,
+    )
+    .catch((error: unknown) => setStatus(String(error)));
 }
 
 function handleContextMenuAction(action: string, payload?: string): void {
@@ -719,11 +948,14 @@ function handleContextMenuAction(action: string, payload?: string): void {
       }
       break;
     }
+    // Pairing is an explicit navigation, so it leaves Settings (which would stay in front).
     case 'pairNew':
+      hideSettings();
       startScan();
       break;
     case 'repairCurrent':
       localStorage.removeItem('atvcreds');
+      hideSettings();
       startScan();
       break;
     case 'setTheme':
@@ -736,26 +968,29 @@ function handleContextMenuAction(action: string, payload?: string): void {
     case 'toggleAlwaysOnTop':
       if (payload !== undefined) {
         localStorage.setItem('alwaysOnTopChecked', payload);
-        window.electronAPI.setAlwaysOnTop(payload);
+        void desktopAPI.setAlwaysOnTop(payload === 'true');
         handleContextMenu();
       }
       break;
     case 'openSettings':
-      window.electronAPI.showWindow();
+      void desktopAPI.showWindow();
       showSettings();
       break;
   }
 }
 
 export async function init(): Promise<void> {
-  // Theme listener
-  window.electronAPI.onThemeUpdated(() => {
-    handleDarkMode();
-  });
-
   await handleDarkMode();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    void handleDarkMode();
+  });
   handleContextMenu();
+  window.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    handleContextMenu(true);
+  });
   initSettingsListeners();
+  initSeekBar();
 
   $('#cancelPairing')!.addEventListener('click', () => {
     window.location.reload();
@@ -774,11 +1009,10 @@ export async function init(): Promise<void> {
   }
   if (localStorage.getItem('firstRun') !== 'false') {
     localStorage.setItem('firstRun', 'false');
-    window.electronAPI.showWindow();
+    void desktopAPI.showWindow();
   }
 
   if (creds && creds.credentials && creds.identifier) {
-    setAtvCredentials(creds);
     connectToATV();
   } else {
     startScan();

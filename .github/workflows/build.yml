@@ -13,44 +13,31 @@ jobs:
     strategy:
       matrix:
         include:
+          - os: macos-15-intel
+            platform: macos-x64
+            artifact_glob: src-tauri/target/release/bundle/dmg/*.dmg
           - os: macos-latest
-            platform: mac-intel
-            build_cmd: pnpm exec electron-builder -m --x64 --publish never
-            artifact_glob: dist/*.dmg
-          - os: macos-latest
-            platform: mac-arm
-            build_cmd: pnpm exec electron-builder -m --arm64 --publish never
-            artifact_glob: dist/*.dmg
+            platform: macos-arm64
+            artifact_glob: src-tauri/target/release/bundle/dmg/*.dmg
           - os: windows-latest
-            platform: win
-            build_cmd: pnpm exec electron-builder -w --publish never
-            artifact_glob: dist/*.exe
-
+            platform: windows-x64
+            artifact_glob: |
+              src-tauri/target/release/bundle/**/*.msi
+              src-tauri/target/release/bundle/**/*.exe
     runs-on: ${{ matrix.os }}
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: false
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build app
-        run: pnpm build:all
-
-      - name: Build ${{ matrix.platform }}
-        run: ${{ matrix.build_cmd }}
-
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install sidecar dependencies
+        run: pnpm --dir app install --frozen-lockfile
+      - name: Build Tauri bundle
+        run: pnpm build
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -67,7 +54,6 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
