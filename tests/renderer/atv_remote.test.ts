@@ -16,6 +16,7 @@ const desktopAPI = {
   showContextMenu: vi.fn(),
   showWindow: vi.fn(),
   setAlwaysOnTop: vi.fn(),
+  setWindowTheme: vi.fn(),
   importCredentials: vi.fn(),
   onAtvState: vi.fn(),
   onAtvNowPlaying: vi.fn(),

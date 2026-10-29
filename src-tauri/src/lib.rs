@@ -10,6 +10,11 @@ mod macos_wake;
 #[cfg(windows)]
 mod windows_wake;
 
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn atv_round_window_corners(ns_window: *mut std::ffi::c_void, radius: f64);
+}
+
 use backend::Backend;
 use serde_json::Value;
 use std::sync::{Arc, Mutex};
@@ -56,6 +61,11 @@ pub fn run() {
             macos_wake::install(app.handle()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
             macos_gesture::install(app.handle()).map_err(std::io::Error::other)?;
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                // Same radius as windowEffects in tauri.conf.json; see corners.m.
+                unsafe { atv_round_window_corners(window.ns_window()?, 16.0) };
+            }
             // Wake reconnect is a convenience: the sidecar still reconnects after a dropped connection.
             #[cfg(windows)]
             if let Err(error) = windows_wake::install(app.handle()) {

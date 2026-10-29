@@ -539,6 +539,8 @@ async function handleDarkMode(): Promise<void> {
     } else {
       document.body.classList.remove('darkMode');
     }
+    // The macOS glass follows the window's appearance, not the page: keep the two in step.
+    await desktopAPI.setWindowTheme(darkModeEnabled ? 'dark' : 'light');
   } catch (err) {
     console.log('Error setting dark mode:', err);
   }
