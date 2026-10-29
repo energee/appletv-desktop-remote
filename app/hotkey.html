@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+      content="default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     />
     <title>Change Hotkey</title>
     <style>
@@ -60,6 +60,7 @@
         min-height: 100vh;
         background: linear-gradient(165deg, #ede9e5 0%, #ddd8d3 40%, #e5e0dc 100%);
         color: var(--text-primary);
+        -webkit-user-select: none;
         user-select: none;
         padding: 24px 20px 20px;
       }
@@ -245,6 +246,6 @@
       </button>
     </div>
 
-    <script src="dist/hotkey.js"></script>
+    <script src="hotkey.js"></script>
   </body>
 </html>

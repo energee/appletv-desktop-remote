@@ -7,7 +7,6 @@ declare module 'node-appletv-remote' {
     name: string;
     address: string;
     port: number;
-    companionPort?: number;
     deviceId?: string;
   }
 
@@ -17,28 +16,38 @@ declare module 'node-appletv-remote' {
     name: string;
     address: string;
     deviceId?: string;
-    companionPort?: number;
 
     constructor(device: DiscoveredDevice);
     connect(credentials: Credentials): Promise<void>;
-    connectCompanion(companionCredentials: unknown): Promise<void>;
     startPairing(): Promise<PairingSession>;
-    startCompanionPairing(): Promise<PairingSession>;
     sendKeyCommand(key: Key): Promise<void>;
+    setPosition(seconds: number): Promise<void>;
     close(): Promise<void>;
     removeAllListeners(): void;
     on(event: 'close', listener: () => void): void;
     on(event: 'error', listener: (err: Error) => void): void;
-    on(event: 'nowPlaying', listener: (info: unknown) => void): void;
-    on(event: 'companionClose', listener: () => void): void;
-    on(event: 'companionError', listener: (err: Error) => void): void;
+    on(event: 'nowPlaying', listener: (info: NowPlayingInfo) => void): void;
   }
 
   export class Credentials {
-    companionCredentials?: unknown;
-    constructor(airplay: unknown, companion?: unknown);
+    constructor(airplay: unknown);
     serialize(): string;
     static deserialize(data: string): Credentials;
+  }
+
+  /** Only the fields this app reads; playbackState is a PlaybackState value. */
+  export interface NowPlayingInfo {
+    title: string;
+    artist: string;
+    album: string;
+    playbackState: number;
+    playerIdentifier?: string;
+    /** Seconds; 0 when unknown. */
+    duration: number;
+    /** Seconds into the item as of `timestamp`, which is the TV's clock in seconds since 2001. */
+    elapsedTime: number;
+    playbackRate: number;
+    timestamp: number;
   }
 
   export interface PairingSession {
@@ -47,6 +56,8 @@ declare module 'node-appletv-remote' {
 
   export enum Key {
     PlayPause,
+    Play,
+    Pause,
     Left,
     Right,
     Down,
@@ -61,4 +72,9 @@ declare module 'node-appletv-remote' {
     VolumeUp,
     VolumeDown,
   }
+}
+
+declare module 'node-appletv-remote/dist/mrp/messages.js' {
+  /** The HID usage each key press sends; mutable, see getLib in atv_service.ts. */
+  export const HID_KEY_MAP: Record<string, { usagePage: number; usage: number }>;
 }

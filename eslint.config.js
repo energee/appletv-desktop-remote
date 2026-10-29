@@ -7,7 +7,15 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   eslintConfigPrettier,
   {
-    ignores: ['app/dist/**', 'node_modules/**', 'build/**'],
+    ignores: [
+      'app/dist/**',
+      'dist/**',
+      'node_modules/**',
+      'build/**',
+      'src-tauri/target/**',
+      'src-tauri/gen/**',
+      '.remember/**',
+    ],
   },
   {
     rules: {

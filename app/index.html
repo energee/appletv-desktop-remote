@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+      content="default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ATV Remote</title>
@@ -48,10 +48,6 @@
           </div>
           <div id="pairCodeElements">
             <div class="pair-section">
-              <div class="pair-step-badge">
-                Step <span id="pairStepNum">1</span> of 2 ·
-                <span id="pairProtocolName">AirPlay</span>
-              </div>
               <p class="pair-label">Enter the code shown on your Apple TV</p>
               <input
                 id="pairCode"
@@ -105,7 +101,7 @@
               data-tippy-content="Play / Pause"
               class="directionCircle media-btn play-btn"
             >
-              <span class="keyText"><span data-icon="play"></span></span
+              <span class="keyText"><span id="playPauseIcon" data-icon="play"></span></span
               ><span class="keyTextAlt">Space</span>
             </div>
             <div
@@ -160,6 +156,10 @@
         <div id="nowPlaying" class="now-playing" style="display: none">
           <div class="now-playing-title" id="npTitle"></div>
           <div class="now-playing-artist" id="npArtist"></div>
+          <div class="seek" id="seek" style="display: none">
+            <input type="range" id="seekBar" min="0" step="1" aria-label="Playback position" />
+            <div class="seek-times"><span id="npElapsed"></span><span id="npDuration"></span></div>
+          </div>
         </div>
       </div>
 
@@ -185,6 +185,16 @@
             <div id="settingsDeviceList"></div>
           </div>
           <div class="settings-section">
+            <div class="settings-label">Move saved remotes</div>
+            <p>Importing is explicit; Electron storage is never read automatically.</p>
+            <button id="settingsExportCredentialsBtn" class="settings-btn">
+              Export Credentials
+            </button>
+            <button id="settingsImportCredentialsBtn" class="settings-btn">
+              Import Credentials
+            </button>
+          </div>
+          <div class="settings-section">
             <button id="settingsHotkeyBtn" class="settings-btn">Change Hotkey</button>
           </div>
           <button id="settingsBackBtn" class="settings-back-btn">&larr; Back</button>
@@ -193,6 +203,6 @@
 
       <h2 id="statusText"></h2>
     </div>
-    <script src="dist/renderer.js"></script>
+    <script src="renderer.js"></script>
   </body>
 </html>

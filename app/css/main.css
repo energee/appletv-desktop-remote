@@ -78,15 +78,23 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  min-height: 100vh;
+  /* No min-height: the window is sized to the page's height (fitWindowToPage). */
   background: linear-gradient(165deg, #ede9e5 0%, #ddd8d3 40%, #e5e0dc 100%);
   color: var(--text-primary);
+  /* WebKit (the macOS and Linux webviews) honours only the prefixed form. */
+  -webkit-user-select: none;
   user-select: none;
   overflow-x: hidden;
   transition:
     background var(--transition-med),
     color var(--transition-med);
+}
+
+/* Text fields stay editable: WebKit blocks typing where text selection is off. */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* ===========================
@@ -238,12 +246,6 @@ a:active {
   color: var(--text-secondary);
   text-align: center;
   line-height: 1.4;
-}
-
-.pair-step-badge {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-tertiary);
 }
 
 .pair-code-input {
@@ -1036,6 +1038,56 @@ a:active {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* A thin track that fills as the item plays; the thumb shows only while hovering or dragging.
+   The input is 16px tall for an easy target, but paints its 4px content box: the played fill
+   (sized by setSeekBar) over the track. */
+.seek {
+  margin-top: 6px;
+}
+
+.seek input {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  height: 16px;
+  padding: 6px 0;
+  margin: 0;
+  background:
+    linear-gradient(var(--text-secondary), var(--text-secondary)) no-repeat,
+    linear-gradient(var(--accent-glass), var(--accent-glass)) no-repeat;
+  background-origin: content-box;
+  background-clip: content-box;
+  background-size:
+    0 100%,
+    100% 100%;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.seek input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.seek:hover input::-webkit-slider-thumb,
+.seek input:active::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.seek-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ===========================

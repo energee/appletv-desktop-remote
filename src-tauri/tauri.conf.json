@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ATV Remote",
+  "version": "0.5.3",
+  "identifier": "com.electron.atvMacRemote",
+  "build": {
+    "beforeDevCommand": { "script": "pnpm build:renderer && pnpm build:sidecar", "wait": true },
+    "beforeBuildCommand": "pnpm build:renderer && pnpm build:sidecar",
+    "frontendDist": "../dist/frontend"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "ATV Remote",
+        "width": 280,
+        "height": 420,
+        "resizable": false,
+        "visible": false,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Utility",
+    "copyright": "Copyright © 2026 Ted Slesinski",
+    "shortDescription": "Apple TV Remote",
+    "longDescription": "Control Apple TV devices from your desktop.",
+    "resources": {
+      "../dist/desktop-backend/": "sidecar/"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.5",
+      "signingIdentity": "-",
+      "entitlements": "entitlements.plist",
+      "infoPlist": "Info.plist"
+    }
+  }
+}

@@ -5,3 +5,7 @@ app/dist
 dist
 *.gz
 .env*
+src-tauri/target/
+src-tauri/gen/
+# Claude plugin notes (Prettier reads only this root ignore file)
+.remember/

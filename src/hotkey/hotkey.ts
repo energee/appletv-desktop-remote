@@ -1,3 +1,4 @@
+import { desktopAPI } from '../shared/desktop-api';
 const DEFAULT_HOTKEY = 'Super+Shift+R';
 const symbolMap: Record<string, string> = {
   Super: '\u2318',
@@ -7,18 +8,9 @@ const symbolMap: Record<string, string> = {
 };
 const modOrder = ['Super', 'Ctrl', 'Alt', 'Shift'];
 
-// Detect dark mode via preload API
-(async () => {
-  try {
-    const isDark = await window.hotkeyAPI.getTheme();
-    if (isDark) document.body.classList.add('darkMode');
-  } catch {
-    // Fallback to matchMedia
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.body.classList.add('darkMode');
-    }
-  }
-})();
+if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+  document.body.classList.add('darkMode');
+}
 
 // Populate key dropdown
 (function populateKeys() {
@@ -96,15 +88,20 @@ function setModifiersFromCombo(combo: string): void {
   const parts = combo.split('+').map((p) => p.trim());
   const modMap: Record<string, string> = {
     Super: 'Super',
+    SUPER: 'Super',
+    META: 'Super',
     Command: 'Super',
     Cmd: 'Super',
     CommandOrControl: 'Super',
     CmdOrCtrl: 'Super',
     Control: 'Ctrl',
+    CONTROL: 'Ctrl',
     Ctrl: 'Ctrl',
     Alt: 'Alt',
+    ALT: 'Alt',
     Option: 'Alt',
     Shift: 'Shift',
+    SHIFT: 'Shift',
   };
   for (const part of parts) {
     const mapped = modMap[part];
@@ -119,7 +116,7 @@ function setModifiersFromCombo(combo: string): void {
 }
 
 async function loadExistingHotkey(): Promise<boolean> {
-  const raw = await window.hotkeyAPI.loadHotkey();
+  const raw = await desktopAPI.loadHotkey();
   if (raw) {
     const hotkeys = raw
       .split(',')
@@ -137,13 +134,13 @@ async function loadExistingHotkey(): Promise<boolean> {
 async function saveHotkey(): Promise<void> {
   const combo = buildComboString();
   if (!combo) return;
-  await window.hotkeyAPI.saveHotkey(combo);
-  await window.hotkeyAPI.closeWindow();
+  await desktopAPI.saveHotkey(combo);
+  await desktopAPI.closeHotkeyWindow();
 }
 
 async function resetToDefault(): Promise<void> {
-  await window.hotkeyAPI.resetHotkey();
-  await window.hotkeyAPI.closeWindow();
+  await desktopAPI.resetHotkey();
+  await desktopAPI.closeHotkeyWindow();
 }
 
 // Attach click handlers via addEventListener (no inline onclick)
