@@ -2,9 +2,9 @@
   <!-- Flat app icon source (Windows, macOS 15 and older); AppIcon.icon is the Liquid Glass
        version. After editing either, run scripts/build-icons.sh.
        Two colors: a graphite macOS icon squircle and a white Siri Remote with its clickpad and
-       buttons cut out. Shapes traced from the 2nd-generation remote, scaled 1.12x and centered. -->
+       buttons cut out. Shapes traced from the 2nd-generation remote, scaled 1.24x and centered. -->
   <rect x="100" y="100" width="824" height="824" rx="185" fill="#1c1f26"/>
-  <g transform="translate(88.1 89.2) scale(1.12)">
+  <g transform="translate(42.66 43.9) scale(1.24)">
     <rect x="296" y="65" width="165" height="625" rx="26" fill="#ffffff"/>
     <g fill="#1c1f26">
       <circle cx="378.5" cy="192" r="74"/>
