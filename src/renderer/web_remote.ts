@@ -376,9 +376,12 @@ function showKeyMap(): void {
   // --- Tap (click) and long-press ---
   let clickStart: { x: number; y: number; t: number } | null = null;
 
+  // Only the primary button presses. A right-click opens the context menu, which takes the
+  // mouseup, so a long-press timer it started would fire and press the key.
   touchpad.addEventListener(
     'mousedown',
     function (e) {
+      if (e.button !== 0) return;
       clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
       longPressTimer = setTimeout(function () {
         sendCommand('select');
@@ -428,7 +431,8 @@ function showKeyMap(): void {
   dataKeyEls.forEach(function (button) {
     button.addEventListener(
       'mousedown',
-      function () {
+      function (e) {
+        if (e.button !== 0) return;
         const key = (button as HTMLElement).dataset.key!;
 
         if (longPressTimers[key]) {
