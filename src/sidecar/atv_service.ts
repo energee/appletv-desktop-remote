@@ -146,6 +146,7 @@ class ATVService extends EventEmitter {
       return {
         credentials: new Credentials(airplayCreds).serialize(),
         identifier: device.deviceId || 'unknown',
+        name: device.name,
       };
     } catch (err) {
       if (epoch !== this.epoch) return null;

@@ -590,20 +590,27 @@ describe('requests', () => {
     expect(desktopAPI.connect).not.toHaveBeenCalled();
   });
 
-  it('connects to a device picked from the menu', () => {
+  it('lists saved devices by name and connects to the one picked by identifier', () => {
     useElements();
+    const bedroom = { ...other, name: 'Bedroom' };
     useStorage({
       atvcreds: JSON.stringify(creds),
-      remote_credentials: JSON.stringify({ 'Living Room': creds, Bedroom: other }),
+      remote_credentials: JSON.stringify({ tv: { ...creds, name: 'Living Room' }, tv2: bedroom }),
     });
-    contextMenuAction('selectDevice', 'Bedroom');
-    expect(desktopAPI.connect).toHaveBeenCalledWith(other);
-    expect(storage.getItem('atvcreds')).toBe(JSON.stringify(other));
+    contextMenuAction('setTheme', 'darkmode');
+    expect(desktopAPI.showContextMenu.mock.lastCall![0].devices).toEqual([
+      { label: 'Living Room', identifier: 'tv', checked: true },
+      { label: 'Bedroom', identifier: 'tv2', checked: false },
+    ]);
+
+    contextMenuAction('selectDevice', 'tv2');
+    expect(desktopAPI.connect).toHaveBeenCalledWith(bedroom);
+    expect(storage.getItem('atvcreds')).toBe(JSON.stringify(bedroom));
   });
 
   it('re-pairs the current device: scans, then connects with the new credentials', async () => {
     useElements();
-    const repaired = { credentials: 'new', identifier: 'tv' };
+    const repaired = { credentials: 'new', identifier: 'tv', name: 'Living Room' };
     contextMenuAction('repairCurrent');
     expect(desktopAPI.scan).toHaveBeenCalled();
     // Kept until pairing succeeds, so Cancel goes back to it rather than the first saved device.
@@ -614,9 +621,20 @@ describe('requests', () => {
     await web.finishPair('1234');
 
     expect(desktopAPI.connect).toHaveBeenCalledWith(repaired);
-    expect(JSON.parse(storage.getItem('remote_credentials'))).toEqual({
-      'Living Room (1.2.3.4)': repaired,
-    });
+    expect(JSON.parse(storage.getItem('remote_credentials'))).toEqual({ tv: repaired });
+  });
+
+  // Issue #11: the TV's IP changed, so the scan label did too; it used to be saved twice.
+  it('replaces the saved entry when a TV is re-paired at a new IP', async () => {
+    useElements();
+    useStorage({ remote_credentials: JSON.stringify({ 'Living Room (1.2.3.4)': creds }) });
+    const repaired = { credentials: 'new', identifier: 'tv', name: 'Living Room' };
+
+    web.startPair('Living Room (1.2.3.9)');
+    desktopAPI.finishPair.mockResolvedValue(repaired);
+    await web.finishPair('1234');
+
+    expect(JSON.parse(storage.getItem('remote_credentials'))).toEqual({ tv: repaired });
   });
 
   it('disconnects the active device when it is removed in Settings', async () => {
