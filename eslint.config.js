@@ -11,7 +11,6 @@ export default tseslint.config(
       'app/dist/**',
       'dist/**',
       'node_modules/**',
-      'build/**',
       'src-tauri/target/**',
       'src-tauri/gen/**',
       '.remember/**',

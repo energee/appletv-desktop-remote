@@ -75,10 +75,10 @@ const tv2 = { credentials: 'creds-2', identifier: 'tv2' };
 /** Runs due timers and lets every pending promise continuation settle. */
 const flush = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
 
-let ATVService: typeof import('../../src/main/atv_service').default;
+let ATVService: typeof import('../../src/sidecar/atv_service').default;
 
 beforeAll(async () => {
-  ATVService = (await import('../../src/main/atv_service')).default;
+  ATVService = (await import('../../src/sidecar/atv_service')).default;
 });
 
 describe('ATVService', () => {

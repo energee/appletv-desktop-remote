@@ -76,7 +76,7 @@ pnpm test         # vitest; also: pnpm typecheck, pnpm lint, cargo test in src-t
 pnpm build        # bundle for this machine (pnpm build:mac for Apple silicon)
 ```
 
-The webview (`src/renderer`) only displays state; the Node backend (`src/sidecar`, `src/main/atv_service.ts`) owns the Apple TV connection, and the Rust host (`src-tauri`) handles the tray, window, hotkeys, and macOS Liquid Glass. CI runs the checks on every pull request; version tags build the macOS and Windows releases. The landing page lives in `docs/` and is served by GitHub Pages.
+The webview (`src/renderer`) only displays state; the Node backend (`src/sidecar`) owns the Apple TV connection, and the Rust host (`src-tauri`) handles the tray, window, hotkeys, and macOS Liquid Glass. CI runs the checks on every pull request; version tags build the macOS and Windows releases. The landing page lives in `docs/` and is served by GitHub Pages.
 
 Local macOS builds are ad-hoc signed. A notarized release needs a Developer ID identity (`bundle.macOS.signingIdentity`) and must re-sign the bundled `node` (see `scripts/build-sidecar.mjs`). The transparent glass window uses Tauri's `macOSPrivateApi`, which rules out the Mac App Store.
 

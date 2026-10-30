@@ -1,5 +1,4 @@
-//! Windows counterpart of macos_wake.rs: reports resume from sleep as `powerResume`, as
-//! Electron's powerMonitor 'resume' did (it also keys off PBT_APMRESUMEAUTOMATIC). The power
+//! Windows counterpart of macos_wake.rs: reports resume from sleep as `powerResume`. The power
 //! manager calls back on its own thread, so no window or message loop is needed.
 use std::{ffi::c_void, ptr, sync::OnceLock};
 use tauri::AppHandle;

@@ -1,5 +1,6 @@
 //! Native desktop behaviour behind the `desktop_action` command: the main and hotkey windows,
-//! tray icon and context menu, global hotkeys (Electron's hotkey.txt), and credential files.
+//! tray icon and context menu, global hotkeys (saved in the 0.5.x hotkey.txt), and credential
+//! files.
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -182,8 +183,8 @@ fn read_hotkeys() -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// File contents after saving `combo`: like the Electron app, it replaces the first hotkey
-/// and keeps any extra hand-added ones.
+/// File contents after saving `combo`. The hotkey window edits only the first hotkey, so any
+/// extra ones added to the file by hand are kept.
 fn saved_hotkeys(existing: &str, combo: &str) -> String {
     let mut hotkeys = hotkey_list(existing);
     if hotkeys.len() > 1 {
@@ -209,8 +210,8 @@ fn normalize_shortcut(shortcut: &str) -> String {
 }
 
 /// Registers the saved hotkeys, adding the defaults when there are none or any of them fails,
-/// as the Electron app did. Failures (an unreadable hotkey.txt, a shortcut another app owns)
-/// are logged so launch continues.
+/// so a bad saved hotkey never leaves the window without one. Failures (an unreadable
+/// hotkey.txt, a shortcut another app owns) are logged so launch continues.
 fn register_hotkeys(app: &AppHandle) {
     let shortcuts = read_hotkeys().unwrap_or_else(|error| {
         eprintln!("Cannot read saved hotkeys: {error}");
@@ -752,7 +753,7 @@ mod tests {
     }
 
     #[test]
-    fn hotkey_directory_prefers_appdata_on_every_platform_like_electron() {
+    fn hotkey_directory_prefers_appdata_on_every_platform() {
         let appdata = Some(PathBuf::from("/appdata"));
         let home = Some(PathBuf::from("/home/me"));
         for macos in [true, false] {

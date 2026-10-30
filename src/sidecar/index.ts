@@ -8,7 +8,7 @@
 // closes, requests that finish within a second are still answered, then the process exits.
 import { Console } from 'node:console';
 import { createInterface } from 'node:readline';
-import ATVService from '../main/atv_service';
+import ATVService from './atv_service';
 import type { ATVKeyName } from '../shared/types';
 
 // stdout belongs exclusively to the protocol, including logs from dependencies.
@@ -119,8 +119,8 @@ process.stdout.on('error', (error: NodeJS.ErrnoException) => {
 });
 process.once('SIGTERM', () => void stop());
 process.once('SIGINT', () => void stop());
-// Like Electron's main process, survive stray library errors (e.g. an AppleTV socket error
-// emitted with no listener); exiting would fail every request until the host relaunches us.
+// Survive stray library errors (e.g. an AppleTV socket error emitted with no listener); exiting
+// would fail every request until the host relaunches us.
 process.on('uncaughtException', (error) => console.error('Uncaught exception:', error));
 process.on('unhandledRejection', (reason) => console.error('Unhandled rejection:', reason));
 
@@ -139,8 +139,8 @@ async function respond(request: Request): Promise<void> {
 
 async function main(): Promise<void> {
   send({ event: 'ready', data: { protocolVersion: 1, nodeVersion: process.versions.node } });
-  // Requests run concurrently, as Electron IPC handlers did, so one hung library call cannot
-  // block the rest; replies carry the request id. The host bounds each request with a timeout.
+  // Requests run concurrently, so one hung library call cannot block the rest; replies carry
+  // the request id. The host bounds each request with a timeout.
   for await (const line of input) {
     if (stopping) break;
     let value: unknown;
