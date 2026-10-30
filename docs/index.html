@@ -93,17 +93,17 @@
       /* Hero */
       .hero {
         text-align: center;
-        padding-top: 72px;
+        padding-top: 32px;
       }
       .hero img.icon {
-        width: 96px;
-        height: 96px;
+        width: 56px;
+        height: 56px;
       }
       .hero h1 {
-        font-size: clamp(44px, 10vw, 96px);
+        font-size: clamp(44px, 8.5vw, 72px);
         line-height: 1.04;
         letter-spacing: -0.018em;
-        margin-top: 20px;
+        margin-top: 16px;
       }
       .hero .lede {
         font-size: clamp(21px, 2.6vw, 28px);
@@ -118,7 +118,7 @@
         justify-content: center;
         align-items: center;
         flex-wrap: wrap;
-        margin-top: 32px;
+        margin-top: 28px;
       }
       .button {
         background: var(--button);
@@ -134,17 +134,53 @@
       .note {
         font-size: 14px;
         color: var(--muted);
-        margin-top: 16px;
+        margin-top: 14px;
       }
-      .shot {
+
+      /* Stage: the remote drives a pretend tvOS screen, sized so both fit above the fold.
+         Color appears only on the screen. */
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr 2.7fr;
+        gap: 48px;
+        align-items: center;
+        max-width: 880px;
+        margin: 32px auto 0;
+      }
+      .stage:focus-visible {
+        outline-offset: 12px;
+        border-radius: 24px;
+      }
+      .remote {
+        position: relative;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .remote img {
         display: block;
-        width: min(300px, 76vw);
+        width: 100%;
         height: auto;
-        margin: 64px auto 0;
         border-radius: 16px;
         box-shadow:
           0 0 0 1px rgb(0 0 0 / 0.06),
           0 40px 80px -30px rgb(0 0 0 / 0.4);
+      }
+      .hotspot {
+        position: absolute;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        cursor: pointer;
+        transition: background-color 0.15s;
+      }
+      .touchpad {
+        border-radius: 10%;
+        cursor: grab;
+      }
+      .hotspot.pressed {
+        background: rgb(0 0 0 / 0.08);
       }
 
       /* Features */
@@ -168,7 +204,7 @@
         color: var(--muted);
       }
 
-      /* Try it: a pretend tvOS screen driven by the app's keyboard shortcuts. Color appears only here. */
+      /* Keyboard shortcuts */
       .try {
         background: var(--band);
         padding-block: 112px;
@@ -197,8 +233,7 @@
       .shortcuts dd {
         margin: 0;
       }
-      kbd,
-      .key {
+      kbd {
         display: inline-block;
         min-width: 34px;
         padding: 4px 9px;
@@ -212,17 +247,8 @@
         border-bottom-width: 2px;
         border-radius: 7px;
       }
-      .key {
-        cursor: pointer;
-      }
-      .key.pressed {
-        color: #fff;
-        background: var(--button);
-        border-color: var(--button);
-      }
 
       .tv {
-        margin-top: 48px;
         padding: 10px;
         background: #000;
         border-radius: 22px;
@@ -241,10 +267,6 @@
         background: #000;
         border-radius: 13px;
         cursor: pointer;
-      }
-      .screen:focus-visible {
-        outline-offset: 6px;
-        border-radius: 13px;
       }
       /* Ambient light from the focused poster, like the tvOS home screen. */
       .screen::before {
@@ -351,7 +373,7 @@
         font-size: 14px;
         transition: opacity 0.2s;
       }
-      .screen:focus .hint {
+      .stage:focus .hint {
         opacity: 0;
       }
       .touch {
@@ -369,7 +391,8 @@
         .tile,
         .tile::after,
         .screen::before,
-        .hud {
+        .hud,
+        .hotspot {
           transition: none;
         }
       }
@@ -491,6 +514,23 @@
           gap: 28px;
           margin-top: 36px;
         }
+        /* TV on top, remote under it within thumb reach. */
+        .stage {
+          grid-template-columns: 1fr;
+          gap: 28px;
+        }
+        .remote {
+          order: 1;
+          width: min(240px, 62vw);
+          margin: 0 auto;
+        }
+        /* The short hint fits a phone-sized screen. */
+        .hint .pointer {
+          display: none;
+        }
+        .hint .touch {
+          display: inline;
+        }
       }
     </style>
   </head>
@@ -511,13 +551,104 @@
           <a href="#setup">How to set it up</a>
         </div>
         <p id="note" class="note">Free for macOS and Windows.</p>
-        <img
-          class="shot"
-          src="remote.png"
-          width="560"
-          height="916"
-          alt="The remote window, showing a touchpad, playback buttons, and the show that's playing"
-        />
+
+        <div
+          id="stage"
+          class="stage"
+          tabindex="0"
+          aria-label="Practice remote and TV. Use the arrow keys, Enter, Space, Escape, T, G, the bracket keys, plus, and minus."
+        >
+          <div class="remote">
+            <img
+              src="remote.png"
+              width="560"
+              height="916"
+              alt="The remote window, showing a touchpad, playback buttons, and the show that's playing"
+            />
+            <!-- Invisible buttons over the screenshot's controls, positioned in % of the image. -->
+            <div
+              id="touchpad"
+              class="hotspot touchpad"
+              style="left: 10.7%; top: 8.7%; width: 78.6%; height: 48%"
+            ></div>
+            <button
+              type="button"
+              tabindex="-1"
+              class="hotspot"
+              data-key="Escape"
+              aria-label="Menu"
+              style="left: 20.5%; top: 60.9%; width: 12.9%; height: 7.9%"
+            ></button>
+            <button
+              type="button"
+              tabindex="-1"
+              class="hotspot"
+              data-key=" "
+              aria-label="Play or pause"
+              style="left: 43.6%; top: 60.9%; width: 12.9%; height: 7.9%"
+            ></button>
+            <button
+              type="button"
+              tabindex="-1"
+              class="hotspot"
+              data-key="t"
+              aria-label="Home"
+              style="left: 66.3%; top: 60.9%; width: 12.9%; height: 7.9%"
+            ></button>
+            <button
+              type="button"
+              tabindex="-1"
+              class="hotspot"
+              data-key="["
+              aria-label="Skip back"
+              style="left: 13.4%; top: 74%; width: 10.7%; height: 6.6%"
+            ></button>
+            <button
+              type="button"
+              tabindex="-1"
+              class="hotspot"
+              data-key="-"
+              aria-label="Volume down"
+              style="left: 35.5%; top: 74%; width: 10.7%; height: 6.6%"
+            ></button>
+            <button
+              type="button"
+              tabindex="-1"
+              class="hotspot"
+              data-key="+"
+              aria-label="Volume up"
+              style="left: 53%; top: 74%; width: 10.7%; height: 6.6%"
+            ></button>
+            <button
+              type="button"
+              tabindex="-1"
+              class="hotspot"
+              data-key="]"
+              aria-label="Skip ahead"
+              style="left: 70.4%; top: 74%; width: 10.7%; height: 6.6%"
+            ></button>
+          </div>
+
+          <div class="tv">
+            <div id="screen" class="screen">
+              <div class="tiles" aria-hidden="true">
+                <div class="tile focused"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+              </div>
+              <p id="hud" class="hud" aria-live="polite"></p>
+              <p class="hint">
+                <span class="pointer">Swipe on the remote's touchpad, or press the arrow keys</span
+                ><span class="touch">Swipe or tap the remote</span>
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="features wrap">
@@ -549,78 +680,42 @@
         <div class="wrap">
           <h2>Or just use the keyboard.</h2>
           <p class="intro">
-            These are the keys the app understands. Try them on the screen below. In the app, hold
-            <span class="mac">Option</span><span class="win">Alt</span> to see every button's key.
+            These are the keys the app understands. They drive the TV at the top of this page too.
+            In the app, hold <span class="mac">Option</span><span class="win">Alt</span> to see
+            every button's key.
           </p>
-          <div class="tv">
-            <div
-              id="screen"
-              class="screen"
-              tabindex="0"
-              aria-label="Practice screen. Use the shortcuts listed below."
-            >
-              <div class="tiles" aria-hidden="true">
-                <div class="tile focused"></div>
-                <div class="tile"></div>
-                <div class="tile"></div>
-                <div class="tile"></div>
-                <div class="tile"></div>
-                <div class="tile"></div>
-                <div class="tile"></div>
-                <div class="tile"></div>
-              </div>
-              <p id="hud" class="hud" aria-live="polite"></p>
-              <p class="hint">
-                <span class="pointer">Click here, then press the arrow keys</span
-                ><span class="touch">Tap the keys below</span>
-              </p>
-            </div>
-          </div>
           <dl class="shortcuts">
             <div>
               <dt>Navigate</dt>
-              <dd>
-                <button type="button" class="key" data-key="ArrowLeft" aria-label="Left">←</button
-                ><button type="button" class="key" data-key="ArrowUp" aria-label="Up">↑</button
-                ><button type="button" class="key" data-key="ArrowDown" aria-label="Down">↓</button
-                ><button type="button" class="key" data-key="ArrowRight" aria-label="Right">
-                  →
-                </button>
-              </dd>
+              <dd><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd></dd>
             </div>
             <div>
               <dt>Select</dt>
-              <dd><button type="button" class="key" data-key="Enter">Enter</button></dd>
+              <dd><kbd>Enter</kbd></dd>
             </div>
             <div>
               <dt>Play or pause</dt>
-              <dd><button type="button" class="key" data-key=" ">Space</button></dd>
+              <dd><kbd>Space</kbd></dd>
             </div>
             <div>
               <dt>Menu</dt>
-              <dd><button type="button" class="key" data-key="Escape">Esc</button></dd>
+              <dd><kbd>Esc</kbd></dd>
             </div>
             <div>
               <dt>Home</dt>
-              <dd><button type="button" class="key" data-key="t">T</button></dd>
+              <dd><kbd>T</kbd></dd>
             </div>
             <div>
               <dt>Top menu</dt>
-              <dd><button type="button" class="key" data-key="g">G</button></dd>
+              <dd><kbd>G</kbd></dd>
             </div>
             <div>
               <dt>Skip back or ahead</dt>
-              <dd>
-                <button type="button" class="key" data-key="[" aria-label="Skip back">[</button
-                ><button type="button" class="key" data-key="]" aria-label="Skip ahead">]</button>
-              </dd>
+              <dd><kbd>[</kbd><kbd>]</kbd></dd>
             </div>
             <div>
               <dt>Volume</dt>
-              <dd>
-                <button type="button" class="key" data-key="+" aria-label="Volume up">+</button
-                ><button type="button" class="key" data-key="-" aria-label="Volume down">−</button>
-              </dd>
+              <dd><kbd>+</kbd><kbd>−</kbd></dd>
             </div>
           </dl>
         </div>
@@ -747,12 +842,16 @@
           .catch(() => {});
       }
 
-      // The practice screen: arrow keys move focus across the posters, the other shortcuts show what
-      // they would do on a real Apple TV, and the matching key in the list lights up.
+      // The practice remote and TV: the keyboard or the remote's buttons drive the screen. Arrows move
+      // focus across the posters, the other shortcuts show what they would do on a real Apple TV, and
+      // the matching remote button lights up.
+      const stage = document.getElementById('stage');
       const screen = document.getElementById('screen');
       const tiles = [...screen.querySelectorAll('.tile')];
       const hud = document.getElementById('hud');
-      const keys = [...document.querySelectorAll('.key')];
+      const touchpad = document.getElementById('touchpad');
+      const remoteButtons = [...document.querySelectorAll('button.hotspot')];
+      const touchpadKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'];
       const columns = 4;
       const aliases = { Backspace: 'Escape', '=': '+', _: '-', T: 't', G: 'g' };
       let focused = 0;
@@ -809,36 +908,70 @@
 
       function press(key) {
         actions[key]();
-        for (const button of keys.filter((k) => k.dataset.key === key)) {
-          button.classList.add('pressed');
-          setTimeout(() => button.classList.remove('pressed'), 160);
-        }
+        const control = touchpadKeys.includes(key)
+          ? touchpad
+          : remoteButtons.find((button) => button.dataset.key === key);
+        if (!control) return;
+        control.classList.add('pressed');
+        setTimeout(() => control.classList.remove('pressed'), 160);
       }
 
-      screen.addEventListener('keydown', (event) => {
+      // Keys only drive the demo while it has focus, so arrow keys still scroll the page elsewhere.
+      stage.addEventListener('keydown', (event) => {
         const key = aliases[event.key] ?? event.key;
         if (!(key in actions) || event.metaKey || event.ctrlKey || event.altKey) return;
         event.preventDefault();
         press(key);
       });
-      keys.forEach((button) => button.addEventListener('click', () => press(button.dataset.key)));
+
+      // Clicking the remote or the TV focuses the stage, so the keyboard works right after.
+      stage.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        stage.focus({ preventScroll: true });
+      });
+      remoteButtons.forEach((button) =>
+        button.addEventListener('click', () => press(button.dataset.key)),
+      );
       tiles.forEach((tile, index) => tile.addEventListener('click', () => focusTile(index)));
 
-      // Moving the pointer over the screen tilts the focused poster, like the Siri Remote touchpad.
-      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        screen.addEventListener('pointermove', (event) => {
-          const rect = screen.getBoundingClientRect();
+      // The touchpad: a swipe moves focus in its direction, a tap selects.
+      let swipeStart = null;
+      touchpad.addEventListener('pointerdown', (event) => {
+        swipeStart = { x: event.clientX, y: event.clientY };
+        touchpad.setPointerCapture(event.pointerId);
+      });
+      touchpad.addEventListener('pointerup', (event) => {
+        if (!swipeStart) return;
+        const dx = event.clientX - swipeStart.x;
+        const dy = event.clientY - swipeStart.y;
+        swipeStart = null;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) press('Enter');
+        else if (Math.abs(dx) > Math.abs(dy)) press(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
+        else press(dy > 0 ? 'ArrowDown' : 'ArrowUp');
+      });
+      touchpad.addEventListener('pointercancel', () => (swipeStart = null));
+
+      // Moving over the touchpad or the screen tilts the focused poster, like the Siri Remote does.
+      function tiltFrom(surface) {
+        return (event) => {
+          const rect = surface.getBoundingClientRect();
           const x = (event.clientX - rect.left) / rect.width - 0.5;
           const y = (event.clientY - rect.top) / rect.height - 0.5;
           screen.style.setProperty('--rx', `${x * 14}deg`);
           screen.style.setProperty('--ry', `${-y * 14}deg`);
           screen.style.setProperty('--sx', `${50 + x * 100}%`);
           screen.style.setProperty('--sy', `${50 + y * 100}%`);
-        });
-        screen.addEventListener('pointerleave', () => {
-          for (const property of ['--rx', '--ry', '--sx', '--sy'])
-            screen.style.removeProperty(property);
-        });
+        };
+      }
+      function resetTilt() {
+        for (const property of ['--rx', '--ry', '--sx', '--sy'])
+          screen.style.removeProperty(property);
+      }
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        for (const surface of [touchpad, screen]) {
+          surface.addEventListener('pointermove', tiltFrom(surface));
+          surface.addEventListener('pointerleave', resetTilt);
+        }
       }
     </script>
   </body>
