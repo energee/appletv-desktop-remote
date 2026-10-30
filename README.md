@@ -10,7 +10,7 @@
   <a href="https://github.com/energee/appletv-desktop-remote/releases/latest"><img src="https://badgen.net/github/release/energee/appletv-desktop-remote" alt="Latest release"/></a>
   <a href="https://github.com/energee/appletv-desktop-remote/actions/workflows/ci.yml"><img src="https://badgen.net/github/checks/energee/appletv-desktop-remote" alt="CI checks"/></a>
   <img src="https://badgen.net/badge/platform/macOS%20%7C%20Windows/blue" alt="Platforms: macOS and Windows"/>
-  <a href="LICENSE"><img src="https://badgen.net/badge/license/CC%20BY-NC-SA%204.0/grey" alt="License: CC BY-NC-SA 4.0"/></a>
+  <a href="LICENSE"><img src="https://badgen.net/badge/license/GPL-3.0-only/grey" alt="License: GPL-3.0-only"/></a>
 </p>
 
 <p align="center">
@@ -82,4 +82,4 @@ Local macOS builds are ad-hoc signed. A notarized release needs a Developer ID i
 
 ## License
 
-[CC BY-NC-SA 4.0](LICENSE). Apple TV and Siri Remote are trademarks of Apple Inc. This app isn't made by or affiliated with Apple.
+Copyright (c) 2026 Ted Slesinski. Licensed under the [GNU General Public License, version 3 only (GPL-3.0-only)](LICENSE). Apple TV and Siri Remote are trademarks of Apple Inc. This app isn't made by or affiliated with Apple.
