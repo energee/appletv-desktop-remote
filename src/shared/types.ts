@@ -3,10 +3,14 @@ export interface ATVCredentials {
   identifier: string;
 }
 
-/** finishPair's result: the serialized AirPlay credentials and the Apple TV's device ID. */
+/**
+ * finishPair's result, saved as is under its identifier: the serialized AirPlay credentials, the
+ * Apple TV's device ID, and its name for menus.
+ */
 export interface PairResult {
   credentials: string;
   identifier: string;
+  name: string;
 }
 
 export type ATVKeyName =

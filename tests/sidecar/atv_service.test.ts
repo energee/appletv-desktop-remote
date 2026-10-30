@@ -13,6 +13,7 @@ const mockPairingSession = { finish: vi.fn() };
 let devices: MockAppleTV[] = [];
 
 class MockAppleTV extends EventEmitter {
+  name?: string;
   deviceId?: string;
   connect = vi.fn((credentials: unknown) => mockConnect(credentials));
   startPairing = vi.fn(() => mockStartPairing());
@@ -26,8 +27,9 @@ class MockAppleTV extends EventEmitter {
   removeOutputDevices = vi.fn(async (_ids: string[]) => {});
   suspend = vi.fn(async () => {});
   close = vi.fn(async () => {});
-  constructor(discovered: { deviceId?: string }) {
+  constructor(discovered: { name?: string; deviceId?: string }) {
     super();
+    this.name = discovered.name;
     this.deviceId = discovered.deviceId;
     devices.push(this);
   }
@@ -248,7 +250,12 @@ describe('ATVService', () => {
 
       const result = await service.finishPair('1234');
 
-      expect(result).toEqual({ credentials: 'serialized-creds', identifier: 'tv1' });
+      // Saved under the identifier, with the name for menus: the IP in the label can change.
+      expect(result).toEqual({
+        credentials: 'serialized-creds',
+        identifier: 'tv1',
+        name: 'Living Room',
+      });
       expect(MockCredentials.constructorArgs).toEqual([['airplay-creds']]);
       expect(service.pairingSession).toBeNull();
       // Pairing mode lasts until the renderer connects with the new credentials.
