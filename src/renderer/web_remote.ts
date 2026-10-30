@@ -630,8 +630,7 @@ export function updateConnectionDot(state: ConnectionDotState): void {
 
   const showName = state === 'connected' || state === 'connecting';
   const name = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
-  const header = $('#topTextHeader')!;
-  header.firstChild!.textContent = asleep && state === 'connected' ? `${name} · Asleep` : name;
+  $('#deviceName')!.textContent = asleep && state === 'connected' ? `${name} · Asleep` : name;
 }
 
 /** Connects to the selected device; the native host supplies its pairing keys. */

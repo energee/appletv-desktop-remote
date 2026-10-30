@@ -19,19 +19,20 @@
     <div class="center" id="keyboardButtonDiv">
       <div class="topText">
         <button id="topTextHeader" type="button" aria-haspopup="menu" title="Switch Apple TV">
-          Apple TV Remote<span id="connectionDot" class="connection-dot" aria-hidden="true"></span
-          ><span class="device-chevron" aria-hidden="true">⌄</span>
+          <span id="deviceName">Apple TV Remote</span>
+          <span id="connectionDot" class="connection-dot" aria-hidden="true"></span>
+          <span class="device-chevron" data-icon="chevron-down" aria-hidden="true"></span>
+        </button>
+        <button
+          id="powerButton"
+          class="power-btn"
+          aria-label="Sleep or wake the Apple TV"
+          title="Sleep / Wake"
+          style="display: none"
+        >
+          <span data-icon="power"></span>
         </button>
       </div>
-      <button
-        id="powerButton"
-        class="power-btn"
-        aria-label="Sleep or wake the Apple TV"
-        title="Sleep / Wake"
-        style="display: none"
-      >
-        <span data-icon="power"></span>
-      </button>
       <div id="topTextKBLink"></div>
       <button id="updatePill" class="update-pill" hidden>
         <span class="update-pill-dot" aria-hidden="true"></span>

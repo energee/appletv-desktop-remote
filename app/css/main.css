@@ -179,27 +179,27 @@ a:active {
    =========================== */
 
 #keyboardButtonDiv {
-  /* The sides cap a long title's width, keeping it clear of the power button. */
-  padding: 14px 36px 4px;
+  width: 100%;
+  padding: 12px 16px 4px;
 }
 
-/* Sleep / wake, at the window's top right like the Siri Remote's power button. The header
-   block is only as wide as its title, so the button is placed against the window. */
 .power-btn {
-  position: fixed;
-  /* Centered on the header button's line. */
-  top: 17px;
-  right: 6px;
   display: flex;
-  padding: 4px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--text-secondary);
   cursor: pointer;
 }
 
 .power-btn:hover {
+  background: var(--glass-hover);
   color: var(--text-primary);
 }
 
@@ -209,6 +209,11 @@ a:active {
 }
 
 .topText {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.04em;
@@ -218,18 +223,22 @@ a:active {
 
 /* Connection status dot */
 #topTextHeader {
-  position: relative;
-  max-width: 256px;
-  padding: 7px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
   font: inherit;
   letter-spacing: normal;
+  line-height: 20px;
   text-transform: none;
   cursor: pointer;
-  overflow-wrap: anywhere;
 }
 
 #topTextHeader:hover {
@@ -237,27 +246,38 @@ a:active {
   border-color: var(--border);
 }
 
-#topTextHeader:focus-visible {
+#topTextHeader:focus-visible,
+.power-btn:focus-visible {
   outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
 
+#deviceName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .device-chevron {
-  margin-left: 8px;
+  display: flex;
+  flex-shrink: 0;
   color: var(--text-secondary);
 }
 
+.device-chevron .lucide-icon {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
 .connection-dot {
-  display: inline-block;
+  flex-shrink: 0;
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--text-tertiary);
   opacity: 0.4;
-  margin-left: 5px;
-  vertical-align: middle;
-  position: relative;
-  top: -1px;
   transition:
     background 0.3s ease,
     opacity 0.3s ease,
