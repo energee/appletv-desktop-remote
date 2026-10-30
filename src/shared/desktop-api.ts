@@ -35,6 +35,9 @@ function nowPlayingInfo(data: unknown): NowPlayingInfo {
   if ('title' in data && typeof data.title === 'string') info.title = data.title;
   if ('artist' in data && typeof data.artist === 'string') info.artist = data.artist;
   if ('album' in data && typeof data.album === 'string') info.album = data.album;
+  if ('appDisplayName' in data && typeof data.appDisplayName === 'string') {
+    info.appDisplayName = data.appDisplayName;
+  }
   const record = data as Record<string, unknown>;
   for (const key of [
     'playbackState',

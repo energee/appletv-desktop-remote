@@ -781,7 +781,9 @@ function initSeekBar(): void {
   }, 1000);
 }
 
-/** Shows the title, artist, and position, and a pause icon on the play button while playing. */
+/**
+ * Shows the app, title, artist, and position, and a pause icon on the play button while playing.
+ */
 function updateNowPlaying(info: NowPlayingInfo): void {
   reportedPlaying = info.playbackState === PlaybackState.Playing;
   position = {
@@ -806,6 +808,7 @@ function updateNowPlaying(info: NowPlayingInfo): void {
   }
 
   container.style.display = 'block';
+  $('#npApp')!.textContent = info.appDisplayName || '';
   $('#npTitle')!.textContent = title;
   $('#npArtist')!.textContent = artist;
 }
