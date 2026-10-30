@@ -1142,6 +1142,23 @@ a:active {
   font-variant-numeric: tabular-nums;
 }
 
+/* The volume slider borrows the seek bar's track (.seek), across the secondary row; its speaker
+   icon tells it apart from the seek bar. */
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 168px;
+  margin: 2px auto 0;
+  color: var(--text-tertiary);
+}
+
+.volume .lucide-icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
 /* ===========================
    Settings Panel
    =========================== */

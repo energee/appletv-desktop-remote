@@ -23,6 +23,8 @@ const desktopAPI = {
   onAtvState: vi.fn(),
   onAtvNowPlaying: vi.fn(),
   onAtvPowerState: vi.fn(),
+  onAtvVolume: vi.fn(),
+  setVolume: vi.fn(),
   onBackendLost: vi.fn(),
   onShortcutWin: vi.fn(),
   onPowerResume: vi.fn(),
@@ -124,6 +126,7 @@ let keydown: (event: unknown) => void;
 let setState: (state: ConnectionState) => void;
 let nowPlaying: (info: NowPlayingInfo) => void;
 let powerState: (state: 'on' | 'off' | 'unknown') => void;
+let volume: (level: number | null) => void;
 let powerResume: () => void;
 let backendLost: () => void;
 let contextMenuAction: (action: string, payload?: string) => void;
@@ -150,6 +153,7 @@ beforeAll(async () => {
   setState = desktopAPI.onAtvState.mock.calls[0][0];
   nowPlaying = desktopAPI.onAtvNowPlaying.mock.calls[0][0];
   powerState = desktopAPI.onAtvPowerState.mock.calls[0][0];
+  volume = desktopAPI.onAtvVolume.mock.calls[0][0];
   powerResume = desktopAPI.onPowerResume.mock.calls[0][0];
   backendLost = desktopAPI.onBackendLost.mock.calls[0][0];
   contextMenuAction = desktopAPI.onContextMenuAction.mock.calls[0][0];
@@ -556,6 +560,38 @@ describe('header', () => {
     expect(header.textContent).toBe('Living Room');
     state('connected');
     expect(header.textContent).toBe('Living Room');
+  });
+});
+
+describe('volume slider', () => {
+  // TV speakers have no absolute volume; outputs such as AirPods or HomePod do.
+  it('shows the absolute volume, hides without one, and sets it when released', async () => {
+    const dom = useElements();
+    desktopAPI.setVolume.mockResolvedValue(undefined);
+    await web.init();
+    const box = dom.get('#volume');
+    const bar = dom.get('#volumeBar');
+    state('connecting');
+    state('connected');
+    expect(box.style.display).toBe('none');
+
+    volume(40);
+    expect(box.style.display).toBe('');
+    expect(bar.value).toBe('40');
+
+    // While dragging, reports don't move the thumb; releasing sets the level.
+    bar.value = '70';
+    dom.listener('#volumeBar', 'input')();
+    volume(45);
+    expect(bar.value).toBe('70');
+    dom.listener('#volumeBar', 'change')();
+    expect(desktopAPI.setVolume).toHaveBeenCalledWith(70);
+
+    volume(null);
+    expect(box.style.display).toBe('none');
+    volume(40);
+    state('connecting');
+    expect(box.style.display).toBe('none');
   });
 });
 

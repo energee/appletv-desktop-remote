@@ -74,6 +74,7 @@ export function initIPC(): void {
 
   desktopAPI.onAtvState(renderState);
   desktopAPI.onAtvNowPlaying(updateNowPlaying);
+  desktopAPI.onAtvVolume(showVolume);
   desktopAPI.onAtvPowerState((power) => {
     asleep = power === 'off';
     if (connection.status === 'connected') updateConnectionDot('connected');
@@ -86,6 +87,7 @@ function renderState(next: ConnectionState): void {
   connection = next;
   if (next.status !== 'connected') asleep = false;
   $('#powerButton')!.style.display = next.status === 'connected' ? '' : 'none';
+  if (next.status !== 'connected') showVolume(null);
   showScreen();
   if (next.status !== 'connected') hideNowPlaying();
   switch (next.status) {
@@ -852,6 +854,35 @@ function showPlayPauseIcon(playing: boolean): void {
   if (el) el.innerHTML = icon(playing ? 'pause' : 'play');
 }
 
+// --- Volume ---
+
+/** True while the volume slider is being dragged, so reports do not move it. */
+let volumeDragging = false;
+
+/** Moves the slider's thumb and its filled part to `level`. */
+function setVolumeBar(bar: HTMLInputElement, level: number): void {
+  bar.value = String(Math.round(level));
+  bar.style.backgroundSize = `${level}% 100%, 100% 100%`;
+}
+
+/** Shows the TV's absolute volume; null (TV speakers, or not connected) hides the slider. */
+function showVolume(level: number | null): void {
+  $('#volume')!.style.display = level === null ? 'none' : '';
+  if (level !== null && !volumeDragging) setVolumeBar($('#volumeBar') as HTMLInputElement, level);
+}
+
+function initVolumeBar(): void {
+  const bar = $('#volumeBar') as HTMLInputElement;
+  bar.addEventListener('input', () => {
+    volumeDragging = true;
+    setVolumeBar(bar, Number(bar.value));
+  });
+  bar.addEventListener('change', () => {
+    volumeDragging = false;
+    desktopAPI.setVolume(Number(bar.value)).catch(showRequestError);
+  });
+}
+
 // --- Settings Panel ---
 
 function showSettings(): void {
@@ -1062,6 +1093,7 @@ export async function init(): Promise<void> {
   });
   initSettingsListeners();
   initSeekBar();
+  initVolumeBar();
   $('#powerButton')!.addEventListener('click', () => {
     desktopAPI.togglePower().catch(showRequestError);
   });
