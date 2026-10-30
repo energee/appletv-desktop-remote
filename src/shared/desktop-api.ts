@@ -3,7 +3,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
-import type { ATVCredentials, ConnectionState, NowPlayingInfo, PairResult } from './types';
+import type {
+  ATVCredentials,
+  ConnectionState,
+  NowPlayingInfo,
+  PairResult,
+  PowerStatus,
+} from './types';
 import type { UpdateState } from './update';
 
 export interface ContextMenuConfig {
@@ -13,7 +19,7 @@ export interface ContextMenuConfig {
 }
 
 /** Sidecar events, plus `connection-lost`, which the host sends when the sidecar exits. */
-type BackendEvent = 'state' | 'now-playing' | 'error' | 'connection-lost';
+type BackendEvent = 'state' | 'now-playing' | 'power-state' | 'error' | 'connection-lost';
 type EventHandler = (value: unknown) => void;
 
 const listeners = new Map<string, Set<EventHandler>>();
@@ -163,6 +169,10 @@ export const desktopAPI = {
     }),
   /** The sidecar exited; the next request relaunches it with no connection. */
   onBackendLost: (callback: () => void) => subscribe('backend:connection-lost', callback),
+  onAtvPowerState: (callback: (state: PowerStatus) => void) =>
+    subscribe('backend:power-state', (data) => {
+      if (data === 'on' || data === 'off' || data === 'unknown') callback(data);
+    }),
   onAtvNowPlaying: (callback: (info: NowPlayingInfo) => void) =>
     subscribe('backend:now-playing', (data) => callback(nowPlayingInfo(data))),
   onErrorMessage: (callback: (message: string) => void) =>

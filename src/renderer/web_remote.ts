@@ -16,6 +16,8 @@ import { $, $$, safeParse } from './state';
 import { scanDevices, startPair, finishPair } from './atv_remote';
 
 let qPresses = 0;
+/** The connected TV reported it is asleep; any other connection state clears it. */
+let asleep = false;
 /** The sidecar's latest connection state. */
 let connection: ConnectionState = { status: 'idle' };
 
@@ -72,12 +74,17 @@ export function initIPC(): void {
 
   desktopAPI.onAtvState(renderState);
   desktopAPI.onAtvNowPlaying(updateNowPlaying);
+  desktopAPI.onAtvPowerState((power) => {
+    asleep = power === 'off';
+    if (connection.status === 'connected') updateConnectionDot('connected');
+  });
 }
 
 /** Shows the sidecar's connection state: the screen, the connection dot, and status text. */
 function renderState(next: ConnectionState): void {
   const previous = connection.status;
   connection = next;
+  if (next.status !== 'connected') asleep = false;
   showScreen();
   if (next.status !== 'connected') hideNowPlaying();
   switch (next.status) {
@@ -519,8 +526,9 @@ export function updateConnectionDot(state: ConnectionDotState): void {
   dot.classList.add(state);
 
   const showName = state === 'connected' || state === 'connecting';
+  const name = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
   const header = $('#topTextHeader')!;
-  header.firstChild!.textContent = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
+  header.firstChild!.textContent = asleep && state === 'connected' ? `${name} · Asleep` : name;
 }
 
 /**
