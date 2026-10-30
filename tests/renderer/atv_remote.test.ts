@@ -463,6 +463,17 @@ describe('PIN entry', () => {
   });
 });
 
+describe('now playing', () => {
+  it('names the app that is playing above the title', () => {
+    const dom = useElements();
+    state('connected');
+    nowPlaying({ title: 'Movie', artist: 'Studio', appDisplayName: 'TV' });
+    expect(dom.get('#npApp').textContent).toBe('TV');
+    nowPlaying({ title: 'Movie' });
+    expect(dom.get('#npApp').textContent).toBe('');
+  });
+});
+
 describe('play button', () => {
   it('shows pause while playing, and play when paused or not connected', () => {
     const dom = useElements();

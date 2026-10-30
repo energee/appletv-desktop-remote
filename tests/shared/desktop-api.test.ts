@@ -55,6 +55,23 @@ describe('desktopAPI', () => {
     expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', playbackState: 1 }], [{}]]);
   });
 
+  it('passes the app name through with now-playing', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const nowPlaying = vi.fn();
+    desktopAPI.onAtvNowPlaying(nowPlaying);
+
+    onBackendEvent({
+      payload: { event: 'now-playing', data: { title: 'Movie', appDisplayName: 'TV' } },
+    });
+    onBackendEvent({ payload: { event: 'now-playing', data: { appDisplayName: 7 } } });
+
+    expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', appDisplayName: 'TV' }], [{}]]);
+  });
+
   it('passes the playing position through with now-playing, for the seek bar', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [

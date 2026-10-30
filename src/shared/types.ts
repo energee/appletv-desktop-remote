@@ -57,6 +57,8 @@ export interface NowPlayingInfo {
   title?: string;
   artist?: string;
   album?: string;
+  /** The playing app's name, such as "TV" or "Music". */
+  appDisplayName?: string;
   /** A PlaybackState value. */
   playbackState?: number;
   /** Seconds; 0 or missing when the item has no known length (live TV). */
