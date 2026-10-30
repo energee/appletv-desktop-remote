@@ -151,6 +151,9 @@
         outline-offset: 12px;
         border-radius: 24px;
       }
+      .stage.pointer-focus:focus-visible {
+        outline: none;
+      }
       .remote {
         position: relative;
         touch-action: none;
@@ -927,10 +930,16 @@
         press(key);
       });
 
-      // Clicking the remote or the TV focuses the stage, so the keyboard works right after.
+      // Clicking or scrolling on the remote or the TV focuses the stage, so the keyboard works right
+      // after. The focus ring is only for people who Tab to the stage; the TV already shows focus.
+      function focusStage() {
+        stage.classList.add('pointer-focus');
+        stage.focus({ preventScroll: true });
+      }
+      stage.addEventListener('blur', () => stage.classList.remove('pointer-focus'));
       stage.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        stage.focus({ preventScroll: true });
+        focusStage();
       });
       remoteButtons.forEach((button) =>
         button.addEventListener('click', () => press(button.dataset.key)),
@@ -957,6 +966,7 @@
         'wheel',
         (event) => {
           event.preventDefault();
+          focusStage();
           clearTimeout(gestureEndTimer);
           gestureEndTimer = setTimeout(endGesture, 150);
           const speed = Math.hypot(event.deltaX, event.deltaY);
