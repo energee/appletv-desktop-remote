@@ -863,10 +863,21 @@
         hudTimer = setTimeout(() => hud.classList.remove('visible'), 1200);
       }
 
-      function select() {
-        const tile = tiles[focused];
-        tile.classList.add('clicked');
-        setTimeout(() => tile.classList.remove('clicked'), 150);
+      // Briefly adds a class, for press feedback on a tile or remote button.
+      function flash(element, className) {
+        element.classList.add(className);
+        setTimeout(() => element.classList.remove(className), 150);
+      }
+
+      function backToFirstTile(message) {
+        focusTile(0);
+        showHud(message);
+      }
+
+      // The arrow key for a movement, by its larger axis; positive x is right, positive y is down.
+      function arrowFor(x, y) {
+        if (Math.abs(x) > Math.abs(y)) return x > 0 ? 'ArrowRight' : 'ArrowLeft';
+        return y > 0 ? 'ArrowDown' : 'ArrowUp';
       }
 
       const actions = {
@@ -874,20 +885,14 @@
         ArrowRight: () => focused % columns < columns - 1 && focusTile(focused + 1),
         ArrowUp: () => focused >= columns && focusTile(focused - columns),
         ArrowDown: () => focused + columns < tiles.length && focusTile(focused + columns),
-        Enter: select,
+        Enter: () => flash(tiles[focused], 'clicked'),
         ' ': () => {
           playing = !playing;
           showHud(playing ? 'Playing' : 'Paused');
         },
         Escape: () => showHud('Menu'),
-        t: () => {
-          focusTile(0);
-          showHud('Home');
-        },
-        g: () => {
-          focusTile(0);
-          showHud('Top menu');
-        },
+        t: () => backToFirstTile('Home'),
+        g: () => backToFirstTile('Top menu'),
         '[': () => showHud('Skipped back'),
         ']': () => showHud('Skipped ahead'),
         '+': () => showHud('Volume up'),
@@ -900,9 +905,7 @@
         const control = touchpadKeys.includes(key)
           ? touchpad
           : remoteButtons.find((button) => button.dataset.key === key);
-        if (!control) return;
-        control.classList.add('pressed');
-        setTimeout(() => control.classList.remove('pressed'), 160);
+        if (control) flash(control, 'pressed');
       }
 
       // Keys drive the demo while the pointer is over it, or when it has keyboard focus (Tab).
@@ -962,9 +965,8 @@
           scrollX += event.deltaX;
           scrollY += event.deltaY;
           if (Math.max(Math.abs(scrollX), Math.abs(scrollY)) < 90) return;
-          if (Math.abs(scrollX) > Math.abs(scrollY))
-            press(scrollX > 0 ? 'ArrowLeft' : 'ArrowRight');
-          else press(scrollY > 0 ? 'ArrowUp' : 'ArrowDown');
+          // Scroll deltas run opposite to the fingers, as in the app.
+          press(arrowFor(-scrollX, -scrollY));
           gestureMoved = true;
           peakSpeed = speed;
           lowSpeed = speed;
@@ -984,9 +986,7 @@
         const dy = event.clientY - swipeStart.y;
         swipeStart = null;
         if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) press('Enter');
-        else if (event.pointerType !== 'touch') return;
-        else if (Math.abs(dx) > Math.abs(dy)) press(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
-        else press(dy > 0 ? 'ArrowDown' : 'ArrowUp');
+        else if (event.pointerType === 'touch') press(arrowFor(dx, dy));
       });
       touchpad.addEventListener('pointercancel', () => (swipeStart = null));
 
