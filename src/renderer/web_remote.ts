@@ -85,6 +85,7 @@ function renderState(next: ConnectionState): void {
   const previous = connection.status;
   connection = next;
   if (next.status !== 'connected') asleep = false;
+  $('#powerButton')!.style.display = next.status === 'connected' ? '' : 'none';
   showScreen();
   if (next.status !== 'connected') hideNowPlaying();
   switch (next.status) {
@@ -1061,6 +1062,9 @@ export async function init(): Promise<void> {
   });
   initSettingsListeners();
   initSeekBar();
+  $('#powerButton')!.addEventListener('click', () => {
+    desktopAPI.togglePower().catch(showRequestError);
+  });
 
   // Back to the saved device, or, with none, a fresh scan; connecting ends pairing.
   $('#cancelPairing')!.addEventListener('click', () => {

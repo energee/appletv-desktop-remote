@@ -155,6 +155,8 @@ export const desktopAPI = {
   disconnect: () => request<void>('disconnect'),
   /** Presses `key`; `hold` holds it for a second, as a long press does. */
   sendKey: (key: string, hold = false) => request<void>('sendKey', { key, hold }),
+  /** Wakes the TV if it is asleep, otherwise puts it to sleep. */
+  togglePower: () => request<void>('power'),
   /** Moves the playing item to `seconds` from its start. */
   seek: (seconds: number) => request<void>('seek', { seconds }),
 
