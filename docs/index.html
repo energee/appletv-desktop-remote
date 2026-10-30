@@ -100,9 +100,9 @@
         height: 96px;
       }
       .hero h1 {
-        font-size: clamp(40px, 11vw, 80px);
-        line-height: 1.05;
-        letter-spacing: -0.015em;
+        font-size: clamp(44px, 10vw, 96px);
+        line-height: 1.04;
+        letter-spacing: -0.018em;
         margin-top: 20px;
       }
       .hero .lede {
@@ -138,13 +138,13 @@
       }
       .shot {
         display: block;
-        width: min(340px, 82vw);
+        width: min(300px, 76vw);
         height: auto;
-        margin: 56px auto 0;
-        border-radius: 22px;
+        margin: 64px auto 0;
+        border-radius: 16px;
         box-shadow:
-          0 1px 2px rgb(0 0 0 / 0.08),
-          0 30px 60px -20px rgb(0 0 0 / 0.35);
+          0 0 0 1px rgb(0 0 0 / 0.06),
+          0 40px 80px -30px rgb(0 0 0 / 0.4);
       }
 
       /* Features */
@@ -152,7 +152,7 @@
         padding-block: 112px;
       }
       .features h2,
-      .keys h2 {
+      .try h2 {
         font-size: clamp(32px, 5vw, 48px);
         line-height: 1.08;
         letter-spacing: -0.003em;
@@ -168,12 +168,12 @@
         color: var(--muted);
       }
 
-      /* Keyboard */
-      .keys {
+      /* Try it: a pretend tvOS screen driven by the app's keyboard shortcuts. Color appears only here. */
+      .try {
         background: var(--band);
         padding-block: 112px;
       }
-      .keys .intro {
+      .try .intro {
         color: var(--muted);
         font-size: 21px;
         line-height: 1.38;
@@ -197,7 +197,8 @@
       .shortcuts dd {
         margin: 0;
       }
-      kbd {
+      kbd,
+      .key {
         display: inline-block;
         min-width: 34px;
         padding: 4px 9px;
@@ -205,10 +206,172 @@
         text-align: center;
         font: inherit;
         font-size: 15px;
+        color: var(--text);
         background: var(--key);
         border: 1px solid var(--key-edge);
         border-bottom-width: 2px;
         border-radius: 7px;
+      }
+      .key {
+        cursor: pointer;
+      }
+      .key.pressed {
+        color: #fff;
+        background: var(--button);
+        border-color: var(--button);
+      }
+
+      .tv {
+        margin-top: 48px;
+        padding: 10px;
+        background: #000;
+        border-radius: 22px;
+        box-shadow:
+          0 0 0 1px rgb(255 255 255 / 0.08),
+          0 50px 90px -50px rgb(0 0 0 / 0.6);
+      }
+      .screen {
+        --glow: #3b4aa8;
+        position: relative;
+        display: grid;
+        align-content: center;
+        aspect-ratio: 16 / 9;
+        padding: 0 9%;
+        overflow: hidden;
+        background: #000;
+        border-radius: 13px;
+        cursor: pointer;
+      }
+      .screen:focus-visible {
+        outline-offset: 6px;
+        border-radius: 13px;
+      }
+      /* Ambient light from the focused poster, like the tvOS home screen. */
+      .screen::before {
+        content: '';
+        position: absolute;
+        inset: -30% 15% 40%;
+        border-radius: 50%;
+        background: var(--glow);
+        filter: blur(80px);
+        opacity: 0.45;
+        transition: background-color 0.5s;
+      }
+      .tiles {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: clamp(10px, 2.6vw, 26px);
+      }
+      .tile {
+        position: relative;
+        aspect-ratio: 16 / 10;
+        border-radius: clamp(5px, 1vw, 11px);
+        background: var(--c);
+        transform: perspective(700px);
+        transition:
+          transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+          box-shadow 0.25s;
+      }
+      .tile::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: radial-gradient(
+          circle at var(--sx, 30%) var(--sy, 0%),
+          rgb(255 255 255 / 0.3),
+          transparent 60%
+        );
+        opacity: 0.35;
+        transition: opacity 0.25s;
+      }
+      .tile.focused {
+        z-index: 1;
+        transform: perspective(700px) translateY(-5%) scale(1.14) rotateX(var(--ry, 0deg))
+          rotateY(var(--rx, 0deg));
+        box-shadow: 0 26px 36px -14px rgb(0 0 0 / 0.95);
+      }
+      .tile.focused::after {
+        opacity: 1;
+      }
+      .tile.clicked {
+        transform: perspective(700px) scale(1.06);
+      }
+      .tile:nth-child(1) {
+        --c: #3b4aa8;
+      }
+      .tile:nth-child(2) {
+        --c: #1e7a72;
+      }
+      .tile:nth-child(3) {
+        --c: #8e3b62;
+      }
+      .tile:nth-child(4) {
+        --c: #b5651d;
+      }
+      .tile:nth-child(5) {
+        --c: #2d5d8a;
+      }
+      .tile:nth-child(6) {
+        --c: #5b3c8c;
+      }
+      .tile:nth-child(7) {
+        --c: #6f7f2a;
+      }
+      .tile:nth-child(8) {
+        --c: #a23b3b;
+      }
+      .hud {
+        position: absolute;
+        top: 7%;
+        right: 5%;
+        padding: 7px 16px;
+        border-radius: 980px;
+        background: rgb(255 255 255 / 0.16);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        color: #fff;
+        font-size: 15px;
+        opacity: 0;
+        transform: translateY(-6px);
+        transition:
+          opacity 0.2s,
+          transform 0.2s;
+      }
+      .hud.visible {
+        opacity: 1;
+        transform: none;
+      }
+      .hint {
+        position: absolute;
+        inset: auto 0 6%;
+        text-align: center;
+        color: rgb(255 255 255 / 0.6);
+        font-size: 14px;
+        transition: opacity 0.2s;
+      }
+      .screen:focus .hint {
+        opacity: 0;
+      }
+      .touch {
+        display: none;
+      }
+      @media (hover: none) {
+        .touch {
+          display: inline;
+        }
+        .pointer {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .tile,
+        .tile::after,
+        .screen::before,
+        .hud {
+          transition: none;
+        }
       }
 
       /* Setup */
@@ -272,7 +435,7 @@
 
       @media (max-width: 734px) {
         .features,
-        .keys {
+        .try {
           padding-block: 72px;
         }
         .setup {
@@ -311,9 +474,9 @@
         <img
           class="shot"
           src="remote.png"
-          width="590"
-          height="1010"
-          alt="The remote open below its menu bar icon, showing a touchpad, playback buttons, and the show that's playing"
+          width="560"
+          height="916"
+          alt="The remote window, showing a touchpad, playback buttons, and the show that's playing"
         />
       </section>
 
@@ -342,45 +505,82 @@
         </div>
       </section>
 
-      <section class="keys">
+      <section class="try">
         <div class="wrap">
           <h2>Or just use the keyboard.</h2>
           <p class="intro">
-            Hold <span class="mac">Option</span><span class="win">Alt</span> and the remote labels
-            every button with its key.
+            These are the keys the app understands. Try them on the screen below. In the app, hold
+            <span class="mac">Option</span><span class="win">Alt</span> to see every button's key.
           </p>
+          <div class="tv">
+            <div
+              id="screen"
+              class="screen"
+              tabindex="0"
+              aria-label="Practice screen. Use the shortcuts listed below."
+            >
+              <div class="tiles" aria-hidden="true">
+                <div class="tile focused"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+              </div>
+              <p id="hud" class="hud" aria-live="polite"></p>
+              <p class="hint">
+                <span class="pointer">Click here, then press the arrow keys</span
+                ><span class="touch">Tap the keys below</span>
+              </p>
+            </div>
+          </div>
           <dl class="shortcuts">
             <div>
               <dt>Navigate</dt>
-              <dd><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd></dd>
+              <dd>
+                <button type="button" class="key" data-key="ArrowLeft" aria-label="Left">←</button
+                ><button type="button" class="key" data-key="ArrowUp" aria-label="Up">↑</button
+                ><button type="button" class="key" data-key="ArrowDown" aria-label="Down">↓</button
+                ><button type="button" class="key" data-key="ArrowRight" aria-label="Right">
+                  →
+                </button>
+              </dd>
             </div>
             <div>
               <dt>Select</dt>
-              <dd><kbd>Enter</kbd></dd>
+              <dd><button type="button" class="key" data-key="Enter">Enter</button></dd>
             </div>
             <div>
               <dt>Play or pause</dt>
-              <dd><kbd>Space</kbd></dd>
+              <dd><button type="button" class="key" data-key=" ">Space</button></dd>
             </div>
             <div>
               <dt>Menu</dt>
-              <dd><kbd>Esc</kbd></dd>
+              <dd><button type="button" class="key" data-key="Escape">Esc</button></dd>
             </div>
             <div>
               <dt>Home</dt>
-              <dd><kbd>T</kbd></dd>
+              <dd><button type="button" class="key" data-key="t">T</button></dd>
             </div>
             <div>
               <dt>Top menu</dt>
-              <dd><kbd>G</kbd></dd>
+              <dd><button type="button" class="key" data-key="g">G</button></dd>
             </div>
             <div>
               <dt>Skip back or ahead</dt>
-              <dd><kbd>[</kbd><kbd>]</kbd></dd>
+              <dd>
+                <button type="button" class="key" data-key="[" aria-label="Skip back">[</button
+                ><button type="button" class="key" data-key="]" aria-label="Skip ahead">]</button>
+              </dd>
             </div>
             <div>
               <dt>Volume</dt>
-              <dd><kbd>+</kbd><kbd>−</kbd></dd>
+              <dd>
+                <button type="button" class="key" data-key="+" aria-label="Volume up">+</button
+                ><button type="button" class="key" data-key="-" aria-label="Volume down">−</button>
+              </dd>
             </div>
           </dl>
         </div>
@@ -482,6 +682,100 @@
             }
           })
           .catch(() => {});
+      }
+
+      // The practice screen: arrow keys move focus across the posters, the other shortcuts show what
+      // they would do on a real Apple TV, and the matching key in the list lights up.
+      const screen = document.getElementById('screen');
+      const tiles = [...screen.querySelectorAll('.tile')];
+      const hud = document.getElementById('hud');
+      const keys = [...document.querySelectorAll('.key')];
+      const columns = 4;
+      const aliases = { Backspace: 'Escape', '=': '+', _: '-', T: 't', G: 'g' };
+      let focused = 0;
+      let playing = true;
+      let hudTimer;
+
+      function focusTile(index) {
+        tiles[focused].classList.remove('focused');
+        focused = index;
+        tiles[focused].classList.add('focused');
+        screen.style.setProperty(
+          '--glow',
+          getComputedStyle(tiles[focused]).getPropertyValue('--c'),
+        );
+      }
+
+      function showHud(message) {
+        hud.textContent = message;
+        hud.classList.add('visible');
+        clearTimeout(hudTimer);
+        hudTimer = setTimeout(() => hud.classList.remove('visible'), 1200);
+      }
+
+      function select() {
+        const tile = tiles[focused];
+        tile.classList.add('clicked');
+        setTimeout(() => tile.classList.remove('clicked'), 150);
+      }
+
+      const actions = {
+        ArrowLeft: () => focused % columns > 0 && focusTile(focused - 1),
+        ArrowRight: () => focused % columns < columns - 1 && focusTile(focused + 1),
+        ArrowUp: () => focused >= columns && focusTile(focused - columns),
+        ArrowDown: () => focused + columns < tiles.length && focusTile(focused + columns),
+        Enter: select,
+        ' ': () => {
+          playing = !playing;
+          showHud(playing ? 'Playing' : 'Paused');
+        },
+        Escape: () => showHud('Menu'),
+        t: () => {
+          focusTile(0);
+          showHud('Home');
+        },
+        g: () => {
+          focusTile(0);
+          showHud('Top menu');
+        },
+        '[': () => showHud('Skipped back'),
+        ']': () => showHud('Skipped ahead'),
+        '+': () => showHud('Volume up'),
+        '-': () => showHud('Volume down'),
+      };
+
+      function press(key) {
+        actions[key]();
+        for (const button of keys.filter((k) => k.dataset.key === key)) {
+          button.classList.add('pressed');
+          setTimeout(() => button.classList.remove('pressed'), 160);
+        }
+      }
+
+      screen.addEventListener('keydown', (event) => {
+        const key = aliases[event.key] ?? event.key;
+        if (!(key in actions) || event.metaKey || event.ctrlKey || event.altKey) return;
+        event.preventDefault();
+        press(key);
+      });
+      keys.forEach((button) => button.addEventListener('click', () => press(button.dataset.key)));
+      tiles.forEach((tile, index) => tile.addEventListener('click', () => focusTile(index)));
+
+      // Moving the pointer over the screen tilts the focused poster, like the Siri Remote touchpad.
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        screen.addEventListener('pointermove', (event) => {
+          const rect = screen.getBoundingClientRect();
+          const x = (event.clientX - rect.left) / rect.width - 0.5;
+          const y = (event.clientY - rect.top) / rect.height - 0.5;
+          screen.style.setProperty('--rx', `${x * 14}deg`);
+          screen.style.setProperty('--ry', `${-y * 14}deg`);
+          screen.style.setProperty('--sx', `${50 + x * 100}%`);
+          screen.style.setProperty('--sy', `${50 + y * 100}%`);
+        });
+        screen.addEventListener('pointerleave', () => {
+          for (const property of ['--rx', '--ry', '--sx', '--sy'])
+            screen.style.removeProperty(property);
+        });
       }
     </script>
   </body>
