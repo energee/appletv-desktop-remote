@@ -338,10 +338,6 @@ class ATVService extends EventEmitter {
     await withTimeout(this.supersede('idle'), COMMAND_TIMEOUT, 'Disconnect timed out.');
   }
 
-  isConnected(): boolean {
-    return this.state.status === 'connected';
-  }
-
   async destroy(): Promise<void> {
     await this.disconnect().catch((err: unknown) => console.error('Error closing device:', err));
     this.scanResults = {};

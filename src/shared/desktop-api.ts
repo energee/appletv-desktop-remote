@@ -137,7 +137,6 @@ export const desktopAPI = {
   sendKey: (key: string) => request<void>('sendKey', { key }),
   /** Moves the playing item to `seconds` from its start. */
   seek: (seconds: number) => request<void>('seek', { seconds }),
-  isConnected: () => request<boolean>('isConnected'),
 
   onShortcutWin: (callback: () => void) => subscribe('shortcutWin', callback),
   onPowerResume: (callback: () => void) => subscribe('powerResume', callback),

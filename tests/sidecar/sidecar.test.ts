@@ -140,7 +140,8 @@ describe('sidecar protocol', () => {
         '{"id":true,"method":"shutdown"}',
         '{"id":"bad-params","method":"shutdown","params":[]}',
         '{"id":0,"method":"unknown"}',
-        '{"id":"check","method":"isConnected"}',
+        '{"id":"removed","method":"isConnected"}',
+        '{"id":"check","method":"disconnect"}',
         '',
       ].join('\n'),
     );
@@ -151,13 +152,15 @@ describe('sidecar protocol', () => {
       null,
       'bad-params',
       0,
+      'removed',
       'check',
     ]);
     for (const response of responses.slice(0, -1)) {
       expect(response.error).toEqual({ message: expect.any(String) });
       expect(response).not.toHaveProperty('result');
     }
-    expect(responses.at(-1)).toEqual({ id: 'check', result: false });
+    expect(responses.at(-2)).toHaveProperty('error.message', 'Unknown method: isConnected');
+    expect(responses.at(-1)).toEqual({ id: 'check', result: null });
   });
 
   it('flushes the shutdown response and does not execute buffered commands after shutdown', async () => {
@@ -191,7 +194,7 @@ describe('sidecar protocol', () => {
     const messages = await exchange(
       '{"id":"key","method":"sendKey","params":{"key":"toString"}}\r\n' +
         '{"id":"disconnect","method":"disconnect"}\r\n' +
-        '{"id":"final","method":"isConnected"}',
+        '{"id":"final","method":"disconnect"}',
     );
     // Requests run concurrently, so replies are matched by id rather than order.
     const responses = new Map(
@@ -200,21 +203,25 @@ describe('sidecar protocol', () => {
     expect([...responses.keys()].sort()).toEqual(['disconnect', 'final', 'key']);
     expect(responses.get('key')).toHaveProperty('error.message', 'Unknown key: toString');
     expect(responses.get('disconnect')).toEqual({ id: 'disconnect', result: null });
-    expect(responses.get('final')).toEqual({ id: 'final', result: false });
+    expect(responses.get('final')).toEqual({ id: 'final', result: null });
   });
 
   it(
     'answers a quick request while an earlier slow one is still running',
     { timeout: 10000 },
     async () => {
-      // scan browses the network for its 2 s window, so isConnected must not queue behind it.
+      // scan browses the network for its 2 s window; a seek it rejects must not queue behind it.
       const messages = await exchange(
-        ['{"id":"slow","method":"scan"}', '{"id":"quick","method":"isConnected"}', ''].join('\n'),
+        [
+          '{"id":"slow","method":"scan"}',
+          '{"id":"quick","method":"seek","params":{"seconds":-1}}',
+          '',
+        ].join('\n'),
         { sidecar: slowScanEntrypoint, holdInputFor: ['slow'], timeout: 8000 },
       );
       const responses = messages.filter((message) => Object.hasOwn(message, 'id'));
       expect(responses.map((message) => message.id)).toEqual(['quick', 'slow']);
-      expect(responses[0]).toEqual({ id: 'quick', result: false });
+      expect(responses[0]).toHaveProperty('error.message', 'Invalid position');
     },
   );
 
@@ -241,12 +248,12 @@ const timer = setInterval(() => {
 }, 10);
 `,
     );
-    const messages = await exchange('{"id":"after","method":"isConnected"}\n', {
+    const messages = await exchange('{"id":"after","method":"disconnect"}\n', {
       nodeArgs: ['--import', pathToFileURL(preload).href],
       waitForStderr: ['stray exception', 'stray rejection'],
     });
     expect(messages.filter((message) => Object.hasOwn(message, 'id'))).toEqual([
-      { id: 'after', result: false },
+      { id: 'after', result: null },
     ]);
   });
 });
