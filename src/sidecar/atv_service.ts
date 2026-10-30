@@ -9,12 +9,7 @@ import {
   type ConnectionState,
   type PairResult,
 } from '../shared/types';
-import type {
-  AppleTV,
-  DiscoveredDevice,
-  Key as KeyType,
-  PairingSession,
-} from 'node-appletv-remote';
+import type { AppleTV, DiscoveredDevice, Key as KeyType, PairSetup } from 'node-appletv-remote';
 
 // node-appletv-remote is ESM-only. Use dynamic import wrapper.
 let atvLib: typeof import('node-appletv-remote') | null = null;
@@ -61,7 +56,7 @@ class ATVService extends EventEmitter {
   /** The connected device, the one a connect attempt is using, or the one being paired. */
   device: AppleTV | null = null;
   scanResults: Record<string, DiscoveredDevice> = {};
-  pairingSession: PairingSession | null = null;
+  pairingSession: PairSetup | null = null;
   state: ConnectionState = { status: 'idle' };
   /**
    * Bumped by every connect, pairing step, and disconnect. Async work checks it after each
