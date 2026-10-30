@@ -11,6 +11,8 @@ let temporary: string;
 let entrypoint: string;
 /** The sidecar with a stand-in library whose scan lasts exactly its 2 s window, offline. */
 let slowScanEntrypoint: string;
+/** The source files esbuild put into the real sidecar bundle. */
+let bundledInputs: string[];
 
 function bundle(outfile: string, plugins: Plugin[] = []) {
   return build({
@@ -25,6 +27,7 @@ function bundle(outfile: string, plugins: Plugin[] = []) {
     },
     plugins,
     outfile,
+    metafile: true,
   });
 }
 
@@ -44,7 +47,8 @@ beforeAll(async () => {
       build.onResolve({ filter: /^node-appletv-remote$/ }, () => ({ path: library }));
     },
   };
-  await Promise.all([bundle(entrypoint), bundle(slowScanEntrypoint, [stubLibrary])]);
+  const [real] = await Promise.all([bundle(entrypoint), bundle(slowScanEntrypoint, [stubLibrary])]);
+  bundledInputs = Object.keys(real.metafile.inputs);
 });
 
 afterAll(async () => {
@@ -132,6 +136,13 @@ async function exchange(
 }
 
 describe('sidecar protocol', () => {
+  it('bundles the library itself, not the type declarations tsconfig maps it to', () => {
+    // esbuild reads tsconfig paths too; bundling index.d.ts would ship a sidecar without it.
+    expect(bundledInputs.some((input) => input.endsWith('node-appletv-remote/dist/index.js'))).toBe(
+      true,
+    );
+  });
+
   it('recovers from malformed frames and correlates errors without accepting invalid requests', async () => {
     const messages = await exchange(
       [
