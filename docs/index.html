@@ -939,9 +939,14 @@
 
       // The touchpad works like the app's (src/renderer/web_remote.ts): a two-finger scroll moves once
       // per gesture after 90px, a gesture ends after 150 ms without scroll events, and a click selects.
+      // The app also hears from macOS when fingers start a new gesture; a web page doesn't, so a
+      // second swipe during the first one's momentum would be ignored. Momentum only fades, so once it
+      // has dropped well below its peak, a clear rise in speed means fingers are back: a new gesture.
       let scrollX = 0;
       let scrollY = 0;
       let gestureMoved = false;
+      let peakSpeed = 0;
+      let lowSpeed = 0;
       let gestureEndTimer;
       function endGesture() {
         scrollX = 0;
@@ -954,7 +959,18 @@
           event.preventDefault();
           clearTimeout(gestureEndTimer);
           gestureEndTimer = setTimeout(endGesture, 150);
-          if (gestureMoved) return;
+          const speed = Math.hypot(event.deltaX, event.deltaY);
+          if (gestureMoved) {
+            // lowSpeed is the slowest since the latest peak, so a swipe that keeps speeding up
+            // never counts as faded.
+            const fingersBack = lowSpeed < peakSpeed * 0.6 && speed > lowSpeed * 1.5 + 2;
+            if (!fingersBack) {
+              if (speed > peakSpeed) peakSpeed = lowSpeed = speed;
+              else lowSpeed = Math.min(lowSpeed, speed);
+              return;
+            }
+            endGesture();
+          }
           scrollX += event.deltaX;
           scrollY += event.deltaY;
           if (Math.max(Math.abs(scrollX), Math.abs(scrollY)) < 90) return;
@@ -962,6 +978,8 @@
             press(scrollX > 0 ? 'ArrowLeft' : 'ArrowRight');
           else press(scrollY > 0 ? 'ArrowUp' : 'ArrowDown');
           gestureMoved = true;
+          peakSpeed = speed;
+          lowSpeed = speed;
         },
         { passive: false },
       );
