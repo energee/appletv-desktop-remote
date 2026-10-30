@@ -1,6 +1,6 @@
 // The remote window's UI. It renders the sidecar's connection state (which screen, status
-// text, connection dot) and forwards user actions; the sidecar owns connecting, reconnecting,
-// and pairing mode.
+// text, connection dot) and forwards user actions, including the scan and pairing requests; the
+// sidecar owns connecting, reconnecting, and pairing mode.
 import {
   PlaybackState,
   type ATVKeyName,
@@ -21,9 +21,10 @@ import {
   saveActiveDevice,
   saveDevices,
 } from './state';
-import { scanDevices, startPair, finishPair } from './atv_remote';
 
 let qPresses = 0;
+/** The scan label of the device being paired, under which finishPair saves its credentials. */
+let pairDevice = '';
 /** The sidecar's latest connection state. */
 let connection: ConnectionState = { status: 'idle' };
 
@@ -256,6 +257,43 @@ export async function sendCommand(k: string, hold = false): Promise<void> {
       el.classList.add('error-flash');
       setTimeout(() => el.classList.remove('error-flash'), 600);
     }
+  }
+}
+
+export async function scanDevices(): Promise<void> {
+  try {
+    const results = (await desktopAPI.scan()) || [];
+    createDropdown(results);
+    if (results.length === 0) {
+      setStatus('No Apple TV found on this network. Right-click to scan again.');
+    }
+  } catch (err) {
+    createDropdown([]);
+    setStatus(err instanceof Error ? err.message : 'Unable to scan for Apple TVs.');
+  }
+}
+
+export function startPair(dev: string): void {
+  pairDevice = dev;
+  desktopAPI.startPair(dev).catch((err: unknown) => {
+    setStatus(err instanceof Error ? err.message : 'Unable to start pairing.');
+  });
+}
+
+// One PIN pairs the Apple TV; save the credentials and connect, which ends pairing. A session
+// takes one PIN, right or wrong, so a failure starts a new one and the TV shows a new PIN.
+export async function finishPair(code: string): Promise<void> {
+  try {
+    const result = await desktopAPI.finishPair(code);
+    // Cancelled while the TV checked the code; the remote has moved on.
+    if (!result) return;
+    saveDevices({ ...loadDevices(), [pairDevice]: result });
+    saveActiveDevice(result);
+    connectToATV();
+  } catch (err) {
+    console.error('Pairing failed:', err);
+    setStatus("That code didn't work. Enter the new code shown on your Apple TV.");
+    startPair(pairDevice);
   }
 }
 

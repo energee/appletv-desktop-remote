@@ -5,7 +5,6 @@ import {
   safeParse,
   saveActiveDevice,
   saveDevices,
-  setPairDevice,
 } from '../../src/renderer/state';
 
 describe('safeParse', () => {
@@ -28,14 +27,6 @@ describe('safeParse', () => {
 
   it('returns fallback for empty string', () => {
     expect(safeParse('', 42)).toBe(42);
-  });
-});
-
-describe('setPairDevice', () => {
-  it('updates pairDevice', async () => {
-    setPairDevice('Test Device');
-    const mod = await import('../../src/renderer/state');
-    expect(mod.pairDevice).toBe('Test Device');
   });
 });
 
