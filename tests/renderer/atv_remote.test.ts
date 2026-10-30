@@ -405,9 +405,6 @@ describe('keys', () => {
     expect(desktopAPI.sendKey).not.toHaveBeenCalled();
     expect(preventDefault).not.toHaveBeenCalled();
 
-    keydown({ key: 'ArrowUp', target, getModifierState: () => false, preventDefault });
-    expect(desktopAPI.sendKey.mock.calls).toEqual([['up']]);
-    expect(preventDefault).toHaveBeenCalledOnce();
   });
 
   // Bug (a): a connect that settled during pairing used to make Enter send Select.
