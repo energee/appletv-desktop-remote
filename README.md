@@ -26,7 +26,7 @@
 ## Everything the Siri Remote does. Nothing to pick up.
 
 - **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Settings → Touchpad → Smooth scrolling** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture.
-- **Now playing.** See what's on, then play, pause, and scrub from the seek bar.
+- **Now playing.** See what's on, then play, pause, and scrub from the seek bar. The current item is requested on connection rather than waiting for a playback change.
 - **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away.
 - **Device picker.** Click the device name to switch Apple TVs or pair another. Right-click for theme, always-on-top, speakers, updates, and other actions. **Settings** manages saved remotes, scrolling, the hotkey, backups, and update preferences.
 

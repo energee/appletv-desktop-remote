@@ -61,6 +61,8 @@ const PAUSED_STATES: readonly number[] = [
 ];
 /** The player the TV reports when no app has registered as now playing. */
 const DEFAULT_PLAYER = 'MediaRemote-DefaultPlayer';
+/** PlaybackQueueRequest error for an idle receiver with no now-playing client. */
+const NO_NOW_PLAYING_CLIENT = 35;
 
 class ATVService extends EventEmitter {
   /** The connected device, the one a connect attempt is using, or the one being paired. */
@@ -229,6 +231,17 @@ class ATVService extends EventEmitter {
       if (epoch !== this.epoch) return;
       this.failures = 0;
       this.setState({ status: 'connected' });
+      // Some receivers push state without metadata at connect; seed the queue once.
+      void device.getState().catch((error: unknown) => {
+        if (device !== this.device) return;
+        if (
+          error instanceof Error &&
+          'errorCode' in error &&
+          error.errorCode === NO_NOW_PLAYING_CLIENT
+        )
+          return;
+        this.emit('error', error);
+      });
       void this.restoreCompanion(device, credsData, epoch);
     } catch (err) {
       if (epoch !== this.epoch) return;
