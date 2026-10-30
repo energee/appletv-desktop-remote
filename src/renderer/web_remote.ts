@@ -23,7 +23,7 @@ import {
 } from './state';
 
 let qPresses = 0;
-/** The scan label of the device being paired, under which finishPair saves its credentials. */
+/** The scan label of the device being paired; a wrong PIN starts pairing it again. */
 let pairDevice = '';
 /** The sidecar's latest connection state. */
 let connection: ConnectionState = { status: 'idle' };
@@ -287,7 +287,7 @@ export async function finishPair(code: string): Promise<void> {
     const result = await desktopAPI.finishPair(code);
     // Cancelled while the TV checked the code; the remote has moved on.
     if (!result) return;
-    saveDevices({ ...loadDevices(), [pairDevice]: result });
+    saveDevices({ ...loadDevices(), [result.identifier]: result });
     saveActiveDevice(result);
     connectToATV();
   } catch (err) {
@@ -545,10 +545,7 @@ function getActiveIdentifier(): string | null {
 
 function getConnectedDeviceName(): string | null {
   const activeId = getActiveIdentifier();
-  if (!activeId) return null;
-  const match = Object.entries(loadDevices()).find(([, v]) => v.identifier === activeId);
-  if (!match) return null;
-  return match[0].replace(/\s*\([\d.]+\)$/, '');
+  return (activeId && loadDevices()[activeId]?.name) || null;
 }
 
 export function updateConnectionDot(state: ConnectionDotState): void {
@@ -906,12 +903,12 @@ function populateDeviceList(): void {
   const creds = loadDevices();
   const activeId = getActiveIdentifier();
 
-  for (const name of Object.keys(creds)) {
+  for (const [identifier, device] of Object.entries(creds)) {
     const row = document.createElement('div');
     row.className = 'settings-device-row';
     const label = document.createElement('span');
-    const isActive = !!activeId && creds[name].identifier === activeId;
-    label.textContent = name + (isActive ? ' (active)' : '');
+    const isActive = identifier === activeId;
+    label.textContent = device.name + (isActive ? ' (active)' : '');
     label.className = 'settings-device-name';
     row.appendChild(label);
 
@@ -920,7 +917,7 @@ function populateDeviceList(): void {
     removeBtn.className = 'settings-device-remove';
     removeBtn.addEventListener('click', () => {
       const allCreds = loadDevices();
-      delete allCreds[name];
+      delete allCreds[identifier];
       saveDevices(allCreds);
       if (isActive) {
         saveActiveDevice(null);
@@ -991,11 +988,11 @@ function handleContextMenu(popup = false): void {
   const mode = localStorage.getItem('uimode') || 'systemmode';
   const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
 
-  const devices = Object.entries(creds).map(([label, v]) => {
-    // The host's menu takes a string, even for a malformed entry with no identifier.
-    const identifier = typeof v.identifier === 'string' ? v.identifier : '';
-    return { label, identifier, checked: !!(activeId && identifier === activeId) };
-  });
+  const devices = Object.entries(creds).map(([identifier, device]) => ({
+    label: device.name,
+    identifier,
+    checked: identifier === activeId,
+  }));
 
   void desktopAPI
     .showContextMenu(

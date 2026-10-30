@@ -1,6 +1,6 @@
 // Renderer helpers: DOM queries, JSON parsing, and saved-device storage. Connection state lives
 // in the sidecar (ATVService); web_remote.ts renders its `state` events.
-import type { ATVCredentials } from '../shared/types';
+import type { ATVCredentials, PairResult } from '../shared/types';
 
 export function $(sel: string): HTMLElement | null {
   return document.querySelector(sel);
@@ -27,24 +27,28 @@ export function parseStored(json: string | null): unknown {
 }
 
 /**
- * Saved Apple TVs by scan label ("Name (IP)"). Entries that older releases stored as JSON
- * strings are decoded and saved back once; entries that aren't objects are dropped.
+ * Saved Apple TVs by identifier. Older releases' entries are converted and saved back once:
+ * those stored as JSON strings are decoded, and those keyed by scan label ("Name (IP)"), which
+ * duplicated a TV whose IP changed, are rekeyed with the label's name (later, newer pairings
+ * win). Entries that aren't objects are dropped.
  */
-export function loadDevices(): Record<string, ATVCredentials> {
+export function loadDevices(): Record<string, PairResult> {
   const json = localStorage.getItem('remote_credentials');
   const stored = parseStored(json);
-  const devices: Record<string, ATVCredentials> = {};
+  const devices: Record<string, PairResult> = {};
   if (typeof stored === 'object' && stored !== null) {
-    for (const [name, value] of Object.entries(stored)) {
+    for (const [key, value] of Object.entries(stored)) {
       const device = typeof value === 'string' ? parseStored(value) : value;
-      if (typeof device === 'object' && device !== null) devices[name] = device as ATVCredentials;
+      if (typeof device !== 'object' || device === null) continue;
+      const { identifier = key, name = key.replace(/\s*\([^()]*\)$/, '') } = device as PairResult;
+      devices[identifier] = { ...(device as PairResult), identifier, name };
     }
   }
   if (json !== null && JSON.stringify(devices) !== json) saveDevices(devices);
   return devices;
 }
 
-export function saveDevices(devices: Record<string, ATVCredentials>): void {
+export function saveDevices(devices: Record<string, PairResult>): void {
   localStorage.setItem('remote_credentials', JSON.stringify(devices));
 }
 

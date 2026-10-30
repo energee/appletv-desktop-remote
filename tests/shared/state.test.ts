@@ -44,8 +44,21 @@ describe('saved devices', () => {
   });
 
   it('saves and loads devices', () => {
-    saveDevices({ 'Living Room (1.2.3.4)': tv });
-    expect(loadDevices()).toEqual({ 'Living Room (1.2.3.4)': tv });
+    saveDevices({ tv: { ...tv, name: 'Living Room' } });
+    expect(loadDevices()).toEqual({ tv: { ...tv, name: 'Living Room' } });
+  });
+
+  // Older releases keyed devices by scan label, so a TV whose IP changed was saved twice.
+  it('keys devices saved by scan label by identifier, keeping the newest pairing', () => {
+    const newer = { credentials: 'new', identifier: 'tv' };
+    store.set(
+      'remote_credentials',
+      JSON.stringify({ 'Living Room (1.2.3.4)': tv, 'Living Room (1.2.3.9)': newer }),
+    );
+    expect(loadDevices()).toEqual({ tv: { ...newer, name: 'Living Room' } });
+    expect(JSON.parse(store.get('remote_credentials')!)).toEqual({
+      tv: { ...newer, name: 'Living Room' },
+    });
   });
 
   it('has no devices when none or only unreadable data is saved', () => {
@@ -59,8 +72,8 @@ describe('saved devices', () => {
       'remote_credentials',
       JSON.stringify({ Old: JSON.stringify(JSON.stringify(tv)), Bad: 'not json' }),
     );
-    expect(loadDevices()).toEqual({ Old: tv });
-    expect(store.get('remote_credentials')).toBe(JSON.stringify({ Old: tv }));
+    expect(loadDevices()).toEqual({ tv: { ...tv, name: 'Old' } });
+    expect(store.get('remote_credentials')).toBe(JSON.stringify({ tv: { ...tv, name: 'Old' } }));
   });
 
   it('saves, loads, and clears the active device', () => {
