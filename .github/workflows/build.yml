@@ -119,9 +119,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          release_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/"
           gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir "$RUNNER_TEMP"
-          jq -e --arg version "$version" --arg release_url "$release_url" '
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '[.assets[] | .apiUrl, .url]' > "$RUNNER_TEMP/release-assets.json"
+          jq -e --arg version "$version" --slurpfile assets "$RUNNER_TEMP/release-assets.json" '
             . as $manifest
             | (
               $manifest.version == $version
@@ -133,7 +133,7 @@ jobs:
                     .[];
                     . as $platform
                     | ($manifest.platforms[$platform] | type == "object")
-                    and ($manifest.platforms[$platform].url | type == "string" and startswith($release_url))
+                    and ($manifest.platforms[$platform].url as $url | $assets[0] | index($url) != null)
                     and ($manifest.platforms[$platform].signature | type == "string" and length > 0)
                   )
               )
