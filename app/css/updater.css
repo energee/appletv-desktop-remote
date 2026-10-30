@@ -110,12 +110,24 @@
 .update-notes {
   max-height: 64px;
   overflow: auto;
-  white-space: pre-wrap;
   font-size: 11px;
   line-height: 1.5;
   overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
+}
+
+.update-notes :is(p, ul, ol, pre, blockquote, h1, h2, h3, h4, h5, h6) {
+  margin: 0 0 6px;
+  font-size: inherit;
+}
+
+.update-notes :is(ul, ol) {
+  padding-left: 16px;
+}
+
+.update-notes pre {
+  white-space: pre-wrap;
 }
 
 .update-progress-section {
