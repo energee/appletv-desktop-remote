@@ -177,7 +177,7 @@
       }
       .touchpad {
         border-radius: 10%;
-        cursor: grab;
+        cursor: pointer;
       }
       .hotspot.pressed {
         background: rgb(0 0 0 / 0.08);
@@ -373,7 +373,8 @@
         font-size: 14px;
         transition: opacity 0.2s;
       }
-      .stage:focus .hint {
+      /* The hint explains the touchpad until the visitor has used the remote once. */
+      .stage.used .hint {
         opacity: 0;
       }
       .touch {
@@ -643,7 +644,8 @@
               </div>
               <p id="hud" class="hud" aria-live="polite"></p>
               <p class="hint">
-                <span class="pointer">Swipe on the remote's touchpad, or press the arrow keys</span
+                <span class="pointer"
+                  >Scroll with two fingers on the remote's touchpad, and click to select</span
                 ><span class="touch">Swipe or tap the remote</span>
               </p>
             </div>
@@ -657,8 +659,8 @@
           <div>
             <h3>Touchpad</h3>
             <p>
-              Swipe with two fingers to move around, and click to select. Same as the remote on your
-              couch.
+              Scroll with two fingers on the touchpad to move around, and click to select. Same as
+              the remote on your couch.
             </p>
           </div>
           <div>
@@ -908,6 +910,7 @@
 
       function press(key) {
         actions[key]();
+        stage.classList.add('used');
         const control = touchpadKeys.includes(key)
           ? touchpad
           : remoteButtons.find((button) => button.dataset.key === key);
@@ -934,7 +937,36 @@
       );
       tiles.forEach((tile, index) => tile.addEventListener('click', () => focusTile(index)));
 
-      // The touchpad: a swipe moves focus in its direction, a tap selects.
+      // The touchpad works like the app's (src/renderer/web_remote.ts): a two-finger scroll moves once
+      // per gesture after 90px, a gesture ends after 150 ms without scroll events, and a click selects.
+      let scrollX = 0;
+      let scrollY = 0;
+      let gestureMoved = false;
+      let gestureEndTimer;
+      function endGesture() {
+        scrollX = 0;
+        scrollY = 0;
+        gestureMoved = false;
+      }
+      touchpad.addEventListener(
+        'wheel',
+        (event) => {
+          event.preventDefault();
+          clearTimeout(gestureEndTimer);
+          gestureEndTimer = setTimeout(endGesture, 150);
+          if (gestureMoved) return;
+          scrollX += event.deltaX;
+          scrollY += event.deltaY;
+          if (Math.max(Math.abs(scrollX), Math.abs(scrollY)) < 90) return;
+          if (Math.abs(scrollX) > Math.abs(scrollY))
+            press(scrollX > 0 ? 'ArrowLeft' : 'ArrowRight');
+          else press(scrollY > 0 ? 'ArrowUp' : 'ArrowDown');
+          gestureMoved = true;
+        },
+        { passive: false },
+      );
+
+      // Phones have no trackpad, so there a one-finger swipe moves instead.
       let swipeStart = null;
       touchpad.addEventListener('pointerdown', (event) => {
         swipeStart = { x: event.clientX, y: event.clientY };
@@ -946,6 +978,7 @@
         const dy = event.clientY - swipeStart.y;
         swipeStart = null;
         if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) press('Enter');
+        else if (event.pointerType !== 'touch') return;
         else if (Math.abs(dx) > Math.abs(dy)) press(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
         else press(dy > 0 ? 'ArrowDown' : 'ArrowUp');
       });
