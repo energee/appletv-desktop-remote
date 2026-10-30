@@ -8,6 +8,7 @@ const shared = {
   target: 'es2022',
   format: 'iife',
   sourcemap: false,
+  loader: { '.md': 'text' },
 };
 
 await rm(output, { recursive: true, force: true });

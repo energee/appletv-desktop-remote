@@ -117,6 +117,11 @@
   user-select: text;
 }
 
+.release-notes-dialog .update-notes {
+  max-height: min(280px, 50dvh);
+  font-size: 12px;
+}
+
 .update-notes :is(p, ul, ol, pre, blockquote, h1, h2, h3, h4, h5, h6) {
   margin: 0 0 6px;
   font-size: inherit;

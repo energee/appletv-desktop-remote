@@ -221,7 +221,10 @@
           </div>
           <div class="settings-section">
             <div class="settings-label">Software updates</div>
-            <div id="settingsAppVersion" class="update-version"></div>
+            <div class="update-header">
+              <div id="settingsAppVersion" class="update-version"></div>
+              <button id="settingsReleaseNotesBtn" class="settings-back-btn">What’s new</button>
+            </div>
             <label class="settings-toggle">
               <input type="checkbox" id="settingsAutoUpdate" />
               <span>Automatically check for updates</span>
@@ -234,6 +237,22 @@
 
       <h2 id="statusText"></h2>
     </div>
+    <dialog
+      id="releaseNotesDialog"
+      class="update-dialog release-notes-dialog"
+      aria-labelledby="releaseNotesTitle"
+    >
+      <div class="update-sheet">
+        <div class="update-header">
+          <h1 id="releaseNotesTitle">What’s new</h1>
+          <div id="releaseNotesVersion" class="update-version"></div>
+        </div>
+        <div id="releaseNotes" class="update-notes-section update-notes" tabindex="0"></div>
+        <div class="update-actions">
+          <button id="releaseNotesClose" class="settings-back-btn update-secondary">Done</button>
+        </div>
+      </div>
+    </dialog>
     <dialog
       id="updateDialog"
       class="update-dialog"

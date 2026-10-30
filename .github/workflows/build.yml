@@ -68,21 +68,16 @@ jobs:
             throw new Error(`Tag ${tagVersion} does not match project versions: ${versions.join(', ')}`);
           }
           EOF
-      # Subsequent serialized jobs reuse GitHub's generated notes in latest.json.
-      - name: Read generated release notes
+      - name: Read release notes
         id: release-notes
         if: github.event_name == 'push' && github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$GITHUB_REF_NAME" --json body --jq .body > "$RUNNER_TEMP/release-notes.md" 2>/dev/null; then
-            delimiter=$(node -p 'crypto.randomUUID()')
-            printf 'body<<%s\n' "$delimiter" >> "$GITHUB_OUTPUT"
-            cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "$delimiter" >> "$GITHUB_OUTPUT"
-          fi
+          delimiter=$(node -p 'crypto.randomUUID()')
+          printf 'body<<%s\n' "$delimiter" >> "$GITHUB_OUTPUT"
+          cat app/release-notes.md >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$delimiter" >> "$GITHUB_OUTPUT"
       - name: Build signed release
         if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: tauri-apps/tauri-action@v1
@@ -92,7 +87,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseDraft: true
-          generateReleaseNotes: true
           releaseBody: ${{ steps.release-notes.outputs.body }}
           args: >-
             ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'

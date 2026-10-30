@@ -2,6 +2,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import installedReleaseNotes from '../../app/release-notes.md';
 import { desktopAPI } from '../shared/desktop-api';
 
 type Status =
@@ -33,6 +34,38 @@ const COPY: Record<Status, Copy> = {
   error: ['Software update', 'Try again', ''],
 };
 
+function releaseNotesHtml(body: string): string {
+  return DOMPurify.sanitize(marked.parse(body, { async: false }), {
+    ALLOWED_TAGS: [
+      'p',
+      'br',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'ul',
+      'ol',
+      'li',
+      'strong',
+      'em',
+      'del',
+      'blockquote',
+      'pre',
+      'code',
+      'hr',
+      'table',
+      'thead',
+      'tbody',
+      'tr',
+      'th',
+      'td',
+    ],
+    ALLOWED_ATTR: [],
+  });
+}
+
 /** Owns the updater resource so downloads continue while this sheet is dismissed. */
 export function initUpdater(): void {
   const dialog = document.getElementById('updateDialog') as HTMLDialogElement;
@@ -42,6 +75,10 @@ export function initUpdater(): void {
   const autoCheck = document.getElementById('settingsAutoUpdate') as HTMLInputElement;
   const settingsButton = document.getElementById('settingsUpdateBtn') as HTMLButtonElement;
   const progress = document.getElementById('updateProgress') as HTMLProgressElement;
+  const notesDialog = document.getElementById('releaseNotesDialog') as HTMLDialogElement;
+  const notesButton = document.getElementById('settingsReleaseNotesBtn') as HTMLButtonElement;
+  const notesClose = document.getElementById('releaseNotesClose') as HTMLButtonElement;
+  document.getElementById('releaseNotes')!.innerHTML = releaseNotesHtml(installedReleaseNotes);
   let update: Update | undefined;
   let status: Status = 'idle';
   let failed: FailedOperation | undefined;
@@ -74,6 +111,7 @@ export function initUpdater(): void {
     if (status === 'error') pillLabel = 'Update needs attention';
     text('updatePillLabel', pillLabel);
     text('settingsAppVersion', version ? `Version ${version}` : 'Apple TV Remote');
+    text('releaseNotesVersion', version ? `Version ${version}` : '');
     autoCheck.checked = automatic;
     primary.disabled = isBusy();
     later.disabled = status === 'installing';
@@ -127,38 +165,7 @@ export function initUpdater(): void {
     if (update) return;
     void execute('checking', 'check', async () => {
       update = (await check()) ?? undefined;
-      document.getElementById('updateNotes')!.innerHTML = DOMPurify.sanitize(
-        marked.parse(update?.body ?? '', { async: false }),
-        {
-          ALLOWED_TAGS: [
-            'p',
-            'br',
-            'h1',
-            'h2',
-            'h3',
-            'h4',
-            'h5',
-            'h6',
-            'ul',
-            'ol',
-            'li',
-            'strong',
-            'em',
-            'del',
-            'blockquote',
-            'pre',
-            'code',
-            'hr',
-            'table',
-            'thead',
-            'tbody',
-            'tr',
-            'th',
-            'td',
-          ],
-          ALLOWED_ATTR: [],
-        },
-      );
+      document.getElementById('updateNotes')!.innerHTML = releaseNotesHtml(update?.body ?? '');
       status = update ? 'available' : 'upToDate';
     });
   }
@@ -200,6 +207,7 @@ export function initUpdater(): void {
   }
 
   function open(checkNow: boolean): void {
+    if (notesDialog.open) notesDialog.close();
     if (!dialog.open) dialog.showModal();
     render();
     if (checkNow && !update) checkForUpdate();
@@ -219,11 +227,12 @@ export function initUpdater(): void {
   window.addEventListener(
     'keydown',
     (event) => {
-      if (!dialog.open) return;
+      const activeDialog = notesDialog.open ? notesDialog : dialog.open ? dialog : undefined;
+      if (!activeDialog) return;
       event.stopImmediatePropagation();
       if (event.key !== 'Tab') return;
       const controls = Array.from(
-        dialog.querySelectorAll<HTMLElement>('button:not(:disabled), [tabindex="0"]'),
+        activeDialog.querySelectorAll<HTMLElement>('button:not(:disabled), [tabindex="0"]'),
       ).filter((element) => element.getClientRects().length > 0);
       const index = controls.indexOf(document.activeElement as HTMLElement);
       const next = index + (event.shiftKey ? -1 : 1);
@@ -235,9 +244,15 @@ export function initUpdater(): void {
     true,
   );
   dialog.addEventListener('contextmenu', (event) => event.stopPropagation());
+  notesDialog.addEventListener('contextmenu', (event) => event.stopPropagation());
+  notesButton.addEventListener('click', () => {
+    notesDialog.showModal();
+    notesClose.focus();
+  });
+  notesClose.addEventListener('click', () => notesDialog.close());
   pill.addEventListener('click', () => void open(false));
   settingsButton.addEventListener('click', () => void open(true));
-  for (const control of [pill, settingsButton, autoCheck]) {
+  for (const control of [pill, settingsButton, notesButton, autoCheck]) {
     control.addEventListener('keydown', (event) => event.stopPropagation());
   }
   autoCheck.addEventListener('change', () => {
