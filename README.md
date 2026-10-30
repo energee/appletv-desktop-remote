@@ -28,7 +28,7 @@
 - **Touchpad.** Scroll with two fingers to move around, and click to select. Same as the remote on your couch.
 - **Now playing.** See what's on, then play, pause, and scrub from the seek bar.
 - **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away.
-- **Yours to set up.** Right-click for the device menu. **Settings** has the theme, always-on-top, saved remotes, and the hotkey. **Quit** stops it.
+- **Yours to set up.** Click the device name for the device menu, or right-click anywhere. **Settings** has the theme, always-on-top, saved remotes, and the hotkey. **Quit** stops it.
 
 ## Or just use the keyboard
 

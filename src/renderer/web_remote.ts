@@ -140,6 +140,8 @@ window.addEventListener('keyup', (e) => {
 });
 
 window.addEventListener('keydown', (e) => {
+  // Let focused buttons activate natively instead of sending their activation keys to the TV.
+  if (e.target instanceof HTMLButtonElement && (e.key === 'Enter' || e.key === ' ')) return;
   let key = e.key;
   if (key === ' ') key = 'Space';
   let mods = [
@@ -1040,6 +1042,7 @@ export async function init(): Promise<void> {
     void handleDarkMode();
   });
   handleContextMenu();
+  $('#topTextHeader')!.addEventListener('click', () => handleContextMenu(true));
   window.addEventListener('contextmenu', (event) => {
     event.preventDefault();
     handleContextMenu(true);
