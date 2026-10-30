@@ -225,9 +225,9 @@ export async function sendCommand(k: string): Promise<void> {
   if ((Object.values(keymap) as string[]).includes(k)) rcmd = k as ATVKeyName;
   const el = getKeyEl(rcmd);
   if (el) {
-    el.classList.add('invert');
+    el.classList.add('sent');
     setTimeout(() => {
-      el.classList.remove('invert');
+      el.classList.remove('sent');
     }, 500);
   }
   if (rcmd === 'play_pause') flipPlayPauseIcon();
@@ -235,7 +235,7 @@ export async function sendCommand(k: string): Promise<void> {
     await desktopAPI.sendKey(rcmd);
   } catch {
     if (el) {
-      el.classList.remove('invert');
+      el.classList.remove('sent');
       el.classList.add('error-flash');
       setTimeout(() => el.classList.remove('error-flash'), 600);
     }

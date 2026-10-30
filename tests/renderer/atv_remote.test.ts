@@ -180,6 +180,15 @@ it('keeps discovery failures visible after rebuilding the device picker', async 
   expect(statusElement.style.display).toBe('block');
 });
 
+it('says so when the scan finds no Apple TV, instead of an empty picker', async () => {
+  desktopAPI.scan.mockResolvedValue([]);
+  await remote.scanDevices();
+  expect(statusElement.textContent).toBe(
+    'No Apple TV found on this network. Right-click to scan again.',
+  );
+  expect(statusElement.style.display).toBe('block');
+});
+
 describe('window appearance', () => {
   // A pinned appearance also pins the webview's prefers-color-scheme, so "Follow system" must
   // hand the window back to the system or the remote stops following it.

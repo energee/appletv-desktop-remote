@@ -121,6 +121,16 @@ describe('ATVService', () => {
       expect(service.scanResults['Living Room (1.2.3.4)']).toBe(living);
     });
 
+    // It listed every AirPlay device (Roku and other smart TVs, Macs), which can never pair.
+    it('lists only Apple TVs, the only devices the remote can control', async () => {
+      await service.scan();
+      const [{ filter }] = mockScan.mock.calls[0];
+      expect(filter({ model: 'AppleTV6,2' })).toBe(true);
+      expect(filter({ model: 'AppleTV5,3' })).toBe(true);
+      expect(filter({ model: '7104X' })).toBe(false); // TCL Roku TV
+      expect(filter({ model: 'Mac16,12' })).toBe(false);
+    });
+
     it('times out with a safety net', async () => {
       mockScan.mockReturnValue(new Promise(() => {}));
       const scanning = expect(service.scan(100)).rejects.toThrow('Scan timed out');
