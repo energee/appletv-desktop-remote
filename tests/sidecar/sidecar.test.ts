@@ -11,6 +11,8 @@ let temporary: string;
 let entrypoint: string;
 /** The sidecar with a stand-in library whose scan lasts exactly its 2 s window, offline. */
 let slowScanEntrypoint: string;
+/** A scan that keeps the process alive indefinitely unless EOF shutdown exits it. */
+let hungScanEntrypoint: string;
 /** The source files esbuild put into the real sidecar bundle. */
 let bundledInputs: string[];
 
@@ -35,6 +37,7 @@ beforeAll(async () => {
   temporary = await mkdtemp(path.join(tmpdir(), 'atv-sidecar-test-'));
   entrypoint = path.join(temporary, 'sidecar.mjs');
   slowScanEntrypoint = path.join(temporary, 'sidecar-slow-scan.mjs');
+  hungScanEntrypoint = path.join(temporary, 'sidecar-hung-scan.mjs');
   // A real mDNS scan may fail fast (no network on CI), which would end a "slow" request early.
   const library = path.join(temporary, 'slow-scan-library.mjs');
   await writeFile(
@@ -49,6 +52,20 @@ beforeAll(async () => {
   };
   const [real] = await Promise.all([bundle(entrypoint), bundle(slowScanEntrypoint, [stubLibrary])]);
   bundledInputs = Object.keys(real.metafile.inputs);
+  const hungLibrary = path.join(temporary, 'hung-scan-library.mjs');
+  // The child needs a live OS handle; fake timers in Vitest cannot keep its event loop alive.
+  await writeFile(
+    hungLibrary,
+    'export const scan = () => new Promise(() => { setInterval(() => {}, 60000); });\n',
+  );
+  await bundle(hungScanEntrypoint, [
+    {
+      name: 'hung-scan-library',
+      setup(build) {
+        build.onResolve({ filter: /^node-appletv-remote$/ }, () => ({ path: hungLibrary }));
+      },
+    },
+  ]);
 });
 
 afterAll(async () => {
@@ -201,6 +218,26 @@ describe('sidecar protocol', () => {
     expect(messages).toContainEqual({ event: 'state', data: { status: 'connecting' } });
   });
 
+  it('rejects a speaker change without an on/off choice', async () => {
+    const messages = await exchange('{"id":"speaker","method":"setSpeaker","params":{"id":"x"}}\n');
+    expect(messages).toContainEqual({ id: 'speaker', error: { message: 'on must be a boolean' } });
+  });
+
+  it('rejects a volume that is not a number', async () => {
+    const messages = await exchange(
+      '{"id":"volume","method":"setVolume","params":{"level":"loud"}}\n',
+    );
+    expect(messages).toContainEqual({
+      id: 'volume',
+      error: { message: 'level must be a number' },
+    });
+  });
+
+  it('serves power, which needs a connection', async () => {
+    const messages = await exchange('{"id":"power","method":"power"}\n');
+    expect(messages).toContainEqual({ id: 'power', error: { message: 'Not connected' } });
+  });
+
   it('rejects prototype-property commands and processes a final CRLF frame before EOF', async () => {
     const messages = await exchange(
       '{"id":"key","method":"sendKey","params":{"key":"toString"}}\r\n' +
@@ -236,11 +273,12 @@ describe('sidecar protocol', () => {
     },
   );
 
-  it('exits soon after its input closes even while a request is still running', async () => {
-    // A crashed host closes our stdin; nobody is left to read the scan's (2 s) reply.
-    const messages = await exchange('{"id":"slow","method":"scan"}\n', {
-      sidecar: slowScanEntrypoint,
-      timeout: 1900,
+  it('exits after its input closes even while a request is hung', { timeout: 15000 }, async () => {
+    // A crashed host closes stdin. The scan never completes and keeps a live timer, so only
+    // bounded EOF shutdown can exit; allow startup time rather than racing a 2 s scan.
+    const messages = await exchange('{"id":"hung","method":"scan"}\n', {
+      sidecar: hungScanEntrypoint,
+      timeout: 10000,
     });
     expect(messages.filter((message) => Object.hasOwn(message, 'id'))).toEqual([]);
   });

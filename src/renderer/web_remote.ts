@@ -8,6 +8,7 @@ import {
   type ConnectionDotState,
   type ConnectionState,
   type NowPlayingInfo,
+  type Speaker,
 } from '../shared/types';
 import { desktopAPI } from '../shared/desktop-api';
 import { icon } from './icons';
@@ -23,6 +24,10 @@ import {
 } from './state';
 
 let qPresses = 0;
+/** AirPlay speakers for the menu, scanned once per connection; empty while not connected. */
+let speakers: Speaker[] = [];
+/** The connected TV reported it is asleep; any other connection state clears it. */
+let asleep = false;
 /** The scan label of the device being paired; a wrong PIN starts pairing it again. */
 let pairDevice = '';
 /** The sidecar's latest connection state. */
@@ -81,17 +86,37 @@ export function initIPC(): void {
 
   desktopAPI.onAtvState(renderState);
   desktopAPI.onAtvNowPlaying(updateNowPlaying);
+  desktopAPI.onAtvVolume(showVolume);
+  // The TV confirmed a change of outputs: update the checks without scanning again.
+  desktopAPI.onAtvOutputs((ids) => {
+    speakers = speakers.map((speaker) => ({ ...speaker, selected: ids.includes(speaker.id) }));
+    handleContextMenu();
+  });
+  desktopAPI.onAtvPowerState((power) => {
+    asleep = power === 'off';
+    if (connection.status === 'connected') updateConnectionDot('connected');
+  });
 }
 
 /** Shows the sidecar's connection state: the screen, the connection dot, and status text. */
 function renderState(next: ConnectionState): void {
   const previous = connection.status;
   connection = next;
+  if (next.status !== 'connected') asleep = false;
+  $('#powerButton')!.style.display = next.status === 'connected' ? '' : 'none';
+  if (next.status !== 'connected') {
+    showVolume(null);
+    if (speakers.length > 0) {
+      speakers = [];
+      handleContextMenu();
+    }
+  }
   showScreen();
   if (next.status !== 'connected') hideNowPlaying();
   switch (next.status) {
     case 'connected':
       updateConnectionDot('connected');
+      if (previous !== 'connected') void loadSpeakers();
       $('#statusText')!.style.display = 'none';
       handleContextMenu();
       showKeyMap();
@@ -554,8 +579,9 @@ export function updateConnectionDot(state: ConnectionDotState): void {
   dot.classList.add(state);
 
   const showName = state === 'connected' || state === 'connecting';
+  const name = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
   const header = $('#topTextHeader')!;
-  header.firstChild!.textContent = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
+  header.firstChild!.textContent = asleep && state === 'connected' ? `${name} · Asleep` : name;
 }
 
 /**
@@ -863,6 +889,48 @@ function showPlayPauseIcon(playing: boolean): void {
   if (el) el.innerHTML = icon(playing ? 'pause' : 'play');
 }
 
+// --- Speakers ---
+
+/** Scans for AirPlay speakers for the menu; a failed scan leaves the Speakers menu out. */
+async function loadSpeakers(): Promise<void> {
+  try {
+    const found = await desktopAPI.speakers();
+    if (connection.status === 'connected') speakers = found;
+  } catch (error) {
+    console.error('Speaker scan failed:', error);
+  }
+  handleContextMenu();
+}
+
+// --- Volume ---
+
+/** True while the volume slider is being dragged, so reports do not move it. */
+let volumeDragging = false;
+
+/** Moves the slider's thumb and its filled part to `level`. */
+function setVolumeBar(bar: HTMLInputElement, level: number): void {
+  bar.value = String(Math.round(level));
+  bar.style.backgroundSize = `${level}% 100%, 100% 100%`;
+}
+
+/** Shows the TV's absolute volume; null (TV speakers, or not connected) hides the slider. */
+function showVolume(level: number | null): void {
+  $('#volume')!.style.display = level === null ? 'none' : '';
+  if (level !== null && !volumeDragging) setVolumeBar($('#volumeBar') as HTMLInputElement, level);
+}
+
+function initVolumeBar(): void {
+  const bar = $('#volumeBar') as HTMLInputElement;
+  bar.addEventListener('input', () => {
+    volumeDragging = true;
+    setVolumeBar(bar, Number(bar.value));
+  });
+  bar.addEventListener('change', () => {
+    volumeDragging = false;
+    desktopAPI.setVolume(Number(bar.value)).catch(showRequestError);
+  });
+}
+
 // --- Settings Panel ---
 
 function showSettings(): void {
@@ -1000,6 +1068,11 @@ function handleContextMenu(popup = false): void {
         devices,
         uiMode: mode,
         alwaysOnTop: topChecked,
+        speakers: speakers.map(({ id, name, selected }) => ({
+          label: name,
+          id,
+          checked: selected,
+        })),
       },
       popup,
     )
@@ -1024,6 +1097,11 @@ function handleContextMenuAction(action: string, payload?: string): void {
       hideSettings();
       startScan();
       break;
+    case 'toggleSpeaker': {
+      const speaker = speakers.find(({ id }) => id === payload);
+      if (speaker) desktopAPI.setSpeaker(speaker.id, !speaker.selected).catch(showRequestError);
+      break;
+    }
     case 'setTheme':
       if (payload) {
         localStorage.setItem('uimode', payload);
@@ -1058,6 +1136,10 @@ export async function init(): Promise<void> {
   });
   initSettingsListeners();
   initSeekBar();
+  initVolumeBar();
+  $('#powerButton')!.addEventListener('click', () => {
+    desktopAPI.togglePower().catch(showRequestError);
+  });
 
   // Back to the saved device, or, with none, a fresh scan; connecting ends pairing.
   $('#cancelPairing')!.addEventListener('click', () => {

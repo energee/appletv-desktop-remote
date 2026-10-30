@@ -33,6 +33,16 @@ export type KeyboardKeyMap = Record<string, ATVKeyName>;
 
 export type ConnectionDotState = 'connected' | 'connecting' | 'disconnected';
 
+/** An AirPlay receiver the TV can play to; `id` is its output ID (the scan's `airplayPsi`). */
+export interface Speaker {
+  id: string;
+  name: string;
+  selected: boolean;
+}
+
+/** The library's PowerState: the TV reports `off` while asleep and keeps the connection open. */
+export type PowerStatus = 'on' | 'off' | 'unknown';
+
 /**
  * The sidecar's connection status, sent as the `state` event whenever it changes. `idle`: no
  * device chosen (or disconnected on request); `connecting`: connecting or waiting to retry;

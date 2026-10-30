@@ -27,6 +27,15 @@
           ><span class="device-chevron" aria-hidden="true">⌄</span>
         </button>
       </div>
+      <button
+        id="powerButton"
+        class="power-btn"
+        aria-label="Sleep or wake the Apple TV"
+        title="Sleep / Wake"
+        style="display: none"
+      >
+        <span data-icon="power"></span>
+      </button>
       <div id="topTextKBLink"></div>
       <button id="updatePill" class="update-pill" hidden>
         <span class="update-pill-dot" aria-hidden="true"></span>
@@ -161,6 +170,12 @@
               <span class="keyText"><span data-icon="skip-forward"></span></span
               ><span class="keyTextAlt">]</span>
             </div>
+          </div>
+
+          <!-- Absolute volume: only for outputs that report one (AirPods, HomePod) -->
+          <div class="seek volume" id="volume" style="display: none">
+            <span data-icon="volume-2"></span>
+            <input type="range" id="volumeBar" min="0" max="100" step="1" aria-label="Volume" />
           </div>
         </div>
 

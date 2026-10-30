@@ -55,6 +55,51 @@ describe('desktopAPI', () => {
     expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', playbackState: 1 }], [{}]]);
   });
 
+  it('passes on the selected outputs only as a list of IDs', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const outputs = vi.fn();
+    desktopAPI.onAtvOutputs(outputs);
+
+    for (const data of [['psi-kitchen'], 'psi-kitchen', [1]]) {
+      onBackendEvent({ payload: { event: 'outputs', data } });
+    }
+    expect(outputs.mock.calls).toEqual([[['psi-kitchen']]]);
+  });
+
+  it('passes on the absolute volume, or null when there is none', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const volume = vi.fn();
+    desktopAPI.onAtvVolume(volume);
+
+    for (const data of [40, null, 'loud']) {
+      onBackendEvent({ payload: { event: 'volume', data } });
+    }
+    expect(volume.mock.calls).toEqual([[40], [null], [null]]);
+  });
+
+  it('passes on only known power states', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const power = vi.fn();
+    desktopAPI.onAtvPowerState(power);
+
+    for (const data of ['off', 'on', 'unknown', 'asleep', 1]) {
+      onBackendEvent({ payload: { event: 'power-state', data } });
+    }
+    expect(power.mock.calls).toEqual([['off'], ['on'], ['unknown']]);
+  });
+
   it('passes the app name through with now-playing', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
