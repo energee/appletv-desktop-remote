@@ -3,7 +3,6 @@
 // and pairing mode.
 import {
   PlaybackState,
-  type ATVCredentials,
   type ATVKeyName,
   type KeyboardKeyMap,
   type ConnectionDotState,
@@ -12,7 +11,16 @@ import {
 } from '../shared/types';
 import { desktopAPI } from '../shared/desktop-api';
 import { icon } from './icons';
-import { $, $$, safeParse } from './state';
+import {
+  $,
+  $$,
+  loadActiveDevice,
+  loadDevices,
+  parseStored,
+  safeParse,
+  saveActiveDevice,
+  saveDevices,
+} from './state';
 import { scanDevices, startPair, finishPair } from './atv_remote';
 
 let qPresses = 0;
@@ -481,21 +489,13 @@ function showKeyMap(): void {
 }
 
 function getActiveIdentifier(): string | null {
-  const active = safeParse<ATVCredentials | false>(localStorage.getItem('atvcreds'), false);
-  return active ? active.identifier : null;
+  return loadActiveDevice()?.identifier ?? null;
 }
 
 function getConnectedDeviceName(): string | null {
   const activeId = getActiveIdentifier();
   if (!activeId) return null;
-  const creds = safeParse(
-    localStorage.getItem('remote_credentials'),
-    {} as Record<string, unknown>,
-  );
-  const match = Object.entries(creds).find(([, val]) => {
-    const v = val as ATVCredentials;
-    return v && v.identifier === activeId;
-  });
+  const match = Object.entries(loadDevices()).find(([, v]) => v.identifier === activeId);
   if (!match) return null;
   return match[0].replace(/\s*\([\d.]+\)$/, '');
 }
@@ -515,13 +515,13 @@ export function updateConnectionDot(state: ConnectionDotState): void {
  * connect, or pairing in progress. Progress arrives as `state` events.
  */
 export function connectToATV(): void {
-  const creds = safeParse<ATVCredentials | null>(localStorage.getItem('atvcreds'), null);
+  const creds = loadActiveDevice();
   if (creds) desktopAPI.connect(creds).catch(showRequestError);
 }
 
 /** Like connectToATV, but the sidecar ignores it while pairing. */
 function reconnectToATV(): void {
-  const creds = safeParse<ATVCredentials | null>(localStorage.getItem('atvcreds'), null);
+  const creds = loadActiveDevice();
   if (creds) desktopAPI.reconnect(creds).catch(showRequestError);
 }
 
@@ -580,20 +580,6 @@ async function handleDarkMode(): Promise<void> {
   }
 }
 
-function getCreds(nm?: string): ATVCredentials | Record<string, never> {
-  // Older releases stored some entries as (repeatedly) JSON-encoded strings.
-  const creds = safeParse(
-    localStorage.getItem('remote_credentials'),
-    {} as Record<string, ATVCredentials | string>,
-  );
-  const keys = Object.keys(creds);
-  if (keys.length === 0) return {};
-
-  let result = nm !== undefined && keys.includes(nm) ? creds[nm] : creds[keys[0]];
-  while (typeof result === 'string') result = JSON.parse(result);
-  return result;
-}
-
 function setAlwaysOnTop(tf: boolean): void {
   void desktopAPI.setAlwaysOnTop(tf);
 }
@@ -635,8 +621,7 @@ async function importCredentials(): Promise<void> {
   }
   // Validate the complete backup before changing any existing saved state.
   function storedObject(value: string): Record<string, unknown> {
-    let decoded: unknown = JSON.parse(value);
-    while (typeof decoded === 'string') decoded = JSON.parse(decoded);
+    const decoded = parseStored(value);
     if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
       throw new Error('Credential data must contain an object.');
     }
@@ -686,7 +671,7 @@ async function importCredentials(): Promise<void> {
   refreshSettings();
   handleContextMenu();
   // connect replaces the old connection; without an active device, just drop it.
-  if (localStorage.getItem('atvcreds')) {
+  if (loadActiveDevice()) {
     setStatus('Credentials imported. Reconnecting...');
     connectToATV();
   } else {
@@ -864,18 +849,14 @@ function hideSettings(): void {
 function populateDeviceList(): void {
   const listEl = $('#settingsDeviceList')!;
   listEl.innerHTML = '';
-  const creds = safeParse(
-    localStorage.getItem('remote_credentials'),
-    {} as Record<string, unknown>,
-  );
+  const creds = loadDevices();
   const activeId = getActiveIdentifier();
 
   for (const name of Object.keys(creds)) {
     const row = document.createElement('div');
     row.className = 'settings-device-row';
     const label = document.createElement('span');
-    const v = creds[name] as ATVCredentials;
-    const isActive = !!(v && activeId && v.identifier === activeId);
+    const isActive = !!activeId && creds[name].identifier === activeId;
     label.textContent = name + (isActive ? ' (active)' : '');
     label.className = 'settings-device-name';
     row.appendChild(label);
@@ -884,14 +865,11 @@ function populateDeviceList(): void {
     removeBtn.textContent = 'Remove';
     removeBtn.className = 'settings-device-remove';
     removeBtn.addEventListener('click', () => {
-      const allCreds = safeParse(
-        localStorage.getItem('remote_credentials'),
-        {} as Record<string, unknown>,
-      );
+      const allCreds = loadDevices();
       delete allCreds[name];
-      localStorage.setItem('remote_credentials', JSON.stringify(allCreds));
+      saveDevices(allCreds);
       if (isActive) {
-        localStorage.removeItem('atvcreds');
+        saveActiveDevice(null);
         void desktopAPI.disconnect();
         setStatus('No device selected. Right-click to choose one.');
       }
@@ -954,20 +932,15 @@ function initSettingsListeners(): void {
 // --- Context Menu ---
 
 function handleContextMenu(popup = false): void {
-  const creds = safeParse(
-    localStorage.getItem('remote_credentials'),
-    {} as Record<string, unknown>,
-  );
-  const ks = Object.keys(creds);
+  const creds = loadDevices();
   const activeId = getActiveIdentifier();
   const mode = localStorage.getItem('uimode') || 'systemmode';
   const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
 
-  const devices = ks.map((k) => {
-    // Older releases stored some devices as JSON strings, which have no identifier.
-    const v = creds[k] as ATVCredentials | null;
-    const identifier = typeof v?.identifier === 'string' ? v.identifier : '';
-    return { label: k, identifier, checked: !!(activeId && identifier === activeId) };
+  const devices = Object.entries(creds).map(([label, v]) => {
+    // The host's menu takes a string, even for a malformed entry with no identifier.
+    const identifier = typeof v.identifier === 'string' ? v.identifier : '';
+    return { label, identifier, checked: !!(activeId && identifier === activeId) };
   });
 
   void desktopAPI
@@ -985,12 +958,9 @@ function handleContextMenu(popup = false): void {
 function handleContextMenuAction(action: string, payload?: string): void {
   switch (action) {
     case 'selectDevice': {
-      const creds = safeParse(
-        localStorage.getItem('remote_credentials'),
-        {} as Record<string, unknown>,
-      );
-      if (payload && creds[payload]) {
-        localStorage.setItem('atvcreds', JSON.stringify(creds[payload]));
+      const creds = loadDevices();
+      if (payload && Object.hasOwn(creds, payload)) {
+        saveActiveDevice(creds[payload]);
         connectToATV();
         handleContextMenu();
       }
@@ -1039,7 +1009,7 @@ export async function init(): Promise<void> {
 
   // Back to the saved device, or, with none, a fresh scan; connecting ends pairing.
   $('#cancelPairing')!.addEventListener('click', () => {
-    if (localStorage.getItem('atvcreds')) connectToATV();
+    if (loadActiveDevice()) connectToATV();
     else startScan();
   });
   const pin = $('#pairCode') as HTMLInputElement;
@@ -1054,13 +1024,11 @@ export async function init(): Promise<void> {
   const checked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
   if (checked) setAlwaysOnTop(checked);
 
-  let creds: ATVCredentials | false = safeParse(localStorage.getItem('atvcreds'), false as const);
+  // With no active device, use the first saved one.
+  let creds = loadActiveDevice();
   if (!creds) {
-    const fallback = getCreds();
-    if (fallback && 'credentials' in fallback) {
-      creds = fallback as ATVCredentials;
-      localStorage.setItem('atvcreds', JSON.stringify(creds));
-    }
+    creds = Object.values(loadDevices())[0] ?? null;
+    if (creds?.credentials) saveActiveDevice(creds);
   }
   if (localStorage.getItem('firstRun') !== 'false') {
     localStorage.setItem('firstRun', 'false');
