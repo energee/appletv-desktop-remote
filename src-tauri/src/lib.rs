@@ -7,6 +7,7 @@ mod desktop;
 mod macos_gesture;
 #[cfg(target_os = "macos")]
 mod macos_wake;
+mod vault;
 #[cfg(windows)]
 mod windows_wake;
 
@@ -24,10 +25,44 @@ use tauri_plugin_global_shortcut::{Builder as GlobalShortcutBuilder, ShortcutSta
 #[tauri::command]
 async fn backend_request(
     state: tauri::State<'_, Backend>,
+    vault: tauri::State<'_, vault::Vault>,
     method: String,
     params: Value,
 ) -> Result<Value, String> {
-    state.request(method, params).await
+    match method.as_str() {
+        "finishPair" | "finishCompanionPair" => {
+            let companion_paired = method == "finishCompanionPair";
+            if let Some(saved) = vault.retry_pending_pair(companion_paired)? {
+                return serde_json::to_value(saved).map_err(|error| error.to_string());
+            }
+            let result = state.request(method, params).await?;
+            if result.is_null() {
+                Ok(Value::Null)
+            } else {
+                serde_json::to_value(vault.save_sidecar_pair(result, companion_paired)?)
+                    .map_err(|error| error.to_string())
+            }
+        }
+        "connect" | "reconnect" => {
+            let identifier = params
+                .as_object()
+                .and_then(|params| params.get("identifier"))
+                .and_then(Value::as_str)
+                .ok_or("connect requires a saved device identifier")?;
+            if params.as_object().is_none_or(|params| params.len() != 1) {
+                return Err("Credentials may only be supplied by the native vault".into());
+            }
+            vault.clear_pending_pair()?;
+            state
+                .request(method, vault.connection_params(identifier)?)
+                .await
+        }
+        "startPair" | "startCompanionPair" | "cancelCompanionPair" | "disconnect" => {
+            vault.clear_pending_pair()?;
+            state.request(method, params).await
+        }
+        _ => state.request(method, params).await,
+    }
 }
 
 #[tauri::command]
@@ -36,8 +71,9 @@ async fn desktop_action(
     action: String,
     args: Value,
     context: tauri::State<'_, Arc<Mutex<Option<desktop::ContextMenuConfig>>>>,
+    vault: tauri::State<'_, vault::Vault>,
 ) -> Result<Value, String> {
-    desktop::desktop_action(app, action, args, context).await
+    desktop::desktop_action(app, action, args, context, vault).await
 }
 
 pub fn run() {
@@ -57,6 +93,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::clone(&menu_context))
+        .manage(vault::Vault::native())
         .setup(move |app| {
             #[cfg(target_os = "macos")]
             macos_wake::install(app.handle()).map_err(std::io::Error::other)?;

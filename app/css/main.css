@@ -1184,26 +1184,6 @@ a:active {
   color: var(--text-tertiary);
 }
 
-.settings-radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.settings-radio-group label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.settings-radio-group input[type='radio'] {
-  accent-color: var(--accent);
-}
-
 .settings-toggle {
   font-size: 13px;
   font-weight: 500;

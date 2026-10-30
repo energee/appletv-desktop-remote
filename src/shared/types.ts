@@ -13,6 +13,13 @@ export interface PairResult {
   name: string;
 }
 
+/** Persisted device information that may cross the native-to-renderer boundary. */
+export interface SavedDevice {
+  identifier: string;
+  name: string;
+  companionPaired: boolean;
+}
+
 export type ATVKeyName =
   | 'play_pause'
   | 'left'

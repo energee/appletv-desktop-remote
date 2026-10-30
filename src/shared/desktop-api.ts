@@ -3,14 +3,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
-import type {
-  ATVCredentials,
-  ConnectionState,
-  NowPlayingInfo,
-  PairResult,
-  PowerStatus,
-  Speaker,
-} from './types';
+import type { ConnectionState, NowPlayingInfo, PowerStatus, SavedDevice, Speaker } from './types';
+import type { CompanionStatus, TextFocusState, TextInputState } from './companion-api';
 
 export interface ContextMenuConfig {
   devices: Array<{ label: string; identifier: string; checked: boolean }>;
@@ -28,7 +22,10 @@ type BackendEvent =
   | 'volume'
   | 'outputs'
   | 'error'
-  | 'connection-lost';
+  | 'connection-lost'
+  | 'companion-state'
+  | 'text-focus'
+  | 'text-input';
 type EventHandler = (value: unknown) => void;
 
 const listeners = new Map<string, Set<EventHandler>>();
@@ -91,7 +88,7 @@ async function call<T>(command: string, args: Record<string, unknown>): Promise<
   }
 }
 
-async function request<T>(method: string, params: unknown = {}): Promise<T> {
+export async function backendRequest<T>(method: string, params: unknown = {}): Promise<T> {
   return call<T>('backend_request', { method, params });
 }
 
@@ -139,34 +136,50 @@ export const desktopAPI = {
   loadHotkey: () => action<string | null>('loadHotkey'),
   saveHotkey: (combo: string) => action<void>('saveHotkey', { combo }),
   resetHotkey: () => action<void>('resetHotkey'),
-  /** Saves `contents` via a native save dialog; resolves false if the user cancels. */
-  exportCredentials: (contents: string) => action<boolean>('exportCredentials', { contents }),
-  /** Reads a backup picked in a native open dialog; resolves null if the user cancels. */
-  importCredentials: () => action<string | null>('importCredentials'),
+  /**
+   * Writes a native-selected backup containing credentials held only by the OS vault plus these
+   * nonsecret UI preferences. `false` means the save dialog was cancelled.
+   */
+  exportCredentials: (settings?: { uimode: string | null; alwaysOnTopChecked: string | null }) =>
+    action<boolean>('exportCredentials', { settings }),
+  /** Imports a native-picked backup and returns only optional nonsecret UI preferences. */
+  importCredentials: () =>
+    action<{ uimode?: string | null; alwaysOnTopChecked?: string | null } | null>(
+      'importCredentials',
+    ),
   showContextMenu: (config: ContextMenuConfig, popup = false) =>
     action<void>('showContextMenu', { ...config, popup }),
+  showDeviceMenu: (config: ContextMenuConfig, position: { x: number; y: number }) =>
+    action<void>('showDeviceMenu', { ...config, ...position }),
 
-  scan: () => request<string[]>('scan'),
-  startPair: (deviceLabel: string) => request<void>('startPair', { deviceLabel }),
+  loadDevices: () => action<SavedDevice[]>('loadDevices'),
+  activeDevice: () => action<string | null>('activeDevice'),
+  selectDevice: (identifier: string | null) => action<void>('selectDevice', { identifier }),
+  removeDevice: (identifier: string) => action<void>('removeDevice', { identifier }),
+  migrateDevices: (legacy: { devices: string | null; active: string | null }) =>
+    action<void>('migrateDevices', legacy),
+
+  scan: () => backendRequest<string[]>('scan'),
+  startPair: (deviceLabel: string) => backendRequest<void>('startPair', { deviceLabel }),
   /** Null if pairing was cancelled while the TV checked the PIN. */
-  finishPair: (pin: string) => request<PairResult | null>('finishPair', { pin }),
-  /** Connects to `credentials`, leaving pairing; resolves at once, progress comes as state. */
-  connect: (credentials: ATVCredentials) => request<void>('connect', credentials),
-  /** Wake and sidecar restarts: like connect, but the sidecar ignores it while pairing. */
-  reconnect: (credentials: ATVCredentials) => request<void>('reconnect', credentials),
-  disconnect: () => request<void>('disconnect'),
+  finishPair: (pin: string) => backendRequest<SavedDevice | null>('finishPair', { pin }),
+  /** Connects to the vault credential for `identifier`; progress comes as state. */
+  connect: (identifier: string) => backendRequest<void>('connect', { identifier }),
+  /** Like connect, but ignored while pairing. */
+  reconnect: (identifier: string) => backendRequest<void>('reconnect', { identifier }),
+  disconnect: () => backendRequest<void>('disconnect'),
   /** Presses `key`; `hold` holds it for a second, as a long press does. */
-  sendKey: (key: string, hold = false) => request<void>('sendKey', { key, hold }),
+  sendKey: (key: string, hold = false) => backendRequest<void>('sendKey', { key, hold }),
   /** AirPlay speakers on the network, after a 2 s scan, with whether each is selected. */
-  speakers: () => request<Speaker[]>('speakers'),
+  speakers: () => backendRequest<Speaker[]>('speakers'),
   /** Adds the speaker to the TV's outputs (`on`) or removes it. */
-  setSpeaker: (id: string, on: boolean) => request<void>('setSpeaker', { id, on }),
+  setSpeaker: (id: string, on: boolean) => backendRequest<void>('setSpeaker', { id, on }),
   /** Sets the absolute volume, 0 to 100. */
-  setVolume: (level: number) => request<void>('setVolume', { level }),
+  setVolume: (level: number) => backendRequest<void>('setVolume', { level }),
   /** Wakes the TV if it is asleep, otherwise puts it to sleep. */
-  togglePower: () => request<void>('power'),
+  togglePower: () => backendRequest<void>('power'),
   /** Moves the playing item to `seconds` from its start. */
-  seek: (seconds: number) => request<void>('seek', { seconds }),
+  seek: (seconds: number) => backendRequest<void>('seek', { seconds }),
 
   onShortcutWin: (callback: () => void) => subscribe('shortcutWin', callback),
   onPowerResume: (callback: () => void) => subscribe('powerResume', callback),
@@ -201,6 +214,12 @@ export const desktopAPI = {
       }
       callback(String(data));
     }),
+  onCompanionState: (callback: (status: CompanionStatus) => void) =>
+    subscribe('backend:companion-state', (data) => callback(data as CompanionStatus)),
+  onTextFocus: (callback: (state: TextFocusState) => void) =>
+    subscribe('backend:text-focus', (data) => callback(data as TextFocusState)),
+  onTextInput: (callback: (state: TextInputState) => void) =>
+    subscribe('backend:text-input', (data) => callback(data as TextInputState)),
   onContextMenuAction: (callback: (action: string, payload?: string) => void) =>
     subscribe('context-menu-action', (data) => {
       if (

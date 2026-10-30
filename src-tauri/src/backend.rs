@@ -19,10 +19,10 @@ use tokio::sync::{oneshot, watch};
 type Reply = Result<Value, String>;
 type Pending = Mutex<HashMap<u64, oneshot::Sender<Reply>>>;
 
-/// Bounds every request so one hung library call cannot leave the UI waiting forever. The
-/// sidecar's own timeouts are at most 30 s (pairing); this is longer so their more specific
-/// errors arrive first.
+/// Bounds every request so one hung library call cannot leave the UI waiting forever.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(35);
+/// Companion pairing may spend 30 s establishing HAP then 15 s completing the PIN exchange.
+const COMPANION_PAIR_TIMEOUT: Duration = Duration::from_secs(50);
 const TIMEOUT_MESSAGE: &str = "The Apple TV did not respond in time. Please try again.";
 
 struct Inner {
@@ -219,10 +219,14 @@ fn launch(app: &AppHandle) -> Result<Arc<Inner>, String> {
     Ok(inner)
 }
 
-/// Waits up to `REQUEST_TIMEOUT` for request `id`'s reply. On timeout the pending entry is
-/// removed, so the reader drops a late reply instead of delivering it.
-async fn await_reply(pending: &Pending, id: u64, reply: oneshot::Receiver<Reply>) -> Reply {
-    match tokio::time::timeout(REQUEST_TIMEOUT, reply).await {
+/// Waits for a reply, removing a timed-out request so a late reply is dropped.
+async fn await_reply(
+    pending: &Pending,
+    id: u64,
+    reply: oneshot::Receiver<Reply>,
+    timeout: Duration,
+) -> Reply {
+    match tokio::time::timeout(timeout, reply).await {
         Ok(reply) => reply.map_err(|_| "Apple TV backend response channel closed".to_owned())?,
         Err(_) => {
             pending.lock().unwrap().remove(&id);
@@ -309,6 +313,15 @@ impl Backend {
                 | "setVolume"
                 | "speakers"
                 | "setSpeaker"
+                | "companionStatus"
+                | "startCompanionPair"
+                | "finishCompanionPair"
+                | "cancelCompanionPair"
+                | "apps"
+                | "launchApp"
+                | "setText"
+                | "clearText"
+                | "touch"
         ) {
             return Err("Unsupported Apple TV operation".into());
         }
@@ -344,7 +357,12 @@ impl Backend {
         if let Err(error) = written {
             inner.fail(format!("Cannot write to Apple TV backend: {error}"));
         }
-        await_reply(&inner.pending, id, receiver).await
+        let timeout = if method == "finishCompanionPair" {
+            COMPANION_PAIR_TIMEOUT
+        } else {
+            REQUEST_TIMEOUT
+        };
+        await_reply(&inner.pending, id, receiver, timeout).await
     }
 
     pub fn shutdown(&self) {
@@ -439,7 +457,7 @@ mod tests {
             let pending = Pending::default();
             let (sender, receiver) = oneshot::channel();
             pending.lock().unwrap().insert(7, sender);
-            let reply = await_reply(&pending, 7, receiver).await;
+            let reply = await_reply(&pending, 7, receiver, REQUEST_TIMEOUT).await;
             assert_eq!(reply, Err(TIMEOUT_MESSAGE.into()));
             // The reader finds no entry for a late reply, so it is dropped.
             assert!(pending.lock().unwrap().is_empty());

@@ -11,18 +11,14 @@
     <link rel="stylesheet" href="css/loaders.css" />
     <link rel="stylesheet" href="css/main.css" />
     <link rel="stylesheet" href="css/updater.css" />
+    <link rel="stylesheet" href="css/companion.css" />
   </head>
 
   <body>
     <!-- Header -->
     <div class="center" id="keyboardButtonDiv">
       <div class="topText">
-        <button
-          id="topTextHeader"
-          type="button"
-          aria-haspopup="menu"
-          title="Switch device or open settings"
-        >
+        <button id="topTextHeader" type="button" aria-haspopup="menu" title="Switch Apple TV">
           Apple TV Remote<span id="connectionDot" class="connection-dot" aria-hidden="true"></span
           ><span class="device-chevron" aria-hidden="true">⌄</span>
         </button>
@@ -85,6 +81,7 @@
                 <div class="pin-slot" aria-hidden="true"></div>
                 <div class="pin-slot" aria-hidden="true"></div>
               </div>
+              <button id="retryPairSave" class="pair-cancel-btn" hidden>Retry saving</button>
             </div>
           </div>
           <button id="cancelPairing" class="pair-cancel-btn">Cancel</button>
@@ -195,26 +192,12 @@
       <div id="settingsPanel" style="display: none">
         <div class="settings-body">
           <div class="settings-section">
-            <div class="settings-label">Appearance</div>
-            <div class="settings-radio-group" id="themeRadios">
-              <label><input type="radio" name="theme" value="systemmode" /> Follow system</label>
-              <label><input type="radio" name="theme" value="darkmode" /> Dark</label>
-              <label><input type="radio" name="theme" value="lightmode" /> Light</label>
-            </div>
-          </div>
-          <div class="settings-section">
-            <label class="settings-toggle">
-              <input type="checkbox" id="settingsAlwaysOnTop" />
-              <span>Always on top</span>
-            </label>
-          </div>
-          <div class="settings-section">
             <div class="settings-label">Saved Devices</div>
             <div id="settingsDeviceList"></div>
           </div>
           <div class="settings-section">
             <div class="settings-label">Move saved remotes</div>
-            <p>Importing is explicit; Electron storage is never read automatically.</p>
+            <p>Pairing keys are stored securely. Export a backup to move saved remotes.</p>
             <button id="settingsExportCredentialsBtn" class="settings-btn">
               Export Credentials
             </button>

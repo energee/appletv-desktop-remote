@@ -25,10 +25,10 @@
 
 ## Everything the Siri Remote does. Nothing to pick up.
 
-- **Touchpad.** Scroll with two fingers to move around, and click to select. Press and hold for a second to long-press, which opens context menus. Same as the remote on your couch.
+- **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Smooth touch** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture.
 - **Now playing.** See what's on, then play, pause, and scrub from the seek bar.
 - **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away.
-- **Yours to set up.** Click the device name for the device menu, or right-click anywhere. **Settings** has the theme, always-on-top, saved remotes, and the hotkey. **Quit** stops it.
+- **Device picker.** Click the device name to switch Apple TVs or pair another. Right-click for theme, always-on-top, speakers, updates, and other actions. **Settings** manages saved remotes, the hotkey, backups, and update preferences.
 
 ## Or just use the keyboard
 
@@ -58,6 +58,16 @@ Hold Option (Alt on Windows) and the remote labels every button with its key.
 2. **Open it.** The app isn't notarized yet, so macOS blocks the first launch. Open System Settings, go to Privacy & Security, and click **Open Anyway**. On Windows, if SmartScreen appears, click **More info**, then **Run anyway**.
 3. **Pair.** Pick your Apple TV and type the code it shows on screen. The code is sent on the fourth digit, and a wrong one brings up a new code. Your computer and Apple TV need to be on the same network.
 
+### Apps, text input, and smooth touch
+
+**Apps**, **Keyboard**, and **Smooth touch** use Apple's Companion connection. The first time you request one, choose **Show pairing code** and enter the second code displayed on the TV. Ordinary remote pairing still needs only the original AirPlay code; scrolling never starts another pairing.
+
+**Apps** lists installed apps to launch. With Companion connected, focusing a text field on the TV shows an editable text box in the remote. Edits are debounced; typing, spaces, and cursor keys stay in the text field instead of sending remote shortcuts. **Smooth touch** toggles continuous touch gestures for the selected device.
+
+Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code.
+
+Credential backups are read and written through native file dialogs; the renderer receives device names and IDs, not pairing keys. Exported backups contain keys in plaintext: keep them private. Importing replaces the saved-device list and active selection with the backup.
+
 ### Upgrading from the Electron version (0.5.x)
 
 Saved Apple TVs don't carry over: pair again, or use **Settings → Import Credentials** with a backup. **Export Credentials** saves one for next time; treat the file as a secret. Your hotkey is kept.
@@ -85,6 +95,8 @@ pnpm build        # bundle for this machine (pnpm build:mac for Apple silicon)
 ```
 
 The webview (`src/renderer`) displays connection state and owns the standard Tauri updater resource; the Node backend (`src/sidecar`) owns the Apple TV connection, and the Rust host (`src-tauri`) handles the tray, window, hotkeys, native update verification/installation, and macOS Liquid Glass. CI runs the checks on every pull request; version tags build the macOS and Windows releases. The landing page lives in `docs/` and is served by GitHub Pages.
+
+The sidecar's pnpm patch opens the Companion remote-service session before `TVRCSessionStart`, matching the [required protocol order](https://github.com/postlund/pyatv/pull/2855). Keep this patch until the dependency includes that initialization; frozen installs apply it from `app/patches`.
 
 Local macOS builds are ad-hoc signed. A notarized release needs a Developer ID identity (`bundle.macOS.signingIdentity`) and must re-sign the bundled `node` (see `scripts/build-sidecar.mjs`). The transparent glass window uses Tauri's `macOSPrivateApi`, which rules out the Mac App Store.
 
