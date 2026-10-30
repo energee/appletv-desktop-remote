@@ -1,7 +1,33 @@
+import { getVersion } from '@tauri-apps/api/app';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 import { desktopAPI } from '../shared/desktop-api';
-import type { UpdateState } from '../shared/update';
 
-/** The native host owns the download and all security decisions; this view can be dismissed. */
+type Status =
+  | 'idle'
+  | 'checking'
+  | 'upToDate'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'installing'
+  | 'error';
+type FailedOperation = 'check' | 'download' | 'install' | 'restart';
+type Copy = readonly [title: string, action: string, description: string];
+
+const AUTO_CHECK_KEY = 'autoUpdateChecks';
+const DAY = 24 * 60 * 60 * 1000;
+const COPY: Record<Status, Copy> = {
+  idle: ['Software update', 'Check for updates', 'Check for a newer version.'],
+  checking: ['Checking for updates…', 'Checking…', 'Checking the latest release.'],
+  upToDate: ['You’re up to date', 'Check again', 'Latest version installed.'],
+  available: ['Update available', 'Download update', 'Restart required to install.'],
+  downloading: ['Downloading update', 'Downloading…', 'You can keep using the remote.'],
+  ready: ['Ready to install', 'Install & restart', 'Downloaded and verified.'],
+  installing: ['Installing update', 'Installing…', 'The app will restart automatically.'],
+  error: ['Update failed', 'Try again', 'You can keep using the current version.'],
+};
+
+/** Owns the updater resource so downloads continue while this sheet is dismissed. */
 export function initUpdater(): void {
   const dialog = document.getElementById('updateDialog') as HTMLDialogElement;
   const pill = document.getElementById('updatePill') as HTMLButtonElement;
@@ -10,10 +36,17 @@ export function initUpdater(): void {
   const autoCheck = document.getElementById('settingsAutoUpdate') as HTMLInputElement;
   const settingsButton = document.getElementById('settingsUpdateBtn') as HTMLButtonElement;
   const progress = document.getElementById('updateProgress') as HTMLProgressElement;
-  let state: UpdateState | undefined;
-  let localError: string | null = null;
-  let commandPending = false;
-  let preferencePending = false;
+  let update: Update | undefined;
+  let status: Status = 'idle';
+  let failed: FailedOperation | undefined;
+  let error: string | undefined;
+  let version = '';
+  let downloaded = 0;
+  let total: number | undefined;
+  let finished = false;
+  let bytesReady = false;
+  let installed = false;
+  let automatic = localStorage.getItem(AUTO_CHECK_KEY) !== 'false';
 
   function text(id: string, value: string): void {
     document.getElementById(id)!.textContent = value;
@@ -23,165 +56,129 @@ export function initUpdater(): void {
     document.getElementById(id)!.hidden = !show;
   }
 
+  function isBusy(): boolean {
+    return ['checking', 'downloading', 'installing'].includes(status);
+  }
+
   function render(): void {
-    const status = localError ? 'error' : (state?.status ?? 'idle');
-    const version = state?.version;
-    const current = state?.currentVersion;
-    const error = localError ?? state?.error;
-    const busy = status === 'checking' || status === 'downloading' || status === 'installing';
-    pill.hidden =
-      !version || !['available', 'downloading', 'ready', 'installing', 'error'].includes(status);
-    let pillLabel = 'Update available';
-    if (status === 'downloading') pillLabel = 'Downloading update';
+    const [title, action, description] = COPY[status];
+    pill.hidden = !update || status === 'checking';
+    let pillLabel = title;
     if (status === 'ready') pillLabel = 'Update ready';
-    if (status === 'installing') pillLabel = 'Installing update';
     if (status === 'error') pillLabel = 'Update needs attention';
     text('updatePillLabel', pillLabel);
-    text('settingsAppVersion', current ? `Version ${current}` : 'Apple TV Remote');
-    autoCheck.checked = state?.autoCheck ?? true;
-    autoCheck.disabled = !state || preferencePending;
-    primary.disabled = busy || commandPending;
+    text('settingsAppVersion', version ? `Version ${version}` : 'Apple TV Remote');
+    autoCheck.checked = automatic;
+    primary.disabled = isBusy();
     later.disabled = status === 'installing';
-    text('updateLater', status === 'downloading' ? 'Keep using remote' : 'Later');
-    if (status === 'upToDate' || status === 'idle' || status === 'error')
-      text('updateLater', 'Done');
-
-    let title = 'Software update';
-    let description = 'Check for a newer version of Apple TV Remote.';
-    let action = 'Check for updates';
-    let footnote = 'Updates are verified before installation.';
-    switch (status) {
-      case 'checking':
-        title = 'Checking for updates…';
-        description = 'Checking for the latest version of Apple TV Remote.';
-        action = 'Checking…';
-        break;
-      case 'upToDate':
-        title = 'You’re up to date';
-        description = 'You’re running the latest version.';
-        action = 'Check again';
-        break;
-      case 'available':
-        title = 'Update available';
-        description = 'A new version of Apple TV Remote is available.';
-        action = 'Download update';
-        footnote = 'Installation requires a restart.';
-        break;
-      case 'downloading':
-        title = 'Downloading update';
-        description = 'You can continue using the remote.';
-        action = 'Downloading…';
-        footnote = 'The download will be verified before installation.';
-        break;
-      case 'ready':
-        title = 'Ready to install';
-        description = 'The update is downloaded and verified.';
-        action = 'Install & restart';
-        footnote = 'Your saved devices and settings will be kept.';
-        break;
-      case 'installing':
-        title = 'Installing update';
-        description = 'Apple TV Remote will restart automatically.';
-        action = 'Installing…';
-        footnote = 'Your saved devices and settings will be kept.';
-        break;
-      case 'error':
-        title = 'Update failed';
-        description = 'The update could not be completed.';
-        action = 'Try again';
-        footnote = 'You can continue using the current version.';
-        break;
-    }
+    let dismiss = update ? 'Later' : 'Done';
+    if (status === 'downloading') dismiss = 'Keep using remote';
+    text('updateLater', dismiss);
     text('updateTitle', title);
     text('updateDescription', description);
     text('updatePrimary', action);
-    text('updateFootnote', footnote);
-    text(
-      'updateVersion',
-      version && current ? `${current} → ${version}` : `Version ${current ?? '—'}`,
-    );
-    visible('updateVersion', Boolean(current));
-    const showNotes = Boolean(state?.notes) && ['available', 'ready'].includes(status);
-    visible('updateNotesSection', showNotes);
-    // Release content is untrusted; never render it as HTML or execute embedded links.
-    text('updateNotes', state?.notes ?? '');
+    text('updateVersion', update ? `${version} → ${update.version}` : `Version ${version || '—'}`);
+    visible('updateVersion', Boolean(version));
+    visible('updateNotesSection', Boolean(update?.body) && ['available', 'ready'].includes(status));
+    text('updateNotes', update?.body ?? '');
     text('updateError', error ?? '');
     visible('updateError', Boolean(error));
-    visible('updateProgressSection', busy);
-    const total = state?.total;
-    if (status === 'downloading' && state && total && total > 0) {
-      const percent = Math.min(100, Math.max(0, (state.downloaded / total) * 100));
+    visible('updateProgressSection', status === 'downloading' || status === 'installing');
+    let label = `${(downloaded / 1048576).toFixed(1)} MB downloaded`;
+    if (status === 'installing') label = 'Installing and restarting…';
+    if (finished && status === 'downloading') label = 'Verifying signature…';
+    if (status === 'downloading' && total) {
+      const percent = Math.min(100, (downloaded / total) * 100);
       progress.value = percent;
-      const downloaded = (state.downloaded / 1048576).toFixed(1);
-      const size = (total / 1048576).toFixed(1);
-      text(
-        'updateProgressLabel',
-        percent >= 100
-          ? 'Verifying signature…'
-          : `${downloaded} of ${size} MB · ${Math.floor(percent)}%`,
-      );
+      if (!finished)
+        label = `${(downloaded / 1048576).toFixed(1)} of ${(total / 1048576).toFixed(1)} MB · ${Math.floor(percent)}%`;
     } else {
       progress.removeAttribute('value');
-      let label = 'Connecting securely…';
-      if (status === 'installing') label = 'Installing and restarting…';
-      if (status === 'downloading')
-        label = `${((state?.downloaded ?? 0) / 1048576).toFixed(1)} MB downloaded`;
-      text('updateProgressLabel', label);
     }
+    text('updateProgressLabel', label);
   }
 
-  function accept(next: UpdateState): void {
-    if (state && next.revision < state.revision) return;
-    state = next;
-    localError = null;
-    render();
-  }
-
-  async function run(command: () => Promise<void>): Promise<void> {
-    if (commandPending) return;
-    commandPending = true;
-    localError = null;
+  async function execute(
+    next: Status,
+    operation: FailedOperation,
+    task: () => Promise<void>,
+  ): Promise<void> {
+    if (isBusy()) return;
+    status = next;
+    error = undefined;
+    failed = undefined;
     render();
     try {
-      await command();
-    } catch (error) {
-      localError = error instanceof Error ? error.message : String(error);
-    } finally {
-      commandPending = false;
-      render();
+      await task();
+    } catch (reason) {
+      status = 'error';
+      failed = operation;
+      error = reason instanceof Error ? reason.message : String(reason);
     }
+    render();
   }
 
-  async function open(check: boolean): Promise<void> {
+  function checkForUpdate(): void {
+    if (update) return;
+    void execute('checking', 'check', async () => {
+      update = (await check()) ?? undefined;
+      status = update ? 'available' : 'upToDate';
+    });
+  }
+
+  function download(): void {
+    if (!update || bytesReady) return;
+    downloaded = 0;
+    total = undefined;
+    finished = false;
+    void execute('downloading', 'download', async () => {
+      await update!.download((event) => {
+        if (event.event === 'Started') total = event.data.contentLength;
+        else if (event.event === 'Progress') downloaded += event.data.chunkLength;
+        else finished = true;
+        render();
+      });
+      bytesReady = true;
+      status = 'ready';
+    });
+  }
+
+  function install(): void {
+    if (!update || !bytesReady) return;
+    if (installed) {
+      void execute('installing', 'restart', desktopAPI.restart);
+      return;
+    }
+    void execute('installing', 'install', async () => {
+      await update!.install();
+      installed = true;
+      await desktopAPI.restart();
+    });
+  }
+
+  function retry(): void {
+    if (failed === 'download') download();
+    else if (failed === 'install' || failed === 'restart') install();
+    else checkForUpdate();
+  }
+
+  function open(checkNow: boolean): void {
     if (!dialog.open) dialog.showModal();
     render();
-    try {
-      accept(await desktopAPI.updateStatus());
-      if (check && state && ['idle', 'upToDate', 'error'].includes(state.status)) {
-        await run(desktopAPI.updateCheck);
-      }
-    } catch (error) {
-      localError = error instanceof Error ? error.message : String(error);
-      render();
-    }
-    // A disabled primary button cannot receive focus during a background operation.
+    if (checkNow && !update) checkForUpdate();
     if (dialog.open) (primary.disabled ? later : primary).focus();
   }
 
   primary.addEventListener('click', () => {
-    if (!state) {
-      void open(true);
-      return;
-    }
-    if (!localError && state.status === 'available') void run(desktopAPI.updateDownload);
-    else if (!localError && state.status === 'ready') void run(desktopAPI.updateInstall);
-    else void run(desktopAPI.updateCheck);
+    if (status === 'available') download();
+    else if (status === 'ready') install();
+    else if (status === 'error') retry();
+    else checkForUpdate();
   });
   later.addEventListener('click', () => dialog.close());
   dialog.addEventListener('cancel', (event) => {
-    if (state?.status === 'installing') event.preventDefault();
+    if (status === 'installing') event.preventDefault();
   });
-  // Disabling a focused button can move focus to body; guard there too, not just in the dialog.
   window.addEventListener(
     'keydown',
     (event) => {
@@ -207,31 +204,25 @@ export function initUpdater(): void {
     control.addEventListener('keydown', (event) => event.stopPropagation());
   }
   autoCheck.addEventListener('change', () => {
-    const value = autoCheck.checked;
-    preferencePending = true;
-    autoCheck.disabled = true;
-    void desktopAPI
-      .updateAutoCheck(value)
-      .then(accept)
-      .catch((error: unknown) => {
-        localError = error instanceof Error ? error.message : String(error);
-        if (!dialog.open) dialog.showModal();
-      })
-      .finally(() => {
-        preferencePending = false;
-        render();
-      });
+    automatic = autoCheck.checked;
+    localStorage.setItem(AUTO_CHECK_KEY, String(automatic));
   });
-  desktopAPI.onUpdateState(accept);
   desktopAPI.onContextMenuAction((action) => {
     if (action === 'openUpdates') void open(true);
   });
+  void Promise.all([getVersion(), desktopAPI.isDevelopment()])
+    .then(([currentVersion, development]) => {
+      version = currentVersion;
+      render();
+      if (!development) {
+        window.setTimeout(() => {
+          if (automatic) checkForUpdate();
+          window.setInterval(() => {
+            if (automatic) checkForUpdate();
+          }, DAY);
+        }, 15_000);
+      }
+    })
+    .catch((reason: unknown) => console.error('Unable to initialize updater:', reason));
   render();
-  void desktopAPI
-    .updateStatus()
-    .then(accept)
-    .catch((error: unknown) => {
-      // Startup failures must never cover the remote; a manual check exposes the error.
-      console.error('Unable to read update status:', error);
-    });
 }
