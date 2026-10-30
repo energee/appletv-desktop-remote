@@ -7,7 +7,6 @@ mod desktop;
 mod macos_gesture;
 #[cfg(target_os = "macos")]
 mod macos_wake;
-mod updater;
 #[cfg(windows)]
 mod windows_wake;
 
@@ -37,9 +36,8 @@ async fn desktop_action(
     action: String,
     args: Value,
     context: tauri::State<'_, Arc<Mutex<Option<desktop::ContextMenuConfig>>>>,
-    updater: tauri::State<'_, Arc<updater::Updater>>,
 ) -> Result<Value, String> {
-    desktop::desktop_action(app, action, args, context, updater).await
+    desktop::desktop_action(app, action, args, context).await
 }
 
 pub fn run() {
@@ -76,9 +74,6 @@ pub fn run() {
             }
             // Never fails or blocks: a sidecar startup error is returned by backend requests.
             app.manage(Backend::start(app.handle()));
-            let updater = Arc::new(updater::Updater::new(app.handle()));
-            updater::schedule(app.handle().clone(), Arc::clone(&updater));
-            app.manage(updater);
             desktop::setup(app.handle(), Arc::clone(&menu_context))
                 .map_err(std::io::Error::other)?;
             Ok(())

@@ -247,14 +247,14 @@
       aria-describedby="updateDescription"
     >
       <div class="update-sheet">
-        <div class="update-eyebrow">Apple TV Remote</div>
+        <div class="settings-label update-eyebrow">Apple TV Remote</div>
         <h1 id="updateTitle" aria-live="polite">Software update</h1>
         <p id="updateDescription" class="update-description">
           Check for a newer version of Apple TV Remote.
         </p>
         <div id="updateVersion" class="update-version" hidden></div>
         <section id="updateNotesSection" class="update-notes-section" hidden>
-          <h2>What’s new</h2>
+          <h2 class="settings-label">What’s new</h2>
           <div id="updateNotes" class="update-notes" tabindex="0"></div>
         </section>
         <div id="updateProgressSection" class="update-progress-section" hidden>
@@ -263,10 +263,10 @@
         </div>
         <p id="updateError" class="update-error" role="alert" hidden></p>
         <div class="update-actions">
-          <button id="updatePrimary" class="update-primary">Check for updates</button>
-          <button id="updateLater" class="update-secondary">Not now</button>
+          <button id="updatePrimary" class="settings-btn update-primary">Check for updates</button>
+          <button id="updateLater" class="settings-back-btn update-secondary">Not now</button>
         </div>
-        <p id="updateFootnote" class="update-footnote">Updates are verified before installation.</p>
+        <p id="updateFootnote" class="update-footnote">Saved devices and settings are kept.</p>
       </div>
     </dialog>
     <script src="renderer.js"></script>
