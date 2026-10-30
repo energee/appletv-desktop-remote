@@ -1,6 +1,7 @@
 import { companionAPI } from '../shared/companion-api';
 import type { CompanionStatus } from '../shared/companion-api';
 import { refreshDevices } from './state';
+import { icon } from './icons';
 
 let status: CompanionStatus = { status: 'unpaired', identifier: null };
 let dialog: HTMLDialogElement;
@@ -13,7 +14,8 @@ let inlineError: HTMLElement;
 let inlineText: HTMLInputElement;
 let keyboardText: HTMLInputElement | null = null;
 let clearButton: HTMLButtonElement | null = null;
-let smoothButton: HTMLButtonElement;
+let keyboardButton: HTMLButtonElement;
+let smoothToggle: HTMLInputElement;
 let smoothTouchEnabled = false;
 let pairingOpen = false;
 let operation = 0;
@@ -75,8 +77,11 @@ function renderText(): void {
     if (input.value !== desiredText) input.value = desiredText;
     input.disabled = !textFocused || !textReady;
   }
-  inlineText.hidden = !textFocused || status.status !== 'connected';
+  const visible = textFocused && status.status === 'connected';
+  inlineText.hidden = keyboardButton.hidden = !visible;
+  keyboardButton.disabled = !textReady;
   if (clearButton) clearButton.disabled = !textFocused || !textReady;
+  if (!visible && keyboardText) dismissSheet();
 }
 
 function resetText(): void {
@@ -309,15 +314,18 @@ export async function companionTouchAdapter(
 }
 
 export function initCompanion(): void {
-  const host = document.getElementById('runningElements');
+  const host = document.querySelector('#runningElements .remote-body');
   if (!host || document.getElementById('companionTools')) return;
   host.insertAdjacentHTML(
     'beforeend',
     `
     <div id="companionTools" class="companion-tools">
-      <button type="button" id="companionApps">Apps</button>
-      <button type="button" id="companionKeyboard">Keyboard</button>
-      <button type="button" id="companionSmooth" aria-pressed="false">Smooth touch</button>
+      <button type="button" id="companionApps" aria-label="Apps" title="Apps">
+        <span aria-hidden="true">${icon('layout-grid')}</span>
+      </button>
+      <button type="button" id="companionKeyboard" aria-label="Keyboard" title="Keyboard" hidden>
+        <span aria-hidden="true">${icon('keyboard')}</span>
+      </button>
     </div>
     <input id="companionText" aria-label="Apple TV text" autocomplete="off" hidden />
     <p id="companionError" class="companion-error" role="alert" hidden></p>`,
@@ -339,23 +347,18 @@ export function initCompanion(): void {
   dialogError = document.getElementById('companionDialogError')!;
   inlineError = document.getElementById('companionError')!;
   inlineText = document.getElementById('companionText') as HTMLInputElement;
-  smoothButton = document.getElementById('companionSmooth') as HTMLButtonElement;
+  keyboardButton = document.getElementById('companionKeyboard') as HTMLButtonElement;
+  smoothToggle = document.getElementById('settingsSmoothTouch') as HTMLInputElement;
   document.getElementById('companionApps')!.addEventListener('click', () => void openApps());
-  document
-    .getElementById('companionKeyboard')!
-    .addEventListener('click', () => void openKeyboard());
-  smoothButton.addEventListener(
-    'click',
-    () =>
-      void requestFeature('Smooth touch', async () => {
-        smoothTouchEnabled = !smoothTouchEnabled;
-        localStorage.setItem(
-          `companion-smooth-touch:${status.identifier}`,
-          String(smoothTouchEnabled),
-        );
-        smoothButton.setAttribute('aria-pressed', String(smoothTouchEnabled));
-      }),
-  );
+  keyboardButton.addEventListener('click', () => void openKeyboard());
+  smoothToggle.addEventListener('change', () => {
+    const enabled = smoothToggle.checked;
+    smoothToggle.checked = smoothTouchEnabled;
+    void requestFeature('Smooth scrolling', async () => {
+      localStorage.setItem(`companion-smooth-touch:${status.identifier}`, String(enabled));
+      smoothTouchEnabled = smoothToggle.checked = enabled;
+    });
+  });
   inlineText.addEventListener('input', () => queueText(inlineText.value));
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();
@@ -378,7 +381,8 @@ export function initCompanion(): void {
     status = next;
     smoothTouchEnabled =
       localStorage.getItem(`companion-smooth-touch:${next.identifier}`) === 'true';
-    smoothButton.setAttribute('aria-pressed', String(smoothTouchEnabled));
+    smoothToggle.checked = smoothTouchEnabled;
+    smoothToggle.disabled = !next.identifier;
     renderText();
     if (next.error) showError(new Error(next.error));
     if (waitingFeature?.current === operation && next.status === 'connected') {
