@@ -21,6 +21,9 @@ class MockAppleTV extends EventEmitter {
   powerState = 'unknown';
   wake = vi.fn(async () => {});
   setVolume = vi.fn(async (_level: number) => {});
+  outputDevices: { name: string; identifier: string }[] = [];
+  addOutputDevices = vi.fn(async (_ids: string[]) => {});
+  removeOutputDevices = vi.fn(async (_ids: string[]) => {});
   suspend = vi.fn(async () => {});
   close = vi.fn(async () => {});
   constructor(discovered: { deviceId?: string }) {
@@ -325,6 +328,16 @@ describe('ATVService', () => {
       expect(service.state).toEqual({ status: 'connected' });
     });
 
+    it('forwards the selected outputs only from the current device', async () => {
+      const outputs = vi.fn();
+      service.on('outputs', outputs);
+      const first = await connected(tv1);
+      const second = await connected(tv2);
+      first.emit('outputDevices', [{ name: 'Old', identifier: 'x' }]);
+      second.emit('outputDevices', [{ name: 'Kitchen', identifier: 'psi-kitchen' }]);
+      expect(outputs.mock.calls).toEqual([[['psi-kitchen']]]);
+    });
+
     it('forwards absolute volume only from the current device, null once it is lost', async () => {
       const volume = vi.fn();
       service.on('volume', volume);
@@ -549,6 +562,56 @@ describe('ATVService', () => {
       const sending = expect(service.sendKey('up')).rejects.toThrow('did not respond');
       await flush(5000);
       await sending;
+    });
+  });
+
+  describe('speakers()', () => {
+    // A HomePod and the bedroom TV: AirPlay receivers, each with the output ID (psi) that
+    // addOutputDevices takes. The connected TV and receivers without a psi are left out.
+    const kitchen = {
+      name: 'Kitchen',
+      address: '1.2.3.6',
+      deviceId: 'hp1',
+      airplayPsi: 'psi-kitchen',
+      model: 'AudioAccessory5,1',
+    };
+    const bedroomTv = { ...bedroom, airplayPsi: 'psi-bedroom', model: 'AppleTV6,2' };
+    const noPsi = {
+      name: 'Old speaker',
+      address: '1.2.3.7',
+      deviceId: 'old',
+      model: 'AirPort10,115',
+    };
+
+    it('lists the other AirPlay receivers, marking the selected ones', async () => {
+      const device = await connected();
+      device.outputDevices = [{ name: 'Kitchen', identifier: 'psi-kitchen' }];
+      mockScan.mockResolvedValue([
+        { ...living, airplayPsi: 'psi-living' },
+        kitchen,
+        bedroomTv,
+        noPsi,
+      ]);
+
+      await expect(service.speakers()).resolves.toEqual([
+        { id: 'psi-kitchen', name: 'Kitchen', selected: true },
+        { id: 'psi-bedroom', name: 'Bedroom', selected: false },
+      ]);
+      // Unfiltered: speakers aren't Apple TVs.
+      expect(mockScan.mock.lastCall![0].filter).toBeUndefined();
+    });
+
+    it('adds or removes one speaker', async () => {
+      const device = await connected();
+      await service.setSpeaker('psi-kitchen', true);
+      await service.setSpeaker('psi-bedroom', false);
+      expect(device.addOutputDevices).toHaveBeenCalledWith(['psi-kitchen']);
+      expect(device.removeOutputDevices).toHaveBeenCalledWith(['psi-bedroom']);
+    });
+
+    it('needs a connection', async () => {
+      await expect(service.speakers()).rejects.toThrow('Not connected');
+      await expect(service.setSpeaker('psi-kitchen', true)).rejects.toThrow('Not connected');
     });
   });
 

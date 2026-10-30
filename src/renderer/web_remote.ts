@@ -9,6 +9,7 @@ import {
   type ConnectionDotState,
   type ConnectionState,
   type NowPlayingInfo,
+  type Speaker,
 } from '../shared/types';
 import { desktopAPI } from '../shared/desktop-api';
 import { icon } from './icons';
@@ -16,6 +17,8 @@ import { $, $$, safeParse } from './state';
 import { scanDevices, startPair, finishPair } from './atv_remote';
 
 let qPresses = 0;
+/** AirPlay speakers for the menu, scanned once per connection; empty while not connected. */
+let speakers: Speaker[] = [];
 /** The connected TV reported it is asleep; any other connection state clears it. */
 let asleep = false;
 /** The sidecar's latest connection state. */
@@ -75,6 +78,11 @@ export function initIPC(): void {
   desktopAPI.onAtvState(renderState);
   desktopAPI.onAtvNowPlaying(updateNowPlaying);
   desktopAPI.onAtvVolume(showVolume);
+  // The TV confirmed a change of outputs: update the checks without scanning again.
+  desktopAPI.onAtvOutputs((ids) => {
+    speakers = speakers.map((speaker) => ({ ...speaker, selected: ids.includes(speaker.id) }));
+    handleContextMenu();
+  });
   desktopAPI.onAtvPowerState((power) => {
     asleep = power === 'off';
     if (connection.status === 'connected') updateConnectionDot('connected');
@@ -87,12 +95,19 @@ function renderState(next: ConnectionState): void {
   connection = next;
   if (next.status !== 'connected') asleep = false;
   $('#powerButton')!.style.display = next.status === 'connected' ? '' : 'none';
-  if (next.status !== 'connected') showVolume(null);
+  if (next.status !== 'connected') {
+    showVolume(null);
+    if (speakers.length > 0) {
+      speakers = [];
+      handleContextMenu();
+    }
+  }
   showScreen();
   if (next.status !== 'connected') hideNowPlaying();
   switch (next.status) {
     case 'connected':
       updateConnectionDot('connected');
+      if (previous !== 'connected') void loadSpeakers();
       $('#statusText')!.style.display = 'none';
       handleContextMenu();
       showKeyMap();
@@ -841,6 +856,19 @@ function showPlayPauseIcon(playing: boolean): void {
   if (el) el.innerHTML = icon(playing ? 'pause' : 'play');
 }
 
+// --- Speakers ---
+
+/** Scans for AirPlay speakers for the menu; a failed scan leaves the Speakers menu out. */
+async function loadSpeakers(): Promise<void> {
+  try {
+    const found = await desktopAPI.speakers();
+    if (connection.status === 'connected') speakers = found;
+  } catch (error) {
+    console.error('Speaker scan failed:', error);
+  }
+  handleContextMenu();
+}
+
 // --- Volume ---
 
 /** True while the volume slider is being dragged, so reports do not move it. */
@@ -1019,6 +1047,11 @@ function handleContextMenu(popup = false): void {
         devices,
         uiMode: mode,
         alwaysOnTop: topChecked,
+        speakers: speakers.map(({ id, name, selected }) => ({
+          label: name,
+          id,
+          checked: selected,
+        })),
       },
       popup,
     )
@@ -1046,6 +1079,11 @@ function handleContextMenuAction(action: string, payload?: string): void {
       hideSettings();
       startScan();
       break;
+    case 'toggleSpeaker': {
+      const speaker = speakers.find(({ id }) => id === payload);
+      if (speaker) desktopAPI.setSpeaker(speaker.id, !speaker.selected).catch(showRequestError);
+      break;
+    }
     case 'setTheme':
       if (payload) {
         localStorage.setItem('uimode', payload);
