@@ -1,1 +1,4 @@
 onlyBuiltDependencies: []
+
+patchedDependencies:
+  node-appletv-remote@0.5.0: patches/node-appletv-remote@0.5.0.patch

@@ -1,0 +1,13 @@
+diff --git a/dist/appletv.js b/dist/appletv.js
+index 15d6a354b3114b0bf4663b988a05797537f8aaef..ffe838a3769486c9f5b9d731e9b9688ed77d53a6 100644
+--- a/dist/appletv.js
++++ b/dist/appletv.js
+@@ -434,6 +434,8 @@ export class AppleTV extends EventEmitter {
+                 ['_idsID', credentials.clientId], ['_pubID', this.deviceId], ['_sf', 256], ['_sv', '170.18'],
+                 ['model', this.model], ['name', this.name],
+             ]));
++            // Register com.apple.tvremoteservices before TVRCSessionStart and app/RTI requests.
++            await this.startTouch();
+             connection.sendMessage('_interest', new Map([['_regEvents', ['_iMC']]]));
+             // tvOS 26.4+ (Apple TV HD on 26.6) silently drops power and app-list requests until a TV Remote session
+             // is registered (pyatv #2845). Older TVs reject the message, so failure is ignored.
