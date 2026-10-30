@@ -4,6 +4,7 @@
 #   src-tauri/icons/icon.svg      -> the bundle.icon files (flat icon; Windows, macOS 15 and older)
 #   src-tauri/icons/AppIcon.icon  -> src-tauri/icons/Assets.car (Liquid Glass icon, macOS 26+)
 #   app/images/IconTemplate.svg   -> app/images/IconTemplate.png (menu bar template image)
+#   and copies the 256 px flat icon to docs/icon.png (landing page)
 set -eu
 cd "$(dirname "$0")/.."
 tmp=$(mktemp -d)
@@ -13,12 +14,14 @@ pnpm -s tauri icon src-tauri/icons/icon.svg -o "$tmp/app" >/dev/null
 for file in 32x32.png 128x128.png 128x128@2x.png icon.icns icon.ico; do
   cp "$tmp/app/$file" src-tauri/icons/
 done
+cp src-tauri/icons/128x128@2x.png docs/icon.png
 
 pnpm -s tauri icon app/images/IconTemplate.svg -o "$tmp/tray" -p 36 >/dev/null
 cp "$tmp/tray/36x36.png" app/images/IconTemplate.png
 
 mkdir "$tmp/car"
-xcrun actool src-tauri/icons/AppIcon.icon --compile "$tmp/car" --platform macosx \
+# Absolute path: actool's .icon export fails on a relative one ("no such file", Xcode 27).
+xcrun actool "$PWD/src-tauri/icons/AppIcon.icon" --compile "$tmp/car" --platform macosx \
   --minimum-deployment-target 13.5 --app-icon AppIcon --target-device mac \
   --output-partial-info-plist "$tmp/car/partial.plist" >/dev/null
 cp "$tmp/car/Assets.car" src-tauri/icons/

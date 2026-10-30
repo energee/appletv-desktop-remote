@@ -1,18 +1,92 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <!-- Flat app icon source (Windows, macOS 15 and older); AppIcon.icon is the Liquid Glass
        version. After editing either, run scripts/build-icons.sh.
-       Two colors: a graphite macOS icon squircle and a white Siri Remote with its clickpad and
-       buttons cut out. Shapes traced from the 2nd-generation remote, scaled 1.24x and centered. -->
-  <rect x="100" y="100" width="824" height="824" rx="185" fill="#1c1f26"/>
-  <g transform="translate(42.66 43.9) scale(1.24)">
-    <rect x="296" y="65" width="165" height="625" rx="26" fill="#ffffff"/>
-    <g fill="#1c1f26">
-      <circle cx="378.5" cy="192" r="74"/>
-      <circle cx="344" cy="300" r="29"/>
-      <circle cx="410" cy="300" r="29"/>
-      <circle cx="344" cy="368" r="29"/>
-      <circle cx="344" cy="436" r="29"/>
-      <rect x="381" y="339" width="58" height="126" rx="29"/>
+       A silver 2nd-generation Siri Remote lying on a graphite macOS squircle, seen from above
+       and to the side, in close-up on its top end: power button, black clickpad, top buttons.
+       The remote is drawn flat (centered, 165 x 625, layout measured from Apple's product
+       photo) and tilted into 3D by the group transform: rotate 40 degrees, squash vertically
+       to 0.7 for the viewing angle, scale 3 for the zoom, and translate so the point
+       (0, -160) lands at the squircle's center.
+       Gradients only, no filters: Icon Composer's renderer drops SVG filters. -->
+  <defs>
+    <radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="470" cy="380" r="620">
+      <stop offset="0" stop-color="#3a3f4a"/>
+      <stop offset="1" stop-color="#131519"/>
+    </radialGradient>
+    <radialGradient id="shadow">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="face" gradientUnits="userSpaceOnUse" x1="-82" y1="-312" x2="82" y2="312">
+      <stop offset="0" stop-color="#f7f8fa"/>
+      <stop offset="0.55" stop-color="#dfe1e5"/>
+      <stop offset="1" stop-color="#c3c6cc"/>
+    </linearGradient>
+    <linearGradient id="edge" gradientUnits="userSpaceOnUse" x1="-82" y1="0" x2="115" y2="0">
+      <stop offset="0" stop-color="#b9bcc3"/>
+      <stop offset="1" stop-color="#6f737b"/>
+    </linearGradient>
+    <linearGradient id="black" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#36373c"/>
+      <stop offset="1" stop-color="#0b0b0c"/>
+    </linearGradient>
+    <clipPath id="tile">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <g clip-path="url(#tile)">
+  <g transform="translate(203.5 769.4) scale(1 0.7) rotate(40) scale(3)">
+    <!-- shadow on the table, cast down and right -->
+    <ellipse cx="34" cy="26" rx="135" ry="390" fill="url(#shadow)"/>
+    <!-- edge: the body's corner-radius-inset rectangle swept by the thickness ((24, 28.6) here,
+         straight down on screen), stroked round by the corner radius. Recompute the path if the
+         group's rotate or squash changes; the zoom and translate don't affect it. -->
+    <path d="M-56.5 -286.5 H56.5 L80.5 -257.9 V315.1 H-32.5 L-56.5 286.5 Z"
+          fill="url(#edge)" stroke="url(#edge)" stroke-width="52" stroke-linejoin="round"/>
+    <!-- Siri button on the right edge: a band of that edge, (82.5, y) + t * (24, 28.6) for
+         t 0.5 to 0.85 and y -212 to -141 -->
+    <path d="M94.5 -197.7 V-126.7 L102.9 -116.7 V-187.7 Z"
+          fill="#c6c9cf" stroke="#c6c9cf" stroke-width="3" stroke-linejoin="round"/>
+    <!-- rounded rim between face and edge -->
+    <rect x="-82.5" y="-312.5" width="165" height="625" rx="26" fill="#a5a9b0" transform="translate(9.5 11.5)"/>
+    <rect x="-82.5" y="-312.5" width="165" height="625" rx="26" fill="#eceef1" transform="translate(3.5 4)"/>
+    <!-- face -->
+    <rect x="-82.5" y="-312.5" width="165" height="625" rx="26" fill="url(#face)"/>
+    <!-- IR window and power button -->
+    <rect x="-4.5" y="-280.8" width="9" height="3.6" rx="1.8" fill="#1a1a1c"/>
+    <circle cx="48.8" cy="-278.9" r="14.2" fill="#eef0f2" stroke="#a3a7ae" stroke-width="1.2"/>
+    <path d="M52.66 -283.5 A6 6 0 1 1 44.94 -283.5 M48.8 -286 V-279.5"
+          fill="none" stroke="#8e9299" stroke-width="1.4" stroke-linecap="round"/>
+    <!-- clickpad: black touch ring with direction dots, and its center button -->
+    <circle cx="0" cy="-178" r="73" fill="url(#black)"/>
+    <circle cx="0" cy="-178" r="41" fill="url(#black)" stroke="#000" stroke-width="2"/>
+    <g fill="#d4d6da">
+      <circle cx="0" cy="-243" r="1.8"/>
+      <circle cx="65" cy="-178" r="1.8"/>
+      <circle cx="0" cy="-113" r="1.8"/>
+      <circle cx="-65" cy="-178" r="1.8"/>
     </g>
+    <!-- back, TV; play/pause, volume; mute -->
+    <g fill="url(#black)">
+      <circle cx="-35.5" cy="-68" r="29"/>
+      <circle cx="35.5" cy="-68" r="29"/>
+      <circle cx="-35.5" cy="2" r="29"/>
+      <circle cx="-35.5" cy="72" r="29"/>
+      <rect x="6.5" y="-27" width="58" height="128" rx="29"/>
+    </g>
+    <!-- button glyphs -->
+    <g fill="none" stroke="#e8e9ec" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M-31.5 -77 L-40.5 -68 L-31.5 -59"/>
+      <rect x="25.5" y="-75" width="20" height="13" rx="2"/>
+      <path d="M30.5 -58 H40.5"/>
+      <path d="M-46 -6 L-36 2 L-46 10 Z M-31 -6 V10 M-25.5 -6 V10"/>
+      <path d="M35.5 -6 V10 M27.5 2 H43.5"/>
+      <path d="M27.5 72 H43.5"/>
+      <path d="M-45 68.5 H-41 L-35.5 63.5 V80.5 L-41 75.5 H-45 Z"/>
+    </g>
+    <path d="M-47 82 L-26 61" stroke="#121214" stroke-width="6"/>
+    <path d="M-47 82 L-26 61" stroke="#e8e9ec" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
   </g>
 </svg>
