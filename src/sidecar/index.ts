@@ -86,8 +86,6 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
       await service.seek(seconds);
       return null;
     }
-    case 'isConnected':
-      return service.isConnected();
     default:
       throw new Error(`Unknown method: ${method}`);
   }

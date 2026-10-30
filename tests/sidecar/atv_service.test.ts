@@ -273,7 +273,7 @@ describe('ATVService', () => {
       await flush();
 
       expect(states).toEqual(['connecting', 'connected']);
-      expect(service.isConnected()).toBe(true);
+      expect(service.state).toEqual({ status: 'connected' });
     });
 
     it('connects over MRP only, ignoring Companion keys in older saved credentials', async () => {
