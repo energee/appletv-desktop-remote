@@ -134,7 +134,8 @@ export const desktopAPI = {
   /** Wake and sidecar restarts: like connect, but the sidecar ignores it while pairing. */
   reconnect: (credentials: ATVCredentials) => request<void>('reconnect', credentials),
   disconnect: () => request<void>('disconnect'),
-  sendKey: (key: string) => request<void>('sendKey', { key }),
+  /** Presses `key`; `hold` holds it for a second, as a long press does. */
+  sendKey: (key: string, hold = false) => request<void>('sendKey', { key, hold }),
   /** Moves the playing item to `seconds` from its start. */
   seek: (seconds: number) => request<void>('seek', { seconds }),
   isConnected: () => request<boolean>('isConnected'),
