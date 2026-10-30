@@ -32,7 +32,8 @@ export type ConnectionDotState = 'connected' | 'connecting' | 'disconnected';
 /**
  * The sidecar's connection status, sent as the `state` event whenever it changes. `idle`: no
  * device chosen (or disconnected on request); `connecting`: connecting or waiting to retry;
- * `disconnected`: gave up retrying; `pairing`: scanning or pairing, with no connect running.
+ * `disconnected`: quick retries failed, now retrying every 30 s; `pairing`: scanning or pairing,
+ * with no connect running.
  */
 export interface ConnectionState {
   status: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'pairing';

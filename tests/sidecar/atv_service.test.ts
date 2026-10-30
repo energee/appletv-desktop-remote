@@ -352,7 +352,7 @@ describe('ATVService', () => {
       expect(states).toEqual(['connecting', 'connected', 'connecting', 'connecting', 'connected']);
     });
 
-    it('gives up after five retries and reports disconnected', async () => {
+    it('reports disconnected after five quick retries, then retries every 30 s', async () => {
       mockScan.mockResolvedValue([]);
       service.connect(tv1);
       await flush();
@@ -361,9 +361,28 @@ describe('ATVService', () => {
         expect(service.state).toEqual({ status: 'connecting' });
       }
       await flush(8000);
-
       expect(mockScan).toHaveBeenCalledTimes(6);
       expect(service.state).toEqual({ status: 'disconnected' });
+
+      await flush(29_999);
+      expect(mockScan).toHaveBeenCalledTimes(6);
+      await flush(1);
+      expect(mockScan).toHaveBeenCalledTimes(7);
+
+      // The TV is back: the next slow retry connects, without flashing "connecting" first.
+      mockScan.mockResolvedValue([living]);
+      await flush(30_000);
+      expect(service.state).toEqual({ status: 'connected' });
+      expect(states.slice(-2)).toEqual(['disconnected', 'connected']);
+    });
+
+    it('stops the slow retries on disconnect', async () => {
+      mockScan.mockResolvedValue([]);
+      service.connect(tv1);
+      await flush(15_500);
+      expect(service.state).toEqual({ status: 'disconnected' });
+
+      await service.disconnect();
       await flush(60_000);
       expect(mockScan).toHaveBeenCalledTimes(6);
     });
