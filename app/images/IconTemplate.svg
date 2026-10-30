@@ -2,13 +2,22 @@
   <!-- Menu bar icon source for IconTemplate.png (36 px, drawn at 2x for an 18 pt menu bar);
        after editing, run scripts/build-icons.sh.
        A macOS template image: only the alpha channel matters, and the menu bar tints it.
-       The app icon's remote (src-tauri/icons/icon.svg) with its clickpad and buttons cut out. -->
-  <path fill="#000" fill-rule="evenodd" d="
-    M15.5 1 H20.5 A3 3 0 0 1 23.5 4 V32 A3 3 0 0 1 20.5 35 H15.5 A3 3 0 0 1 12.5 32 V4 A3 3 0 0 1 15.5 1 Z
-    M18 4.6 a3.9 3.9 0 1 0 0.001 0 Z
-    M16.2 12.6 a1.55 1.55 0 1 0 0.001 0 Z
-    M19.8 12.6 a1.55 1.55 0 1 0 0.001 0 Z
-    M16.2 16.2 a1.55 1.55 0 1 0 0.001 0 Z
-    M16.2 19.8 a1.55 1.55 0 1 0 0.001 0 Z
-    M18.25 17.75 a1.55 1.55 0 0 1 3.1 0 V21.85 a1.55 1.55 0 0 1 -3.1 0 Z"/>
+       Upper end of the app icon's remote, viewed from above and the right.
+       Transparent clickpad/buttons and an inset seam preserve depth at menu bar size. -->
+  <g transform="translate(18 18) scale(0.84 0.588) rotate(40)">
+    <defs>
+      <mask id="side">
+        <rect x="-6" y="-15" width="18" height="38" rx="4" fill="#fff"/>
+        <rect x="-10.5" y="-20.5" width="21" height="41" rx="5.5" fill="#000"/>
+      </mask>
+    </defs>
+    <rect x="-6" y="-15" width="18" height="38" rx="4" fill="#000" mask="url(#side)"/>
+    <path fill="#000" fill-rule="evenodd" d="
+      M-5 -19 H5 A4 4 0 0 1 9 -15 V15 A4 4 0 0 1 5 19 H-5 A4 4 0 0 1 -9 15 V-15 A4 4 0 0 1 -5 -19 Z
+      M0 -15 a7 7 0 1 0 0.001 0 Z
+      M-4 2 a2.4 2.4 0 1 0 0.001 0 Z
+      M4 2 a2.4 2.4 0 1 0 0.001 0 Z
+      M-4 9 a2.4 2.4 0 1 0 0.001 0 Z
+      M1.6 11.4 a2.4 2.4 0 0 1 4.8 0 V15 a2.4 2.4 0 0 1 -4.8 0 Z"/>
+  </g>
 </svg>
