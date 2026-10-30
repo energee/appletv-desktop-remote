@@ -13,21 +13,21 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
+      # tauri-action reads, merges, and replaces latest.json. Serialize release jobs
+      # so each platform preserves metadata uploaded by the preceding platform.
+      max-parallel: 1
       matrix:
         include:
           - os: macos-15-intel
             platform: macos-x64
-            update_arch: x86_64
-            installer_arch: x64
-            family: macos
+            args: --target x86_64-apple-darwin
           - os: macos-latest
             platform: macos-arm64
-            update_arch: aarch64
-            installer_arch: aarch64
-            family: macos
+            args: --target aarch64-apple-darwin
           - os: windows-latest
             platform: windows-x64
-            family: windows
+            args: ''
     runs-on: ${{ matrix.os }}
     env:
       # Only tag pushes sign. workflow_dispatch remains an unsigned, build-only path,
@@ -46,106 +46,78 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install sidecar dependencies
         run: pnpm --dir app install --frozen-lockfile
-      - name: Build Tauri bundle
+      - name: Verify tagged release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]]; then
-            [[ -n "$TAURI_SIGNING_PRIVATE_KEY" ]] || {
-              echo "::error::Tagged releases require the TAURI_SIGNING_PRIVATE_KEY repository secret."
-              exit 1
-            }
-            pnpm build --config '{"bundle":{"createUpdaterArtifacts":true}}'
-          else
-            pnpm build
-          fi
-      - name: Collect macOS installers and updater bundle
-        if: matrix.family == 'macos'
+          [[ -n "$TAURI_SIGNING_PRIVATE_KEY" ]] || {
+            echo '::error::Tagged releases require the TAURI_SIGNING_PRIVATE_KEY repository secret.'
+            exit 1
+          }
+          node --input-type=module <<'EOF'
+          import { readFileSync } from 'node:fs';
+
+          const tagVersion = process.env.GITHUB_REF_NAME.slice(1);
+          const versions = [
+            JSON.parse(readFileSync('package.json')).version,
+            JSON.parse(readFileSync('src-tauri/tauri.conf.json')).version,
+            readFileSync('src-tauri/Cargo.toml', 'utf8').match(/^version = "([^"]+)"$/m)?.[1],
+          ];
+          if (versions.some((version) => version !== tagVersion)) {
+            throw new Error(`Tag ${tagVersion} does not match project versions: ${versions.join(', ')}`);
+          }
+          EOF
+      # Subsequent serialized jobs reuse GitHub's generated notes in latest.json.
+      - name: Read generated release notes
+        id: release-notes
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]] || version=manual
-          bundle=src-tauri/target/release/bundle
-          dmgs=()
-          updates=()
-          while IFS= read -r -d '' file; do dmgs+=("$file"); done < <(find "$bundle" -type f -name '*.dmg' -print0)
-          while IFS= read -r -d '' file; do updates+=("$file"); done < <(find "$bundle" -type f -name '*.app.tar.gz' -print0)
-          [[ ${#dmgs[@]} -eq 1 ]] || { echo "Expected one DMG, found ${#dmgs[@]}"; exit 1; }
-          mkdir release-assets
-          cp "${dmgs[0]}" "release-assets/Apple.TV.Remote_${version}_${{ matrix.installer_arch }}.dmg"
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]]; then
-            [[ ${#updates[@]} -eq 1 ]] || { echo "Expected one macOS updater bundle, found ${#updates[@]}"; exit 1; }
-            [[ -f "${updates[0]}.sig" ]] || { echo "Missing updater signature for ${updates[0]}"; exit 1; }
-            cp "${updates[0]}" "release-assets/Apple.TV.Remote_${version}_${{ matrix.update_arch }}.app.tar.gz"
-            cp "${updates[0]}.sig" "release-assets/Apple.TV.Remote_${version}_${{ matrix.update_arch }}.app.tar.gz.sig"
+          if gh release view "$GITHUB_REF_NAME" --json body --jq .body > "$RUNNER_TEMP/release-notes.md" 2>/dev/null; then
+            delimiter=$(node -p 'crypto.randomUUID()')
+            printf 'body<<%s\n' "$delimiter" >> "$GITHUB_OUTPUT"
+            cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$delimiter" >> "$GITHUB_OUTPUT"
           fi
-      - name: Collect Windows installers and updater bundle
-        if: matrix.family == 'windows'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag') {
-            $env:GITHUB_REF_NAME -replace '^v', ''
-          } else {
-            'manual'
-          }
-          $bundle = 'src-tauri/target/release/bundle'
-          $msis = @(Get-ChildItem -Path $bundle -Recurse -File -Filter *.msi)
-          $nsis = @(Get-ChildItem -Path (Join-Path $bundle 'nsis') -Recurse -File -Filter *.exe)
-          if ($msis.Count -ne 1) { throw "Expected one MSI, found $($msis.Count)" }
-          if ($nsis.Count -ne 1) { throw "Expected one NSIS installer, found $($nsis.Count)" }
-          New-Item -ItemType Directory -Path release-assets | Out-Null
-          Copy-Item $msis[0].FullName "release-assets/Apple.TV.Remote_${version}_x64.msi"
-          Copy-Item $nsis[0].FullName "release-assets/Apple.TV.Remote_${version}_x64-setup.exe"
-          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag') {
-            $signature = "$($nsis[0].FullName).sig"
-            if (!(Test-Path -LiteralPath $signature)) { throw "Missing updater signature for $($nsis[0].FullName)" }
-            Copy-Item $signature "release-assets/Apple.TV.Remote_${version}_x64-setup.exe.sig"
-          }
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+      - name: Build signed release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
-          name: ${{ matrix.platform }}-builds
-          path: release-assets/*
-          if-no-files-found: error
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseDraft: true
+          generateReleaseNotes: true
+          releaseBody: ${{ steps.release-notes.outputs.body }}
+          args: >-
+            ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          releaseAssetNamePattern: '[name]_[version]_[arch][setup][ext]'
+          updaterJsonPreferNsis: true
+          uploadUpdaterJson: true
+          uploadWorkflowArtifacts: true
+      - name: Build unsigned workflow artifacts
+        if: github.event_name != 'push' || github.ref_type != 'tag'
+        uses: tauri-apps/tauri-action@v1
+        with:
+          args: ${{ matrix.args }}
+          uploadUpdaterJson: false
+          uploadWorkflowArtifacts: true
 
   release:
     needs: build
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Download all artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-          merge-multiple: true
-      - name: Create draft release
-        run: gh release create "$GITHUB_REF_NAME" --draft --generate-notes --title "$GITHUB_REF_NAME"
-      - name: Read draft release notes
-        shell: bash
+      - name: Publish completed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          gh release view "$GITHUB_REF_NAME" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
-          echo "RELEASE_CREATED_AT=$(gh release view "$GITHUB_REF_NAME" --json createdAt --jq .createdAt)" >> "$GITHUB_ENV"
-      - name: Generate validated updater manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          node scripts/create-update-manifest.mjs \
-            --assets-dir artifacts \
-            --version "$version" \
-            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
-            --notes-file "$RUNNER_TEMP/release-notes.md" \
-            --pub-date "$RELEASE_CREATED_AT"
-      - name: Upload complete release assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          find artifacts -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME" --clobber
-      - name: Publish release
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+          gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir "$RUNNER_TEMP"
+          jq -e '.platforms | ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"] - keys | length == 0' "$RUNNER_TEMP/latest.json"
+          gh release edit "$GITHUB_REF_NAME" --draft=false

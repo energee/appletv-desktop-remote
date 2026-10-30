@@ -473,30 +473,14 @@ pub async fn desktop_action(
     action: String,
     args: Value,
     context: tauri::State<'_, Arc<Mutex<Option<ContextMenuConfig>>>>,
-    updater: tauri::State<'_, Arc<crate::updater::Updater>>,
 ) -> Result<Value, String> {
     match action.as_str() {
-        "updateStatus" => serde_json::to_value(updater.snapshot()?)
-            .map_err(|error| format!("Could not encode updater status: {error}")),
-        "updateCheck" => {
-            updater.check(app)?;
-            Ok(Value::Null)
-        }
-        "updateDownload" => {
-            updater.download(app)?;
-            Ok(Value::Null)
-        }
-        "updateInstall" => {
-            updater.install(app)?;
-            Ok(Value::Null)
-        }
-        "updateAutoCheck" => {
-            let value = args
-                .get("value")
-                .and_then(Value::as_bool)
-                .ok_or("updateAutoCheck requires boolean args.value")?;
-            serde_json::to_value(updater.set_auto_check(&app, value)?)
-                .map_err(|error| format!("Could not encode updater status: {error}"))
+        "isDevelopment" => Ok(Value::Bool(cfg!(debug_assertions))),
+        "restart" => {
+            if let Some(backend) = app.try_state::<crate::backend::Backend>() {
+                backend.shutdown();
+            }
+            app.restart();
         }
         "showWindow" => {
             show_window(&app)?;
