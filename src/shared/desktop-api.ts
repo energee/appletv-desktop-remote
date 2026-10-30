@@ -9,6 +9,7 @@ import type {
   NowPlayingInfo,
   PairResult,
   PowerStatus,
+  Speaker,
 } from './types';
 import type { UpdateState } from './update';
 
@@ -16,6 +17,8 @@ export interface ContextMenuConfig {
   devices: Array<{ label: string; identifier: string; checked: boolean }>;
   uiMode: string;
   alwaysOnTop: boolean;
+  /** AirPlay speakers for the Speakers submenu; picking one sends `toggleSpeaker` with its id. */
+  speakers: Array<{ label: string; id: string; checked: boolean }>;
 }
 
 /** Sidecar events, plus `connection-lost`, which the host sends when the sidecar exits. */
@@ -24,6 +27,7 @@ type BackendEvent =
   | 'now-playing'
   | 'power-state'
   | 'volume'
+  | 'outputs'
   | 'error'
   | 'connection-lost';
 type EventHandler = (value: unknown) => void;
@@ -161,6 +165,10 @@ export const desktopAPI = {
   disconnect: () => request<void>('disconnect'),
   /** Presses `key`; `hold` holds it for a second, as a long press does. */
   sendKey: (key: string, hold = false) => request<void>('sendKey', { key, hold }),
+  /** AirPlay speakers on the network, after a 2 s scan, with whether each is selected. */
+  speakers: () => request<Speaker[]>('speakers'),
+  /** Adds the speaker to the TV's outputs (`on`) or removes it. */
+  setSpeaker: (id: string, on: boolean) => request<void>('setSpeaker', { id, on }),
   /** Sets the absolute volume, 0 to 100. */
   setVolume: (level: number) => request<void>('setVolume', { level }),
   /** Wakes the TV if it is asleep, otherwise puts it to sleep. */
@@ -179,6 +187,11 @@ export const desktopAPI = {
     }),
   /** The sidecar exited; the next request relaunches it with no connection. */
   onBackendLost: (callback: () => void) => subscribe('backend:connection-lost', callback),
+  /** The output IDs the TV plays to, whenever they change. */
+  onAtvOutputs: (callback: (ids: string[]) => void) =>
+    subscribe('backend:outputs', (data) => {
+      if (Array.isArray(data) && data.every((id) => typeof id === 'string')) callback(data);
+    }),
   /** The absolute volume, 0 to 100, or null when the output has none (TV speakers). */
   onAtvVolume: (callback: (level: number | null) => void) =>
     subscribe('backend:volume', (data) => callback(typeof data === 'number' ? data : null)),

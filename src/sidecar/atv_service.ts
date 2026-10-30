@@ -8,6 +8,7 @@ import {
   type ATVKeyName,
   type ConnectionState,
   type PairResult,
+  type Speaker,
 } from '../shared/types';
 import type { AppleTV, DiscoveredDevice, Key as KeyType, PairSetup } from 'node-appletv-remote';
 
@@ -234,6 +235,14 @@ class ATVService extends EventEmitter {
       console.error('ATV error:', err);
       if (device === this.device) this.emit('error', err);
     });
+    // The outputs the TV plays to, by output ID, whenever its DeviceInfo changes them.
+    device.on('outputDevices', (outputs: { identifier: string }[]) => {
+      if (device === this.device)
+        this.emit(
+          'outputs',
+          outputs.map((o) => o.identifier),
+        );
+    });
     // 0-100, from outputs with absolute volume (AirPods, HomePod, not TV speakers); undefined, sent
     // as null, when the output loses it.
     device.on('volume', (level) => {
@@ -340,6 +349,31 @@ class ATVService extends EventEmitter {
   private connectedDevice(): AppleTV {
     if (!this.device || this.state.status !== 'connected') throw new Error('Not connected');
     return this.device;
+  }
+
+  /**
+   * AirPlay receivers the TV can play to (HomePods, AirPlay speakers, other TVs): a scan with no
+   * Apple TV filter, keeping those with an output ID (`airplayPsi`), less the connected TV.
+   */
+  async speakers(): Promise<Speaker[]> {
+    const device = this.connectedDevice();
+    const { scan } = await getLib();
+    const found = await withTimeout(scan({ timeout: 2000 }), 4000, 'Speaker scan timed out.');
+    const selected = new Set(device.outputDevices.map((output) => output.identifier));
+    return found.flatMap(({ airplayPsi: id, name, deviceId }) =>
+      id && deviceId !== device.deviceId ? [{ id, name, selected: selected.has(id) }] : [],
+    );
+  }
+
+  /** Adds speaker `id` to the TV's outputs, or removes it; resolves once the TV confirms. */
+  async setSpeaker(id: string, on: boolean): Promise<void> {
+    const device = this.connectedDevice();
+    // The library waits up to 5 s for the TV to report the new outputs.
+    await withTimeout(
+      on ? device.addOutputDevices([id]) : device.removeOutputDevices([id]),
+      COMMAND_TIMEOUT + 2000,
+      'The Apple TV did not confirm the speaker change.',
+    );
   }
 
   /** Sets the absolute volume, 0 to 100; the TV must have reported one (the `volume` event). */
