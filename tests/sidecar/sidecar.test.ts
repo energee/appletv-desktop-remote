@@ -201,6 +201,11 @@ describe('sidecar protocol', () => {
     expect(messages).toContainEqual({ event: 'state', data: { status: 'connecting' } });
   });
 
+  it('rejects a speaker change without an on/off choice', async () => {
+    const messages = await exchange('{"id":"speaker","method":"setSpeaker","params":{"id":"x"}}\n');
+    expect(messages).toContainEqual({ id: 'speaker', error: { message: 'on must be a boolean' } });
+  });
+
   it('rejects a volume that is not a number', async () => {
     const messages = await exchange(
       '{"id":"volume","method":"setVolume","params":{"level":"loud"}}\n',

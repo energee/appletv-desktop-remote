@@ -4,7 +4,7 @@
 // Protocol: one JSON object per line. Requests are `{ id, method, params }` and are handled
 // concurrently, so replies `{ id, result }` or `{ id, error }` can arrive in any order. Events
 // are `{ event, data }`: `state` (ConnectionState), `now-playing`, `power-state` (PowerStatus),
-// `volume` (0-100 or null), and `error`. `connect` and
+// `volume` (0-100 or null), `outputs` (the selected output IDs), and `error`. `connect` and
 // `reconnect` reply at once and report progress as `state`. Logs go only to stderr. When stdin
 // closes, requests that finish within a second are still answered, then the process exits.
 import { Console } from 'node:console';
@@ -81,6 +81,13 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
       // ATVService rejects unknown keys, including inherited names like 'toString'.
       await service.sendKey(stringParam(params, 'key') as ATVKeyName, params.hold === true);
       return null;
+    case 'speakers':
+      return service.speakers();
+    case 'setSpeaker': {
+      if (typeof params.on !== 'boolean') throw new Error('on must be a boolean');
+      await service.setSpeaker(stringParam(params, 'id'), params.on);
+      return null;
+    }
     case 'setVolume': {
       const level = params.level;
       if (typeof level !== 'number') throw new Error('level must be a number');
@@ -101,7 +108,7 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
   }
 }
 
-for (const event of ['state', 'now-playing', 'power-state', 'volume']) {
+for (const event of ['state', 'now-playing', 'power-state', 'volume', 'outputs']) {
   service.on(event, (data: unknown = null) => send({ event, data }));
 }
 service.on('error', (error: Error) => send({ event: 'error', data: { message: error.message } }));

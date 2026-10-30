@@ -55,6 +55,21 @@ describe('desktopAPI', () => {
     expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', playbackState: 1 }], [{}]]);
   });
 
+  it('passes on the selected outputs only as a list of IDs', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const outputs = vi.fn();
+    desktopAPI.onAtvOutputs(outputs);
+
+    for (const data of [['psi-kitchen'], 'psi-kitchen', [1]]) {
+      onBackendEvent({ payload: { event: 'outputs', data } });
+    }
+    expect(outputs.mock.calls).toEqual([[['psi-kitchen']]]);
+  });
+
   it('passes on the absolute volume, or null when there is none', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
