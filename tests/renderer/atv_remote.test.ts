@@ -249,10 +249,32 @@ describe('remote', () => {
     const dom = useElements();
     state('connected');
     (dom.listener('#touchpad', 'mousedown') as (event: unknown) => void)({
+      button: 0,
       clientX: 10,
       clientY: 10,
     });
     dom.listener('#touchpad', 'mouseleave')();
+    vi.advanceTimersByTime(1000);
+    expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+  });
+
+  // A right-click opens the context menu, which takes the mouseup, so the long-press timer
+  // that mousedown started used to fire a second later and press the key.
+  it('sends nothing for a right-click on the touchpad or a button', () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    const button = { ...fakeElement(), dataset: { key: 'home' } };
+    vi.mocked(document.querySelectorAll).mockImplementation(
+      (selector: string) => (selector === '[data-key]' ? [button] : []) as never,
+    );
+    state('connected');
+    const rightClick = { button: 2, clientX: 10, clientY: 10 };
+    (dom.listener('#touchpad', 'mousedown') as (event: unknown) => void)(rightClick);
+    (
+      button.addEventListener.mock.calls.find(([name]) => name === 'mousedown')![1] as (
+        event: unknown,
+      ) => void
+    )(rightClick);
     vi.advanceTimersByTime(1000);
     expect(desktopAPI.sendKey).not.toHaveBeenCalled();
   });
