@@ -187,7 +187,8 @@ a:active {
    block is only as wide as its title, so the button is placed against the window. */
 .power-btn {
   position: fixed;
-  top: 10px;
+  /* Centered on the header button's line. */
+  top: 17px;
   right: 6px;
   display: flex;
   padding: 4px;
