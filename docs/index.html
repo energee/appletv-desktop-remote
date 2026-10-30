@@ -101,7 +101,7 @@
         font-size: clamp(44px, 8.5vw, 72px);
         line-height: 1.04;
         letter-spacing: -0.018em;
-        margin-top: 16px;
+        margin-top: 12px;
       }
       .hero .lede {
         font-size: clamp(21px, 2.6vw, 28px);
@@ -116,7 +116,7 @@
         justify-content: center;
         align-items: center;
         flex-wrap: wrap;
-        margin-top: 28px;
+        margin-top: 24px;
       }
       .button {
         background: var(--button);
@@ -132,7 +132,7 @@
       .note {
         font-size: 14px;
         color: var(--muted);
-        margin-top: 14px;
+        margin-top: 12px;
       }
 
       /* Stage: the remote drives a pretend tvOS screen, sized so both fit above the fold.
@@ -142,8 +142,8 @@
         grid-template-columns: 1fr 2.7fr;
         gap: 48px;
         align-items: center;
-        max-width: 880px;
-        margin: 32px auto 0;
+        max-width: 820px;
+        margin: 28px auto 0;
       }
       .stage:focus-visible {
         outline-offset: 12px;
@@ -185,8 +185,7 @@
       .features {
         padding-block: 112px;
       }
-      .features h2,
-      .try h2 {
+      .features h2 {
         font-size: clamp(32px, 5vw, 48px);
         line-height: 1.08;
         letter-spacing: -0.003em;
@@ -202,30 +201,31 @@
         color: var(--muted);
       }
 
-      /* Keyboard shortcuts */
-      .try {
-        padding-block: 0 112px;
-      }
-      .try .intro {
-        color: var(--muted);
-        font-size: 21px;
-        line-height: 1.38;
-        max-width: 560px;
-        margin-top: 16px;
-      }
+      /* Keyboard shortcuts, under the stage */
       .shortcuts {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        column-gap: 56px;
-        margin: 48px 0 0;
+        grid-template-columns: repeat(4, auto);
+        justify-content: space-between;
+        column-gap: 32px;
+        max-width: 820px;
+        white-space: nowrap;
+        margin: 24px auto 0;
+        text-align: left;
+        font-size: 14px;
+        color: var(--muted);
       }
       .shortcuts div {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 16px;
-        padding: 14px 0;
-        border-bottom: 1px solid var(--key-edge);
+        gap: 12px;
+        padding: 5px 0;
+      }
+      .shortcuts kbd {
+        min-width: 26px;
+        padding: 1px 7px;
+        margin-left: 3px;
+        font-size: 13px;
       }
       .shortcuts dd {
         margin: 0;
@@ -496,7 +496,6 @@
         .features {
           padding-block: 72px;
         }
-        .try,
         .setup,
         .source {
           padding-block: 0 72px;
@@ -647,6 +646,41 @@
             </div>
           </div>
         </div>
+
+        <dl class="shortcuts" aria-label="Keyboard shortcuts">
+          <div>
+            <dt>Navigate</dt>
+            <dd><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd></dd>
+          </div>
+          <div>
+            <dt>Select</dt>
+            <dd><kbd>Enter</kbd></dd>
+          </div>
+          <div>
+            <dt>Play or pause</dt>
+            <dd><kbd>Space</kbd></dd>
+          </div>
+          <div>
+            <dt>Menu</dt>
+            <dd><kbd>Esc</kbd></dd>
+          </div>
+          <div>
+            <dt>Home</dt>
+            <dd><kbd>T</kbd></dd>
+          </div>
+          <div>
+            <dt>Top menu</dt>
+            <dd><kbd>G</kbd></dd>
+          </div>
+          <div>
+            <dt>Skip back or ahead</dt>
+            <dd><kbd>[</kbd><kbd>]</kbd></dd>
+          </div>
+          <div>
+            <dt>Volume</dt>
+            <dd><kbd>+</kbd><kbd>−</kbd></dd>
+          </div>
+        </dl>
       </section>
 
       <section class="features wrap">
@@ -668,54 +702,10 @@
             <p>
               Press <span class="mac"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd></span
               ><span class="win"><kbd>Win</kbd><kbd>Shift</kbd><kbd>R</kbd></span> to show or hide
-              it from any app. Keep it on top, or let it tuck away.
+              it from any app. Hold <span class="mac">Option</span><span class="win">Alt</span> to
+              see every button's key.
             </p>
           </div>
-        </div>
-      </section>
-
-      <section class="try">
-        <div class="wrap">
-          <h2>Or just use the keyboard.</h2>
-          <p class="intro">
-            These are the keys the app understands. They drive the TV at the top of this page too.
-            In the app, hold <span class="mac">Option</span><span class="win">Alt</span> to see
-            every button's key.
-          </p>
-          <dl class="shortcuts">
-            <div>
-              <dt>Navigate</dt>
-              <dd><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd></dd>
-            </div>
-            <div>
-              <dt>Select</dt>
-              <dd><kbd>Enter</kbd></dd>
-            </div>
-            <div>
-              <dt>Play or pause</dt>
-              <dd><kbd>Space</kbd></dd>
-            </div>
-            <div>
-              <dt>Menu</dt>
-              <dd><kbd>Esc</kbd></dd>
-            </div>
-            <div>
-              <dt>Home</dt>
-              <dd><kbd>T</kbd></dd>
-            </div>
-            <div>
-              <dt>Top menu</dt>
-              <dd><kbd>G</kbd></dd>
-            </div>
-            <div>
-              <dt>Skip back or ahead</dt>
-              <dd><kbd>[</kbd><kbd>]</kbd></dd>
-            </div>
-            <div>
-              <dt>Volume</dt>
-              <dd><kbd>+</kbd><kbd>−</kbd></dd>
-            </div>
-          </dl>
         </div>
       </section>
 
