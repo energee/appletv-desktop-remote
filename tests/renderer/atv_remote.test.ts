@@ -704,7 +704,7 @@ describe('requests', () => {
     expect(desktopAPI.disconnect).not.toHaveBeenCalled();
   });
 
-  it('does not reconnect on window focus, matching the Electron release', async () => {
+  it('does not reconnect on window focus, which would drop a working connection', async () => {
     await web.init();
     const windowEvents = vi.mocked(window.addEventListener).mock.calls.map(([name]) => name);
     expect(windowEvents).not.toContain('focus');

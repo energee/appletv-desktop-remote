@@ -2,7 +2,6 @@
   "name": "appletv-desktop-remote",
   "version": "0.7.0",
   "description": "Apple TV Remote",
-  "productName": "Apple TV Remote",
   "scripts": {
     "typecheck": "tsc",
     "build:renderer": "node esbuild.renderer.mjs",
