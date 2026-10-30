@@ -64,6 +64,8 @@ Hold Option (Alt on Windows) and the remote labels every button with its key.
 
 **Apps** lists installed apps to launch. With Companion connected, focusing a text field on the TV shows an editable text box in the remote. Edits are debounced; typing, spaces, and cursor keys stay in the text field instead of sending remote shortcuts. **Smooth touch** toggles continuous touch gestures for the selected device.
 
+The header groups the device picker and power control. Companion connection errors clear after a successful reconnect.
+
 Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code.
 
 Credential backups are read and written through native file dialogs; the renderer receives device names and IDs, not pairing keys. Exported backups contain keys in plaintext: keep them private. Importing replaces the saved-device list and active selection with the backup.
