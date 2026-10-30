@@ -81,6 +81,9 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
       // ATVService rejects unknown keys, including inherited names like 'toString'.
       await service.sendKey(stringParam(params, 'key') as ATVKeyName);
       return null;
+    case 'power':
+      await service.togglePower();
+      return null;
     case 'seek': {
       const seconds = params.seconds;
       if (typeof seconds !== 'number') throw new Error('seconds must be a number');

@@ -10,6 +10,7 @@ const desktopAPI = {
   disconnect: vi.fn(),
   scan: vi.fn(),
   sendKey: vi.fn(),
+  togglePower: vi.fn(),
   seek: vi.fn(),
   startPair: vi.fn(),
   finishPair: vi.fn(),
@@ -441,6 +442,19 @@ describe('PIN entry', () => {
 });
 
 describe('header', () => {
+  it('sleeps or wakes the TV from the power button, shown only while connected', async () => {
+    const dom = useElements();
+    desktopAPI.togglePower.mockResolvedValue(undefined);
+    await web.init();
+    state('connecting');
+    expect(dom.get('#powerButton').style.display).toBe('none');
+    state('connected');
+    expect(dom.get('#powerButton').style.display).toBe('');
+
+    dom.listener('#powerButton', 'click')();
+    expect(desktopAPI.togglePower).toHaveBeenCalledTimes(1);
+  });
+
   // The TV keeps its connection while asleep, so the dot alone can't tell.
   it('says the TV is asleep while it is, and only while connected', () => {
     const dom = useElements();

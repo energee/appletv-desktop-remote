@@ -322,6 +322,20 @@ class ATVService extends EventEmitter {
     return this.device;
   }
 
+  /**
+   * Wakes the TV if it reports being asleep, otherwise puts it to sleep. Over MRP, so no Companion
+   * pairing; the library keeps `powerState` current from the TV's DeviceInfo.
+   */
+  async togglePower(): Promise<void> {
+    const device = this.connectedDevice();
+    const { PowerState } = await getLib();
+    await withTimeout(
+      device.powerState === PowerState.Off ? device.wake() : device.suspend(),
+      COMMAND_TIMEOUT,
+      'The Apple TV did not respond to the power button.',
+    );
+  }
+
   /** Moves the playing item to `seconds` from its start. */
   async seek(seconds: number): Promise<void> {
     if (!Number.isFinite(seconds) || seconds < 0) throw new Error('Invalid position');

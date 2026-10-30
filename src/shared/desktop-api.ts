@@ -144,6 +144,8 @@ export const desktopAPI = {
   reconnect: (credentials: ATVCredentials) => request<void>('reconnect', credentials),
   disconnect: () => request<void>('disconnect'),
   sendKey: (key: string) => request<void>('sendKey', { key }),
+  /** Wakes the TV if it is asleep, otherwise puts it to sleep. */
+  togglePower: () => request<void>('power'),
   /** Moves the playing item to `seconds` from its start. */
   seek: (seconds: number) => request<void>('seek', { seconds }),
   isConnected: () => request<boolean>('isConnected'),

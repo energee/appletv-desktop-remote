@@ -198,6 +198,11 @@ describe('sidecar protocol', () => {
     expect(messages).toContainEqual({ event: 'state', data: { status: 'connecting' } });
   });
 
+  it('serves power, which needs a connection', async () => {
+    const messages = await exchange('{"id":"power","method":"power"}\n');
+    expect(messages).toContainEqual({ id: 'power', error: { message: 'Not connected' } });
+  });
+
   it('rejects prototype-property commands and processes a final CRLF frame before EOF', async () => {
     const messages = await exchange(
       '{"id":"key","method":"sendKey","params":{"key":"toString"}}\r\n' +
