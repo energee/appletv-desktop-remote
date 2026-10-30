@@ -21,6 +21,7 @@ class MockAppleTV extends EventEmitter {
   startPairing = vi.fn(() => mockStartPairing());
   sendKeyCommand = vi.fn((key: unknown, ..._action: unknown[]) => mockSendKeyCommand(key));
   setPosition = vi.fn(async (_seconds: number) => {});
+  getState = vi.fn(async () => ({}));
   powerState = 'unknown';
   wake = vi.fn(async () => {});
   setVolume = vi.fn(async (_level: number) => {});
