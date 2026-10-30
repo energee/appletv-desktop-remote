@@ -159,6 +159,12 @@
               ><span class="keyTextAlt">]</span>
             </div>
           </div>
+
+          <!-- Absolute volume: only for outputs that report one (AirPods, HomePod) -->
+          <div class="seek volume" id="volume" style="display: none">
+            <span data-icon="volume-2"></span>
+            <input type="range" id="volumeBar" min="0" max="100" step="1" aria-label="Volume" />
+          </div>
         </div>
 
         <!-- Now Playing -->

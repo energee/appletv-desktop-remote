@@ -198,6 +198,16 @@ describe('sidecar protocol', () => {
     expect(messages).toContainEqual({ event: 'state', data: { status: 'connecting' } });
   });
 
+  it('rejects a volume that is not a number', async () => {
+    const messages = await exchange(
+      '{"id":"volume","method":"setVolume","params":{"level":"loud"}}\n',
+    );
+    expect(messages).toContainEqual({
+      id: 'volume',
+      error: { message: 'level must be a number' },
+    });
+  });
+
   it('serves power, which needs a connection', async () => {
     const messages = await exchange('{"id":"power","method":"power"}\n');
     expect(messages).toContainEqual({ id: 'power', error: { message: 'Not connected' } });

@@ -18,7 +18,13 @@ export interface ContextMenuConfig {
 }
 
 /** Sidecar events, plus `connection-lost`, which the host sends when the sidecar exits. */
-type BackendEvent = 'state' | 'now-playing' | 'power-state' | 'error' | 'connection-lost';
+type BackendEvent =
+  | 'state'
+  | 'now-playing'
+  | 'power-state'
+  | 'volume'
+  | 'error'
+  | 'connection-lost';
 type EventHandler = (value: unknown) => void;
 
 const listeners = new Map<string, Set<EventHandler>>();
@@ -144,6 +150,8 @@ export const desktopAPI = {
   reconnect: (credentials: ATVCredentials) => request<void>('reconnect', credentials),
   disconnect: () => request<void>('disconnect'),
   sendKey: (key: string) => request<void>('sendKey', { key }),
+  /** Sets the absolute volume, 0 to 100. */
+  setVolume: (level: number) => request<void>('setVolume', { level }),
   /** Wakes the TV if it is asleep, otherwise puts it to sleep. */
   togglePower: () => request<void>('power'),
   /** Moves the playing item to `seconds` from its start. */
@@ -161,6 +169,9 @@ export const desktopAPI = {
     }),
   /** The sidecar exited; the next request relaunches it with no connection. */
   onBackendLost: (callback: () => void) => subscribe('backend:connection-lost', callback),
+  /** The absolute volume, 0 to 100, or null when the output has none (TV speakers). */
+  onAtvVolume: (callback: (level: number | null) => void) =>
+    subscribe('backend:volume', (data) => callback(typeof data === 'number' ? data : null)),
   onAtvPowerState: (callback: (state: PowerStatus) => void) =>
     subscribe('backend:power-state', (data) => {
       if (data === 'on' || data === 'off' || data === 'unknown') callback(data);

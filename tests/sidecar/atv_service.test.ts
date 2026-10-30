@@ -20,6 +20,7 @@ class MockAppleTV extends EventEmitter {
   setPosition = vi.fn(async (_seconds: number) => {});
   powerState = 'unknown';
   wake = vi.fn(async () => {});
+  setVolume = vi.fn(async (_level: number) => {});
   suspend = vi.fn(async () => {});
   close = vi.fn(async () => {});
   constructor(discovered: { deviceId?: string }) {
@@ -324,6 +325,19 @@ describe('ATVService', () => {
       expect(service.state).toEqual({ status: 'connected' });
     });
 
+    it('forwards absolute volume only from the current device, null once it is lost', async () => {
+      const volume = vi.fn();
+      service.on('volume', volume);
+      const first = await connected(tv1);
+      first.emit('volume', 40);
+      first.emit('volume', undefined);
+      const second = await connected(tv2);
+
+      first.emit('volume', 10);
+      second.emit('volume', 55);
+      expect(volume.mock.calls).toEqual([[40], [null], [55]]);
+    });
+
     it('forwards power state only from the current device', async () => {
       const power = vi.fn();
       service.on('power-state', power);
@@ -535,6 +549,23 @@ describe('ATVService', () => {
       const sending = expect(service.sendKey('up')).rejects.toThrow('did not respond');
       await flush(5000);
       await sending;
+    });
+  });
+
+  describe('setVolume()', () => {
+    it('sets the absolute volume', async () => {
+      const device = await connected();
+      await service.setVolume(30);
+      expect(device.setVolume).toHaveBeenCalledWith(30);
+    });
+
+    it('rejects a level outside 0 to 100 before reaching the TV, and needs a connection', async () => {
+      await expect(service.setVolume(50)).rejects.toThrow('Not connected');
+      const device = await connected();
+      for (const level of [-1, 101, Number.NaN]) {
+        await expect(service.setVolume(level)).rejects.toThrow('Invalid volume');
+      }
+      expect(device.setVolume).not.toHaveBeenCalled();
     });
   });
 

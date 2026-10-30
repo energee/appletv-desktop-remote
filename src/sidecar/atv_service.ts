@@ -229,6 +229,11 @@ class ATVService extends EventEmitter {
       console.error('ATV error:', err);
       if (device === this.device) this.emit('error', err);
     });
+    // 0-100, from outputs with absolute volume (AirPods, HomePod, not TV speakers); undefined, sent
+    // as null, when the output loses it.
+    device.on('volume', (level) => {
+      if (device === this.device) this.emit('volume', level ?? null);
+    });
     // A new device starts unknown; the TV reports its state at connect and on every sleep and wake.
     device.on('powerState', (state) => {
       if (device === this.device) this.emit('power-state', state);
@@ -320,6 +325,16 @@ class ATVService extends EventEmitter {
   private connectedDevice(): AppleTV {
     if (!this.device || this.state.status !== 'connected') throw new Error('Not connected');
     return this.device;
+  }
+
+  /** Sets the absolute volume, 0 to 100; the TV must have reported one (the `volume` event). */
+  async setVolume(level: number): Promise<void> {
+    if (!Number.isFinite(level) || level < 0 || level > 100) throw new Error('Invalid volume');
+    await withTimeout(
+      this.connectedDevice().setVolume(level),
+      COMMAND_TIMEOUT,
+      'The Apple TV did not respond to the volume change.',
+    );
   }
 
   /**

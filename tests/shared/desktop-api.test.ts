@@ -55,6 +55,21 @@ describe('desktopAPI', () => {
     expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', playbackState: 1 }], [{}]]);
   });
 
+  it('passes on the absolute volume, or null when there is none', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const volume = vi.fn();
+    desktopAPI.onAtvVolume(volume);
+
+    for (const data of [40, null, 'loud']) {
+      onBackendEvent({ payload: { event: 'volume', data } });
+    }
+    expect(volume.mock.calls).toEqual([[40], [null], [null]]);
+  });
+
   it('passes on only known power states', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
