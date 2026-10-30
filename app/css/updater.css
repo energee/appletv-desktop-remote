@@ -1,0 +1,278 @@
+/* A quiet entry point; the remote remains the main event. */
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px auto 0;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--glass);
+  color: var(--text-secondary);
+  font:
+    500 10px/1.3 -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.update-pill[hidden],
+.update-dialog [hidden] {
+  display: none;
+}
+
+.update-pill:hover {
+  background: var(--glass-hover);
+  color: var(--text-primary);
+}
+
+.update-pill-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.update-dialog {
+  width: calc(100% - 24px);
+  max-width: 320px;
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  color: var(--text-primary);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  animation: update-appear 220ms ease-out;
+}
+
+.update-dialog::backdrop {
+  background: rgba(20, 18, 16, 0.22);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.update-sheet {
+  padding: 20px 18px 16px;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 0, var(--accent-glass), transparent 65%);
+}
+
+.update-eyebrow {
+  margin-bottom: 14px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.update-dialog h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.update-description {
+  margin: 9px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.update-version {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-dialog .update-version {
+  margin-top: 10px;
+}
+
+.update-notes-section {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: left;
+}
+
+.update-notes-section h2 {
+  margin: 0 0 7px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.update-notes {
+  max-height: 64px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+  font-size: 11px;
+  line-height: 1.6;
+  overscroll-behavior: contain;
+}
+
+.update-progress-section {
+  margin-top: 18px;
+}
+
+.update-progress-section progress {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--border);
+  accent-color: var(--text-primary);
+}
+
+.update-progress-section progress::-webkit-progress-bar {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.update-progress-section progress::-webkit-progress-value {
+  background: var(--text-primary);
+  border-radius: 999px;
+  transition: width 160ms linear;
+}
+
+.update-progress-section progress:indeterminate {
+  background: linear-gradient(
+    90deg,
+    var(--border) 20%,
+    var(--text-secondary) 50%,
+    var(--border) 80%
+  );
+  background-size: 200% 100%;
+  animation: update-progress 1.5s linear infinite;
+}
+
+.update-progress-section progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+
+.update-progress-label {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-error {
+  margin-top: 14px;
+  max-height: 80px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.update-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 18px;
+}
+
+.update-primary,
+.update-secondary {
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  font:
+    600 12px/1.3 -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  cursor: pointer;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.update-primary {
+  background: var(--text-primary);
+  color: var(--surface-solid);
+}
+
+.update-primary:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.update-primary:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.update-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.update-secondary:hover:not(:disabled) {
+  background: var(--pressed);
+}
+
+.update-secondary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.update-footnote {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.update-dialog button:focus-visible,
+.update-pill:focus-visible,
+.update-notes:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@keyframes update-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes update-progress {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-dialog,
+  .update-progress-section progress {
+    animation: none;
+    transition: none;
+  }
+}
