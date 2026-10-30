@@ -1,5 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { check, type Update } from '@tauri-apps/plugin-updater';
+import DOMPurify from 'dompurify';
+import { marked } from 'marked';
 import { desktopAPI } from '../shared/desktop-api';
 
 type Status =
@@ -84,7 +86,6 @@ export function initUpdater(): void {
     text('updateVersion', update ? `${version} → ${update.version}` : `Version ${version || '—'}`);
     visible('updateVersion', Boolean(version));
     visible('updateNotesSection', Boolean(update?.body) && ['available', 'ready'].includes(status));
-    text('updateNotes', update?.body ?? '');
     text('updateError', error ?? '');
     visible('updateError', Boolean(error));
     visible('updateProgressSection', status === 'downloading' || status === 'installing');
@@ -126,6 +127,38 @@ export function initUpdater(): void {
     if (update) return;
     void execute('checking', 'check', async () => {
       update = (await check()) ?? undefined;
+      document.getElementById('updateNotes')!.innerHTML = DOMPurify.sanitize(
+        marked.parse(update?.body ?? '', { async: false }),
+        {
+          ALLOWED_TAGS: [
+            'p',
+            'br',
+            'h1',
+            'h2',
+            'h3',
+            'h4',
+            'h5',
+            'h6',
+            'ul',
+            'ol',
+            'li',
+            'strong',
+            'em',
+            'del',
+            'blockquote',
+            'pre',
+            'code',
+            'hr',
+            'table',
+            'thead',
+            'tbody',
+            'tr',
+            'th',
+            'td',
+          ],
+          ALLOWED_ATTR: [],
+        },
+      );
       status = update ? 'available' : 'upToDate';
     });
   }

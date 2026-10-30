@@ -20,7 +20,9 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
-    "@tauri-apps/plugin-updater": "^2.14.1"
+    "@tauri-apps/plugin-updater": "^2.14.1",
+    "dompurify": "3.4.17",
+    "marked": "18.1.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
