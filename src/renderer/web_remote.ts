@@ -117,6 +117,12 @@ window.addEventListener('blur', () => {
   toggleAltText(true);
 });
 
+// The sidecar retries every 30 s after giving up; showing the window retries at once. Only then:
+// reconnecting replaces the connection, so it must not touch one that works.
+window.addEventListener('focus', () => {
+  if (connection.status === 'disconnected') reconnectToATV();
+});
+
 function toggleAltText(tf: boolean): void {
   if (tf) {
     $$('.keyText').forEach((el) => (el.style.display = ''));

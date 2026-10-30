@@ -44,6 +44,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 
 /** Retries after a failed connect or a dropped connection, 0.5 s apart and doubling. */
 const RETRY_LIMIT = 5;
+/** After those, how often to keep trying while disconnected, until the TV comes back. */
+const SLOW_RETRY_MS = 30_000;
 /** How long a key press or closing the device may take before the request fails. */
 const COMMAND_TIMEOUT = 5000;
 /** Playback states in which play_pause sends Play. */
@@ -251,7 +253,9 @@ class ATVService extends EventEmitter {
 
   private retry(epoch: number, credsData: ATVCredentials, found?: DiscoveredDevice): void {
     if (this.failures >= RETRY_LIMIT) {
-      this.setState({ status: 'disconnected' });
+      // Stays disconnected, rather than flashing "connecting" every 30 s; a success connects.
+      if (this.state.status !== 'disconnected') this.setState({ status: 'disconnected' });
+      this.retryTimer = setTimeout(() => void this.attempt(epoch, credsData), SLOW_RETRY_MS);
       return;
     }
     const delay = 500 * 2 ** this.failures++;

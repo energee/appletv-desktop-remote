@@ -122,6 +122,7 @@ let powerResume: () => void;
 let backendLost: () => void;
 let contextMenuAction: (action: string, payload?: string) => void;
 let errorMessage: (message: string) => void;
+let focus: () => void;
 
 const creds = { credentials: 'c', identifier: 'tv' };
 const other = { credentials: 'o', identifier: 'tv2' };
@@ -136,6 +137,9 @@ beforeAll(async () => {
   keydown = vi
     .mocked(window.addEventListener)
     .mock.calls.find(([name]) => name === 'keydown')![1] as (event: unknown) => void;
+  focus = vi
+    .mocked(window.addEventListener)
+    .mock.calls.find(([name]) => name === 'focus')?.[1] as () => void;
   web.initIPC();
   setState = desktopAPI.onAtvState.mock.calls[0][0];
   nowPlaying = desktopAPI.onAtvNowPlaying.mock.calls[0][0];
@@ -704,12 +708,17 @@ describe('requests', () => {
     expect(desktopAPI.disconnect).not.toHaveBeenCalled();
   });
 
-  it('does not reconnect on window focus, which would drop a working connection', async () => {
-    await web.init();
-    const windowEvents = vi.mocked(window.addEventListener).mock.calls.map(([name]) => name);
-    expect(windowEvents).not.toContain('focus');
-    expect(windowEvents).not.toContain('pageshow');
-    const documentEvents = vi.mocked(document.addEventListener).mock.calls.map(([name]) => name);
-    expect(documentEvents).not.toContain('visibilitychange');
+  // Reconnecting replaces the connection, so focus must not do it while one is working.
+  it('retries on window focus only after the sidecar gave up', () => {
+    useStorage({ atvcreds: JSON.stringify(creds) });
+    state('connected');
+    focus();
+    state('connecting');
+    focus();
+    expect(desktopAPI.reconnect).not.toHaveBeenCalled();
+
+    state('disconnected');
+    focus();
+    expect(desktopAPI.reconnect).toHaveBeenCalledWith(creds);
   });
 });
