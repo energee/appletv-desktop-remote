@@ -18,6 +18,9 @@ class MockAppleTV extends EventEmitter {
   startPairing = vi.fn(() => mockStartPairing());
   sendKeyCommand = vi.fn((key: unknown, ..._action: unknown[]) => mockSendKeyCommand(key));
   setPosition = vi.fn(async (_seconds: number) => {});
+  powerState = 'unknown';
+  wake = vi.fn(async () => {});
+  suspend = vi.fn(async () => {});
   close = vi.fn(async () => {});
   constructor(discovered: { deviceId?: string }) {
     super();
@@ -64,6 +67,7 @@ vi.mock('node-appletv-remote', () => ({
   scan: (...args: unknown[]) => mockScan(...args),
   AppleTV: MockAppleTV,
   Credentials: MockCredentials,
+  PowerState: { Unknown: 'unknown', Off: 'off', On: 'on' },
   Key: {
     PlayPause: 'play_pause',
     Left: 'left',
@@ -594,6 +598,27 @@ describe('ATVService', () => {
       const sending = expect(service.sendKey('up')).rejects.toThrow('did not respond');
       await flush(5000);
       await sending;
+    });
+  });
+
+  describe('togglePower()', () => {
+    it('wakes a sleeping TV and puts any other to sleep', async () => {
+      const device = await connected();
+      device.powerState = 'off';
+      await service.togglePower();
+      expect(device.wake).toHaveBeenCalledTimes(1);
+      expect(device.suspend).not.toHaveBeenCalled();
+
+      for (const power of ['on', 'unknown']) {
+        device.powerState = power;
+        await service.togglePower();
+      }
+      expect(device.suspend).toHaveBeenCalledTimes(2);
+      expect(device.wake).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws when not connected', async () => {
+      await expect(service.togglePower()).rejects.toThrow('Not connected');
     });
   });
 

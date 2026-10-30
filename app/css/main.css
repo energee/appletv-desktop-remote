@@ -179,7 +179,32 @@ a:active {
    =========================== */
 
 #keyboardButtonDiv {
-  padding: 14px 0 4px;
+  /* The sides cap a long title's width, keeping it clear of the power button. */
+  padding: 14px 36px 4px;
+}
+
+/* Sleep / wake, at the window's top right like the Siri Remote's power button. The header
+   block is only as wide as its title, so the button is placed against the window. */
+.power-btn {
+  position: fixed;
+  top: 10px;
+  right: 6px;
+  display: flex;
+  padding: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.power-btn:hover {
+  color: var(--text-primary);
+}
+
+.power-btn .lucide-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .topText {

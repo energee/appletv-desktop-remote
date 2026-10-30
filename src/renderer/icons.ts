@@ -13,6 +13,7 @@ const ICONS: Record<string, string> = {
   'chevron-right': '<path d="m9 18 6-6-6-6" />',
   'arrow-left': '<path d="m12 19-7-7 7-7" /><path d="M19 12H5" />',
   tv: '<path d="M7 21h10" /><rect width="20" height="14" x="2" y="3" rx="2" />',
+  power: '<path d="M12 2v10" /><path d="M18.4 6.6a9 9 0 1 1-12.77.04" />',
   'skip-back':
     '<path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z" /><path d="M3 20V4" />',
   'skip-forward':
