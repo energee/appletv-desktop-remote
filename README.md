@@ -64,7 +64,7 @@ The **Apps** grid icon, focused text input, and **Settings → Touchpad → Smoo
 
 **Apps** lists installed apps to launch. With Companion connected, the keyboard icon and editable text box appear only while a text field is focused on the TV. Leaving that field also closes the keyboard sheet. Edits are debounced; typing, spaces, and cursor keys stay in the text field instead of sending remote shortcuts. **Smooth scrolling** is saved separately for each selected device.
 
-The header groups the device picker and power control. Companion connection errors clear after a successful reconnect.
+The header groups the device picker and power control. The device dot is green when connected, steady amber while asleep, pulsing amber while connecting, and red when disconnected. Companion connection errors clear after a successful reconnect.
 
 Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code.
 
@@ -106,7 +106,7 @@ Local macOS builds are ad-hoc signed. A notarized release needs a Developer ID i
 
 The release workflow builds macOS Apple silicon, macOS Intel, and Windows x64. Tag pushes require the GitHub Actions secret `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has a password). The matching public key is committed in `src-tauri/tauri.conf.json`; never commit the private key. Keep a secure backup of the signing key: generating a replacement key does not let already-installed apps verify it.
 
-Keep `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` versions in sync with the `v` tag. The official `tauri-apps/tauri-action` builds and uploads installers, signed updater bundles, signatures, and `latest.json` with release notes. Builds run sequentially so the action's metadata merge preserves every platform. The release stays a draft until all builds succeed and the manifest contains all three platforms. Architecture-specific asset names prevent collisions.
+Keep `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` versions in sync with the `v` tag. The official `tauri-apps/tauri-action` builds and uploads installers, signed updater bundles, signatures, and `latest.json` with release notes. Builds run sequentially so the action's metadata merge preserves every platform. The release stays a draft until its manifest has the tagged version, all three platform URLs and non-empty signatures, then publishes it. Architecture-specific asset names prevent collisions.
 
 Normal local builds and manual workflow runs do not generate updater artifacts and require no signing secret. To create signed updater artifacts locally:
 

@@ -35,14 +35,14 @@
 }
 
 .update-dialog {
-  width: calc(100% - 24px);
-  max-width: 320px;
-  max-height: calc(100dvh - 24px);
+  width: calc(100% - 32px);
+  max-width: 360px;
+  max-height: calc(100dvh - 32px);
   margin: auto;
   padding: 0;
   overflow-x: hidden;
   border: 1px solid var(--glass-border);
-  border-radius: 22px;
+  border-radius: var(--radius-md);
   background: var(--surface-solid);
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
@@ -56,70 +56,72 @@
 }
 
 .update-sheet {
-  padding: 20px 18px 16px;
-  text-align: center;
-  background: radial-gradient(ellipse at 50% 0, var(--accent-glass), transparent 65%);
+  padding: 16px;
+  text-align: left;
 }
 
-.update-eyebrow {
-  margin-bottom: 14px;
+.update-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .update-dialog h1 {
   margin: 0;
-  font-size: 18px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 .update-description {
-  margin: 9px 0 0;
+  margin: 3px 0 0;
   color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
+
 .update-version,
 .update-progress-label,
-.update-error,
-.update-footnote {
+.update-error {
   color: var(--text-secondary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+
 .update-dialog .update-version {
-  margin-top: 10px;
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--text-tertiary);
 }
 
 .update-notes-section {
-  margin-top: 16px;
-  padding: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  text-align: left;
 }
 
 .update-notes-section h2 {
-  margin: 0 0 7px;
+  margin: 0 0 5px;
 }
-.update-notes,
-.update-error {
-  max-height: 80px;
+
+.update-notes {
+  max-height: 64px;
   overflow: auto;
+  white-space: pre-wrap;
+  font-size: 11px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
 }
-.update-notes {
-  max-height: 64px;
-  white-space: pre-wrap;
-  font-size: 11px;
-  line-height: 1.6;
-}
 
 .update-progress-section {
-  margin-top: 18px;
+  margin-top: 14px;
 }
+
 .update-progress-section progress {
   display: block;
   width: 100%;
@@ -130,51 +132,58 @@
   background: var(--border);
   accent-color: var(--text-primary);
 }
+
 .update-progress-section progress::-webkit-progress-bar {
   background: var(--border);
 }
+
 .update-progress-section progress::-webkit-progress-value {
   background: var(--text-primary);
 }
+
 .update-progress-label {
-  margin-top: 8px;
-  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
 }
+
 .update-error {
-  margin-top: 14px;
-  line-height: 1.5;
+  margin-top: 12px;
+  line-height: 1.45;
 }
 
 .update-actions {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 18px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
 }
-.update-primary,
-.update-secondary {
-  width: 100%;
-}
+
 .update-primary {
+  padding: 7px 12px;
   border: 0;
   background: var(--text-primary);
   color: var(--surface-solid);
 }
+
 .update-primary:hover:not(:disabled) {
   background: var(--text-primary);
   opacity: 0.85;
 }
+
+.update-secondary {
+  padding: 5px 2px;
+  border-radius: var(--radius-sm);
+}
+
 .update-dialog button:disabled {
   cursor: default;
   opacity: 0.45;
 }
-.update-footnote {
-  margin-top: 10px;
-  line-height: 1.5;
-}
+
 .update-dialog button:focus-visible,
 .update-pill:focus-visible,
 .update-notes:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface-solid),
+    0 0 0 4px var(--accent);
 }

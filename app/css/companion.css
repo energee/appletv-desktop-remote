@@ -27,7 +27,7 @@
   border-color: transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .companion-tools button[hidden] {

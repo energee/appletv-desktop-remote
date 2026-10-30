@@ -1,6 +1,6 @@
 [package]
 name = "atv-desktop-remote"
-version = "0.7.0"
+version = "0.7.1"
 description = "Apple TV Remote"
 authors = ["Ted Slesinski"]
 edition = "2021"
