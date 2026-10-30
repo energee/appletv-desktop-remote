@@ -279,6 +279,30 @@ describe('remote', () => {
     expect(desktopAPI.sendKey).not.toHaveBeenCalled();
   });
 
+  // A held press: Select opens tvOS context menus, Home opens Control Center.
+  it('holds the key after a long press on the touchpad or a button', () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    const button = { ...fakeElement(), dataset: { key: 'home' } };
+    vi.mocked(document.querySelectorAll).mockImplementation(
+      (selector: string) => (selector === '[data-key]' ? [button] : []) as never,
+    );
+    state('connected');
+    const press = { button: 0, clientX: 10, clientY: 10 };
+    (dom.listener('#touchpad', 'mousedown') as (event: unknown) => void)(press);
+    vi.advanceTimersByTime(1000);
+    (
+      button.addEventListener.mock.calls.find(([name]) => name === 'mousedown')![1] as (
+        event: unknown,
+      ) => void
+    )(press);
+    vi.advanceTimersByTime(1000);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([
+      ['select', true],
+      ['home', true],
+    ]);
+  });
+
   // The hint is for a new user at launch; after a wake the window is usually hidden.
   it('shows the keyboard hint once per launch, not after every reconnect', () => {
     useElements();
@@ -320,12 +344,15 @@ describe('two-finger swipe', () => {
     // About 0.8 s of scrolling: the swipe, then momentum tailing off.
     scroll(wheel, 20, 30);
     scroll(wheel, 30, 4);
-    expect(desktopAPI.sendKey.mock.calls).toEqual([['left']]);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([['left', false]]);
 
     // Once the events stop, the next swipe moves again.
     vi.advanceTimersByTime(200);
     scroll(wheel, 5, 30);
-    expect(desktopAPI.sendKey.mock.calls).toEqual([['left'], ['left']]);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([
+      ['left', false],
+      ['left', false],
+    ]);
   });
 
   // macOS reports when fingers start a new gesture, so a swipe during the last one's momentum
@@ -340,7 +367,10 @@ describe('two-finger swipe', () => {
     scroll(wheel, 20, 30);
     gestureBegan();
     scroll(wheel, 5, -30);
-    expect(desktopAPI.sendKey.mock.calls).toEqual([['left'], ['right']]);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([
+      ['left', false],
+      ['right', false],
+    ]);
   });
 });
 
@@ -367,7 +397,10 @@ describe('keys', () => {
     const hold = (key: string) =>
       keydown({ key, repeat: true, getModifierState: () => false, preventDefault: vi.fn() });
     for (const key of ['ArrowUp', '+', ' ', 'Enter', 'q', 'q', 'q']) hold(key);
-    expect(desktopAPI.sendKey.mock.calls).toEqual([['up'], ['volume_up']]);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([
+      ['up', false],
+      ['volume_up', false],
+    ]);
     expect(desktopAPI.quit).not.toHaveBeenCalled();
   });
 
@@ -379,7 +412,7 @@ describe('keys', () => {
 
     state('connected');
     press('Enter');
-    expect(desktopAPI.sendKey).toHaveBeenCalledWith('select');
+    expect(desktopAPI.sendKey).toHaveBeenCalledWith('select', false);
   });
 });
 

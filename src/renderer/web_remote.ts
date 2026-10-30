@@ -225,7 +225,8 @@ function getKeyEl(key: string): Element | undefined {
   return el;
 }
 
-export async function sendCommand(k: string): Promise<void> {
+/** Sends a key by name or keyboard key; `hold` holds it, for a long press. */
+export async function sendCommand(k: string, hold = false): Promise<void> {
   if (k === 'Pause') k = 'Space';
   let rcmd = keymap[k];
   if ((Object.values(keymap) as string[]).includes(k)) rcmd = k as ATVKeyName;
@@ -238,7 +239,7 @@ export async function sendCommand(k: string): Promise<void> {
   }
   if (rcmd === 'play_pause') flipPlayPauseIcon();
   try {
-    await desktopAPI.sendKey(rcmd);
+    await desktopAPI.sendKey(rcmd, hold);
   } catch {
     if (el) {
       el.classList.remove('sent');
@@ -390,7 +391,7 @@ function showKeyMap(): void {
       if (e.button !== 0) return;
       clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
       longPressTimer = setTimeout(function () {
-        sendCommand('select');
+        sendCommand('select', true);
         clickStart = null;
       }, 1000);
     },
@@ -453,7 +454,7 @@ function showKeyMap(): void {
 
           button.classList.add('longpress-triggered');
 
-          sendCommand(key);
+          sendCommand(key, true);
 
           isLongPressing[key] = false;
 
