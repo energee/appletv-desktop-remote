@@ -14,7 +14,6 @@
     <style>
       :root {
         --bg: #fff;
-        --band: #f5f5f7;
         --text: #1d1d1f;
         --muted: #6e6e73;
         --link: #0066cc;
@@ -26,7 +25,6 @@
       @media (prefers-color-scheme: dark) {
         :root {
           --bg: #000;
-          --band: #161617;
           --text: #f5f5f7;
           --muted: #86868b;
           --link: #2997ff;
@@ -151,9 +149,6 @@
         outline-offset: 12px;
         border-radius: 24px;
       }
-      .stage.pointer-focus:focus-visible {
-        outline: none;
-      }
       .remote {
         position: relative;
         touch-action: none;
@@ -209,8 +204,7 @@
 
       /* Keyboard shortcuts */
       .try {
-        background: var(--band);
-        padding-block: 112px;
+        padding-block: 0 112px;
       }
       .try .intro {
         color: var(--muted);
@@ -403,7 +397,7 @@
 
       /* Setup */
       .setup {
-        padding-block: 112px;
+        padding-block: 0 112px;
       }
       .setup h2 {
         font-size: clamp(32px, 5vw, 48px);
@@ -450,8 +444,7 @@
 
       /* Open source */
       .source {
-        background: var(--band);
-        padding-block: 96px;
+        padding-block: 0 112px;
         text-align: center;
       }
       .source svg {
@@ -500,13 +493,13 @@
       }
 
       @media (max-width: 734px) {
-        .features,
-        .try {
+        .features {
           padding-block: 72px;
         }
+        .try,
         .setup,
         .source {
-          padding-block: 72px;
+          padding-block: 0 72px;
         }
         .grid,
         .shortcuts,
@@ -922,25 +915,21 @@
         setTimeout(() => control.classList.remove('pressed'), 160);
       }
 
-      // Keys only drive the demo while it has focus, so arrow keys still scroll the page elsewhere.
-      stage.addEventListener('keydown', (event) => {
+      // Keys drive the demo while the pointer is over it, or when it has keyboard focus (Tab).
+      // Anywhere else, arrow keys scroll the page as usual.
+      let hovering = false;
+      stage.addEventListener('pointerenter', (event) => (hovering = event.pointerType !== 'touch'));
+      stage.addEventListener('pointerleave', () => (hovering = false));
+      document.addEventListener('keydown', (event) => {
+        if (!hovering && document.activeElement !== stage) return;
         const key = aliases[event.key] ?? event.key;
         if (!(key in actions) || event.metaKey || event.ctrlKey || event.altKey) return;
         event.preventDefault();
         press(key);
       });
 
-      // Clicking or scrolling on the remote or the TV focuses the stage, so the keyboard works right
-      // after. The focus ring is only for people who Tab to the stage; the TV already shows focus.
-      function focusStage() {
-        stage.classList.add('pointer-focus');
-        stage.focus({ preventScroll: true });
-      }
-      stage.addEventListener('blur', () => stage.classList.remove('pointer-focus'));
-      stage.addEventListener('pointerdown', (event) => {
-        event.preventDefault();
-        focusStage();
-      });
+      // Stop clicks and drags on the remote from selecting text or dragging the screenshot.
+      stage.addEventListener('pointerdown', (event) => event.preventDefault());
       remoteButtons.forEach((button) =>
         button.addEventListener('click', () => press(button.dataset.key)),
       );
@@ -966,7 +955,6 @@
         'wheel',
         (event) => {
           event.preventDefault();
-          focusStage();
           clearTimeout(gestureEndTimer);
           gestureEndTimer = setTimeout(endGesture, 150);
           const speed = Math.hypot(event.deltaX, event.deltaY);
