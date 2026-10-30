@@ -392,7 +392,7 @@ describe('keys', () => {
     expect(preventDefault).not.toHaveBeenCalled();
 
     keydown({ key: 'ArrowUp', target, getModifierState: () => false, preventDefault });
-    expect(desktopAPI.sendKey.mock.calls).toEqual([['up']]);
+    expect(desktopAPI.sendKey.mock.calls).toEqual([['up', false]]);
     expect(preventDefault).toHaveBeenCalledOnce();
   });
 
