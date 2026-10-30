@@ -108,7 +108,7 @@ The release workflow builds macOS Apple silicon, macOS Intel, and Windows x64. T
 
 Keep `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` versions in sync with the `v` tag. The official `tauri-apps/tauri-action` builds and uploads installers, signed updater bundles, signatures, and `latest.json` with release notes. Builds run sequentially so the action's metadata merge preserves every platform. The release stays a draft until its manifest has the tagged version, all three platforms pointing to actual release assets, and non-empty signatures. Architecture-specific asset names prevent collisions.
 
-Release notes render as sanitized Markdown text, including headings, lists, emphasis, code, and tables. Images and link navigation are disabled.
+**Settings → What’s new** shows the installed version’s release notes offline, without checking for an update. Update `app/release-notes.md` before tagging a release: the renderer bundles it, and the release workflow uses the same file for GitHub and updater notes. Notes render as sanitized Markdown text, including headings, lists, emphasis, code, and tables; images and link navigation are disabled.
 
 Normal local builds and manual workflow runs do not generate updater artifacts and require no signing secret. To create signed updater artifacts locally:
 
