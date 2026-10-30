@@ -1,8 +1,15 @@
 // The renderer only displays the sidecar's connection state and forwards user actions; these
 // tests drive it with `state` events and check the screen, status text, and requests sent.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PlaybackState, type ConnectionState, type NowPlayingInfo } from '../../src/shared/types';
+import {
+  PlaybackState,
+  type ConnectionState,
+  type NowPlayingInfo,
+  type SavedDevice,
+} from '../../src/shared/types';
 import { icon } from '../../src/renderer/icons';
+import type * as RendererState from '../../src/renderer/state';
+import type * as WebRemote from '../../src/renderer/web_remote';
 
 const desktopAPI = {
   connect: vi.fn(),
@@ -15,6 +22,7 @@ const desktopAPI = {
   startPair: vi.fn(),
   finishPair: vi.fn(),
   showContextMenu: vi.fn(),
+  showDeviceMenu: vi.fn(),
   showWindow: vi.fn(),
   quit: vi.fn(),
   setAlwaysOnTop: vi.fn(),
@@ -37,6 +45,33 @@ const desktopAPI = {
 };
 
 vi.mock('../../src/shared/desktop-api', () => ({ desktopAPI }));
+const companionTouch = vi.hoisted(() => ({
+  available: vi.fn(() => false),
+  send: vi.fn(async () => true),
+}));
+vi.mock('../../src/renderer/companion', () => ({
+  companionKeyboardGuard: () => false,
+  companionTouchAvailable: companionTouch.available,
+  companionTouchAdapter: companionTouch.send,
+}));
+
+const deviceState = vi.hoisted(() => ({
+  devices: {} as Record<string, SavedDevice>,
+  active: null as SavedDevice | null,
+}));
+vi.mock('../../src/renderer/state', async (importOriginal) => ({
+  ...(await importOriginal<typeof RendererState>()),
+  loadDevices: () => deviceState.devices,
+  loadActiveDevice: () => deviceState.active,
+  refreshDevices: vi.fn(async () => {}),
+  saveActiveDevice: vi.fn(async (device: SavedDevice | null) => {
+    deviceState.active = device;
+  }),
+  removeDevice: vi.fn(async (identifier: string) => {
+    delete deviceState.devices[identifier];
+    if (deviceState.active?.identifier === identifier) deviceState.active = null;
+  }),
+}));
 
 const mockElement = {
   style: { display: '' },
@@ -91,14 +126,14 @@ function fakeElement(value = '') {
     appendChild: vi.fn(),
     addEventListener: vi.fn(),
     focus: vi.fn(),
+    getBoundingClientRect: () => ({ left: 12, bottom: 44 }),
     querySelectorAll: vi.fn(() => []),
   };
 }
 
-/** Gives each selector its own element (and the theme radios), so tests can read UI state. */
+/** Gives each selector its own element so tests can read UI state. */
 function useElements() {
   const elements = new Map<string, ReturnType<typeof fakeElement>>();
-  const radios = ['systemmode', 'darkmode', 'lightmode'].map(fakeElement);
   const get = (selector: string) => {
     if (!elements.has(selector)) elements.set(selector, fakeElement());
     return elements.get(selector)!;
@@ -106,13 +141,11 @@ function useElements() {
   vi.mocked(document.querySelector).mockImplementation(
     (selector: string) => (selector === '#statusText' ? statusElement : get(selector)) as never,
   );
-  vi.mocked(document.querySelectorAll).mockImplementation(
-    (selector: string) => (selector.includes('name="theme"') ? radios : []) as never,
-  );
+  vi.mocked(document.querySelectorAll).mockReturnValue([] as never);
   vi.mocked(document.getElementById).mockImplementation((id: string) => get(`#${id}`) as never);
   const listener = (selector: string, event: string) =>
     get(selector).addEventListener.mock.calls.find(([name]) => name === event)![1] as () => void;
-  return { get, radios, listener };
+  return { get, listener };
 }
 
 /** Backs the localStorage mock with a map, so values the renderer writes can be read back. */
@@ -123,7 +156,7 @@ function useStorage(values: Record<string, string>) {
   storage.removeItem.mockImplementation((key: string) => void store.delete(key));
 }
 
-let web: typeof import('../../src/renderer/web_remote');
+let web: typeof WebRemote;
 let keydown: (event: unknown) => void;
 let setState: (state: ConnectionState) => void;
 let nowPlaying: (info: NowPlayingInfo) => void;
@@ -136,8 +169,15 @@ let contextMenuAction: (action: string, payload?: string) => void;
 let errorMessage: (message: string) => void;
 let focus: () => void;
 
-const creds = { credentials: 'c', identifier: 'tv' };
-const other = { credentials: 'o', identifier: 'tv2' };
+const creds: SavedDevice = { identifier: 'tv', name: 'Living Room', companionPaired: false };
+const other: SavedDevice = { identifier: 'tv2', name: 'Bedroom', companionPaired: false };
+function useDevices(
+  devices: SavedDevice[],
+  active: string | null = devices[0]?.identifier ?? null,
+): void {
+  deviceState.devices = Object.fromEntries(devices.map((device) => [device.identifier, device]));
+  deviceState.active = active ? (deviceState.devices[active] ?? null) : null;
+}
 const state = (status: ConnectionState['status']) => setState({ status });
 const press = (key: string) =>
   keydown({ key, getModifierState: () => false, preventDefault: vi.fn() });
@@ -165,10 +205,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  companionTouch.available.mockReturnValue(false);
   statusElement.textContent = '';
   statusElement.style.display = '';
   documentStub.activeElement = null;
-  useStorage({ atvcreds: JSON.stringify(creds) });
+  useStorage({});
+  useDevices([creds]);
   for (const request of [
     desktopAPI.connect,
     desktopAPI.reconnect,
@@ -217,7 +259,7 @@ describe('window appearance', () => {
       ['darkmode', 'dark'],
       ['lightmode', 'light'],
     ] as const) {
-      useStorage({ atvcreds: JSON.stringify(creds), uimode });
+      useStorage({ uimode });
       useElements();
       await web.init();
       expect(desktopAPI.setWindowTheme).toHaveBeenLastCalledWith(theme);
@@ -504,7 +546,7 @@ describe('PIN entry', () => {
     type('1234');
     await vi.waitFor(() => expect(pin.disabled).toBe(false));
 
-    expect(storage.getItem('remote_credentials')).toBeNull();
+    expect(deviceState.active).toEqual(creds);
     expect(desktopAPI.startPair).toHaveBeenCalledTimes(1);
   });
 
@@ -515,9 +557,10 @@ describe('PIN entry', () => {
     desktopAPI.connect.mockClear();
     state('pairing');
     dom.listener('#cancelPairing', 'click')();
-    expect(desktopAPI.connect).toHaveBeenCalledWith(creds);
+    expect(desktopAPI.connect).toHaveBeenCalledWith(creds.identifier);
 
     useStorage({});
+    useDevices([]);
     desktopAPI.scan.mockClear();
     dom.listener('#cancelPairing', 'click')();
     expect(desktopAPI.scan).toHaveBeenCalled();
@@ -542,10 +585,6 @@ describe('header', () => {
   // The TV keeps its connection while asleep, so the dot alone can't tell.
   it('says the TV is asleep while it is, and only while connected', () => {
     const dom = useElements();
-    useStorage({
-      atvcreds: JSON.stringify(creds),
-      remote_credentials: JSON.stringify({ 'Living Room (1.2.3.4)': creds }),
-    });
     const header = dom.get('#topTextHeader').firstChild;
     state('connected');
     expect(header.textContent).toBe('Living Room');
@@ -769,13 +808,14 @@ describe('requests', () => {
   it('connects to the saved device at startup', async () => {
     useElements();
     await web.init();
-    expect(desktopAPI.connect).toHaveBeenCalledWith(creds);
+    expect(desktopAPI.connect).toHaveBeenCalledWith(creds.identifier);
     expect(desktopAPI.scan).not.toHaveBeenCalled();
   });
 
   it('scans for pairing at startup without a saved device', async () => {
     useElements();
     useStorage({});
+    useDevices([]);
     await web.init();
     expect(desktopAPI.connect).not.toHaveBeenCalled();
     expect(desktopAPI.scan).toHaveBeenCalled();
@@ -784,17 +824,14 @@ describe('requests', () => {
   it('asks the sidecar to reconnect the saved device on wake and after a backend restart', () => {
     powerResume();
     backendLost();
-    expect(desktopAPI.reconnect.mock.calls).toEqual([[creds], [creds]]);
+    expect(desktopAPI.reconnect.mock.calls).toEqual([[creds.identifier], [creds.identifier]]);
     expect(desktopAPI.connect).not.toHaveBeenCalled();
   });
 
-  it('lists saved devices by name and connects to the one picked by identifier', () => {
+  it('lists saved devices by name and connects to the one picked by identifier', async () => {
     useElements();
     const bedroom = { ...other, name: 'Bedroom' };
-    useStorage({
-      atvcreds: JSON.stringify(creds),
-      remote_credentials: JSON.stringify({ tv: { ...creds, name: 'Living Room' }, tv2: bedroom }),
-    });
+    useDevices([creds, bedroom], creds.identifier);
     contextMenuAction('setTheme', 'darkmode');
     expect(desktopAPI.showContextMenu.mock.lastCall![0].devices).toEqual([
       { label: 'Living Room', identifier: 'tv', checked: true },
@@ -802,45 +839,29 @@ describe('requests', () => {
     ]);
 
     contextMenuAction('selectDevice', 'tv2');
-    expect(desktopAPI.connect).toHaveBeenCalledWith(bedroom);
-    expect(storage.getItem('atvcreds')).toBe(JSON.stringify(bedroom));
+    await vi.waitFor(() => expect(desktopAPI.connect).toHaveBeenCalledWith(bedroom.identifier));
+    expect(deviceState.active).toEqual(bedroom);
   });
 
   it('re-pairs the current device: scans, then connects with the new credentials', async () => {
     useElements();
-    const repaired = { credentials: 'new', identifier: 'tv', name: 'Living Room' };
+    const repaired = { ...creds, name: 'Living Room' };
     contextMenuAction('repairCurrent');
     expect(desktopAPI.scan).toHaveBeenCalled();
     // Kept until pairing succeeds, so Cancel goes back to it rather than the first saved device.
-    expect(storage.getItem('atvcreds')).toBe(JSON.stringify(creds));
+    expect(deviceState.active).toEqual(creds);
 
     web.startPair('Living Room (1.2.3.4)');
     desktopAPI.finishPair.mockResolvedValue(repaired);
     await web.finishPair('1234');
 
-    expect(desktopAPI.connect).toHaveBeenCalledWith(repaired);
-    expect(JSON.parse(storage.getItem('remote_credentials'))).toEqual({ tv: repaired });
-  });
-
-  // Issue #11: the TV's IP changed, so the scan label did too; it used to be saved twice.
-  it('replaces the saved entry when a TV is re-paired at a new IP', async () => {
-    useElements();
-    useStorage({ remote_credentials: JSON.stringify({ 'Living Room (1.2.3.4)': creds }) });
-    const repaired = { credentials: 'new', identifier: 'tv', name: 'Living Room' };
-
-    web.startPair('Living Room (1.2.3.9)');
-    desktopAPI.finishPair.mockResolvedValue(repaired);
-    await web.finishPair('1234');
-
-    expect(JSON.parse(storage.getItem('remote_credentials'))).toEqual({ tv: repaired });
+    expect(desktopAPI.connect).toHaveBeenCalledWith(repaired.identifier);
+    expect(deviceState.active).toEqual(repaired);
   });
 
   it('disconnects the active device when it is removed in Settings', async () => {
     useElements();
-    useStorage({
-      atvcreds: JSON.stringify(creds),
-      remote_credentials: JSON.stringify({ 'Living Room': creds }),
-    });
+    useDevices([creds]);
     await web.init();
     contextMenuAction('openSettings');
     // The device row's Remove button, created by the settings panel.
@@ -850,38 +871,20 @@ describe('requests', () => {
 
     remove();
 
-    expect(storage.getItem('atvcreds')).toBeNull();
-    expect(desktopAPI.disconnect).toHaveBeenCalled();
+    await vi.waitFor(() => expect(desktopAPI.disconnect).toHaveBeenCalled());
+    expect(deviceState.active).toBeNull();
   });
 
-  it('decodes devices older releases saved as JSON strings before listing them', () => {
-    useStorage({ remote_credentials: JSON.stringify({ Old: JSON.stringify(creds) }) });
-    contextMenuAction('setTheme', 'darkmode');
-    expect(desktopAPI.showContextMenu).toHaveBeenLastCalledWith(
-      {
-        devices: [{ label: 'Old', identifier: 'tv', checked: false }],
-        uiMode: 'darkmode',
-        alwaysOnTop: false,
-        speakers: [],
-      },
-      false,
-    );
-  });
-
-  it('applies imported settings to the tray menu and the settings panel', async () => {
+  it('applies imported appearance settings to the window and native menu', async () => {
     const dom = useElements();
     await web.init();
     desktopAPI.showContextMenu.mockClear();
     desktopAPI.connect.mockClear();
-    desktopAPI.importCredentials.mockResolvedValue(
-      JSON.stringify({
-        version: 1,
-        atvcreds: null,
-        remote_credentials: JSON.stringify({ 'Living Room': creds }),
-        uimode: 'darkmode',
-        alwaysOnTopChecked: 'true',
-      }),
-    );
+    useDevices([creds], null);
+    desktopAPI.importCredentials.mockResolvedValue({
+      uimode: 'darkmode',
+      alwaysOnTopChecked: 'true',
+    });
 
     dom.listener('#settingsImportCredentialsBtn', 'click')();
     await vi.waitFor(() => expect(desktopAPI.disconnect).toHaveBeenCalled());
@@ -898,30 +901,25 @@ describe('requests', () => {
       },
       false,
     );
-    expect(dom.radios.map((radio) => radio.checked)).toEqual([false, true, false]);
-    expect(dom.get('#settingsAlwaysOnTop').checked).toBe(true);
+    expect(desktopAPI.setWindowTheme).toHaveBeenLastCalledWith('dark');
+    expect(desktopAPI.setAlwaysOnTop).toHaveBeenLastCalledWith(true);
   });
 
   it('reconnects with imported credentials', async () => {
     const dom = useElements();
     await web.init();
     desktopAPI.connect.mockClear();
-    desktopAPI.importCredentials.mockResolvedValue(
-      JSON.stringify({
-        version: 1,
-        atvcreds: JSON.stringify(other),
-        remote_credentials: JSON.stringify({ Bedroom: other }),
-      }),
-    );
+    useDevices([other]);
+    desktopAPI.importCredentials.mockResolvedValue({});
 
     dom.listener('#settingsImportCredentialsBtn', 'click')();
-    await vi.waitFor(() => expect(desktopAPI.connect).toHaveBeenCalledWith(other));
+    await vi.waitFor(() => expect(desktopAPI.connect).toHaveBeenCalledWith(other.identifier));
     expect(desktopAPI.disconnect).not.toHaveBeenCalled();
   });
 
   // Reconnecting replaces the connection, so focus must not do it while one is working.
   it('retries on window focus only after the sidecar gave up', () => {
-    useStorage({ atvcreds: JSON.stringify(creds) });
+    useDevices([creds]);
     state('connected');
     focus();
     state('connecting');
@@ -930,6 +928,6 @@ describe('requests', () => {
 
     state('disconnected');
     focus();
-    expect(desktopAPI.reconnect).toHaveBeenCalledWith(creds);
+    expect(desktopAPI.reconnect).toHaveBeenCalledWith(creds.identifier);
   });
 });

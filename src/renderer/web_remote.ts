@@ -10,17 +10,22 @@ import {
   type NowPlayingInfo,
   type Speaker,
 } from '../shared/types';
-import { desktopAPI } from '../shared/desktop-api';
+import { desktopAPI, type ContextMenuConfig } from '../shared/desktop-api';
 import { icon } from './icons';
+import {
+  companionKeyboardGuard,
+  companionTouchAdapter,
+  companionTouchAvailable,
+} from './companion';
 import {
   $,
   $$,
   loadActiveDevice,
   loadDevices,
-  parseStored,
+  refreshDevices,
+  removeDevice,
   safeParse,
   saveActiveDevice,
-  saveDevices,
 } from './state';
 
 let qPresses = 0;
@@ -81,7 +86,7 @@ export function initIPC(): void {
     else setStatus(msg);
   });
   desktopAPI.onContextMenuAction((action: string, payload?: string) => {
-    handleContextMenuAction(action, payload);
+    void handleContextMenuAction(action, payload).catch(showRequestError);
   });
 
   desktopAPI.onAtvState(renderState);
@@ -174,6 +179,7 @@ window.addEventListener('keyup', (e) => {
 });
 
 window.addEventListener('keydown', (e) => {
+  if (companionKeyboardGuard(e)) return;
   // Let focused buttons activate natively instead of sending their activation keys to the TV.
   if (e.target instanceof HTMLButtonElement && (e.key === 'Enter' || e.key === ' ')) return;
   let key = e.key;
@@ -299,24 +305,35 @@ export async function scanDevices(): Promise<void> {
 }
 
 export function startPair(dev: string): void {
+  $('#retryPairSave')!.hidden = true;
   pairDevice = dev;
   desktopAPI.startPair(dev).catch((err: unknown) => {
     setStatus(err instanceof Error ? err.message : 'Unable to start pairing.');
   });
 }
 
-// One PIN pairs the Apple TV; save the credentials and connect, which ends pairing. A session
-// takes one PIN, right or wrong, so a failure starts a new one and the TV shows a new PIN.
+// The native host stores the pairing keys; the renderer refreshes metadata and selects the TV.
+// A session takes one PIN, so a rejected code starts a new session and the TV shows a new PIN.
 export async function finishPair(code: string): Promise<void> {
   try {
+    $('#retryPairSave')!.hidden = true;
     const result = await desktopAPI.finishPair(code);
     // Cancelled while the TV checked the code; the remote has moved on.
     if (!result) return;
-    saveDevices({ ...loadDevices(), [result.identifier]: result });
-    saveActiveDevice(result);
-    connectToATV();
+    try {
+      await refreshDevices();
+      await saveActiveDevice(result);
+      connectToATV();
+    } catch (error) {
+      showRequestError(error);
+    }
   } catch (err) {
     console.error('Pairing failed:', err);
+    if (err instanceof Error && err.message.startsWith('Secure storage:')) {
+      setStatus(`${err.message}. Unlock secure storage, then retry saving.`);
+      $('#retryPairSave')!.hidden = false;
+      return;
+    }
     setStatus("That code didn't work. Enter the new code shown on your Apple TV.");
     startPair(pairDevice);
   }
@@ -361,7 +378,7 @@ async function submitCode(): Promise<void> {
   input.disabled = true;
   renderPin();
   await finishPair(input.value);
-  clearPin();
+  if ($('#retryPairSave')!.hidden) clearPin();
 }
 
 function showKeyboardHint(): void {
@@ -413,18 +430,40 @@ function showKeyMap(): void {
   let scrollAccY = 0;
   let gestureMoved = false;
   let gestureEndTimer: ReturnType<typeof setTimeout> | undefined;
+  let touchActive = false;
+  let touchX = 500;
+  let touchY = 500;
+  let touchQueue = Promise.resolve();
+  function queueTouch(x: number, y: number, phase: 'press' | 'hold' | 'release'): void {
+    const identifier = loadActiveDevice()?.identifier;
+    touchQueue = touchQueue
+      .then(async () => {
+        if (
+          (!signal.aborted || phase === 'release') &&
+          loadActiveDevice()?.identifier === identifier
+        ) {
+          await companionTouchAdapter(x, y, phase);
+        }
+      })
+      .catch(showRequestError);
+  }
   const SCROLL_THRESHOLD = 90;
   /** Quiet time that ends a gesture; events arrive about every 16 ms until momentum stops. */
   const GESTURE_END_MS = 150;
 
   function endGesture(): void {
     clearTimeout(gestureEndTimer);
+    if (touchActive) {
+      touchActive = false;
+      queueTouch(touchX, touchY, 'release');
+    }
     scrollAccX = 0;
     scrollAccY = 0;
     gestureMoved = false;
   }
   const stopGestureListener = desktopAPI.onScrollGestureBegan(endGesture);
   signal.addEventListener('abort', stopGestureListener);
+  signal.addEventListener('abort', endGesture, { once: true });
 
   touchpad.addEventListener(
     'wheel',
@@ -433,7 +472,18 @@ function showKeyMap(): void {
 
       clearTimeout(gestureEndTimer);
       gestureEndTimer = setTimeout(endGesture, GESTURE_END_MS);
-      if (gestureMoved) return;
+      if (companionTouchAvailable()) {
+        if (!touchActive) {
+          touchActive = true;
+          touchX = touchY = 500;
+          queueTouch(touchX, touchY, 'press');
+        }
+        touchX = Math.round(Math.max(0, Math.min(1000, touchX - e.deltaX * 2)));
+        touchY = Math.round(Math.max(0, Math.min(1000, touchY - e.deltaY * 2)));
+        queueTouch(touchX, touchY, 'hold');
+        return;
+      }
+      if (touchActive || gestureMoved) return;
 
       scrollAccX += e.deltaX;
       scrollAccY += e.deltaY;
@@ -584,19 +634,16 @@ export function updateConnectionDot(state: ConnectionDotState): void {
   header.firstChild!.textContent = asleep && state === 'connected' ? `${name} · Asleep` : name;
 }
 
-/**
- * Asks the sidecar to connect to the saved device (`atvcreds`), replacing any connection,
- * connect, or pairing in progress. Progress arrives as `state` events.
- */
+/** Connects to the selected device; the native host supplies its pairing keys. */
 export function connectToATV(): void {
-  const creds = loadActiveDevice();
-  if (creds) desktopAPI.connect(creds).catch(showRequestError);
+  const device = loadActiveDevice();
+  if (device) desktopAPI.connect(device.identifier).catch(showRequestError);
 }
 
 /** Like connectToATV, but the sidecar ignores it while pairing. */
 function reconnectToATV(): void {
-  const creds = loadActiveDevice();
-  if (creds) desktopAPI.reconnect(creds).catch(showRequestError);
+  const device = loadActiveDevice();
+  if (device) desktopAPI.reconnect(device.identifier).catch(showRequestError);
 }
 
 function showRequestError(err: unknown): void {
@@ -660,89 +707,29 @@ function setAlwaysOnTop(tf: boolean): void {
 
 // The webview cannot download blobs, so the host writes the file from a native save dialog.
 async function exportCredentials(): Promise<void> {
-  const backup = {
-    version: 1,
-    atvcreds: localStorage.getItem('atvcreds'),
-    remote_credentials: localStorage.getItem('remote_credentials'),
-    uimode: localStorage.getItem('uimode'),
-    alwaysOnTopChecked: localStorage.getItem('alwaysOnTopChecked'),
-  };
-  if (await desktopAPI.exportCredentials(JSON.stringify(backup, null, 2))) {
+  if (
+    await desktopAPI.exportCredentials({
+      uimode: localStorage.getItem('uimode'),
+      alwaysOnTopChecked: localStorage.getItem('alwaysOnTopChecked'),
+    })
+  ) {
     setStatus('Credentials exported.');
   }
 }
 
-function isStoredValue(value: unknown): value is string | null {
-  return typeof value === 'string' || value === null;
-}
-
 // Picked from a native dialog, like the export, so the window stays up to show the result.
 async function importCredentials(): Promise<void> {
-  const contents = await desktopAPI.importCredentials();
-  if (contents === null) return;
-  const parsed: unknown = JSON.parse(contents);
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    !('atvcreds' in parsed) ||
-    !('remote_credentials' in parsed) ||
-    !isStoredValue(parsed.atvcreds) ||
-    !isStoredValue(parsed.remote_credentials) ||
-    ('uimode' in parsed && !isStoredValue(parsed.uimode)) ||
-    ('alwaysOnTopChecked' in parsed && !isStoredValue(parsed.alwaysOnTopChecked))
-  ) {
-    throw new Error('This is not an Apple TV Remote credential export.');
-  }
-  // Validate the complete backup before changing any existing saved state.
-  function storedObject(value: string): Record<string, unknown> {
-    const decoded = parseStored(value);
-    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
-      throw new Error('Credential data must contain an object.');
-    }
-    return decoded as Record<string, unknown>;
-  }
-  function validateCredential(value: unknown): void {
-    const credential = typeof value === 'string' ? storedObject(value) : value;
-    if (
-      typeof credential !== 'object' ||
-      credential === null ||
-      !('credentials' in credential) ||
-      typeof credential.credentials !== 'string' ||
-      credential.credentials.length === 0 ||
-      !('identifier' in credential) ||
-      typeof credential.identifier !== 'string' ||
-      credential.identifier.length === 0
-    ) {
-      throw new Error('Each saved device must contain credentials and an identifier.');
-    }
-  }
-  if (parsed.atvcreds !== null) validateCredential(storedObject(parsed.atvcreds));
-  if (parsed.remote_credentials !== null) {
-    Object.values(storedObject(parsed.remote_credentials)).forEach(validateCredential);
-  }
-  if (
-    'uimode' in parsed &&
-    parsed.uimode !== null &&
-    !['systemmode', 'darkmode', 'lightmode'].includes(parsed.uimode as string)
-  ) {
-    throw new Error('Invalid appearance setting in credential export.');
-  }
-  if (
-    'alwaysOnTopChecked' in parsed &&
-    parsed.alwaysOnTopChecked !== null &&
-    !['true', 'false'].includes(parsed.alwaysOnTopChecked as string)
-  ) {
-    throw new Error('Invalid always-on-top setting in credential export.');
-  }
-  for (const key of ['atvcreds', 'remote_credentials', 'uimode', 'alwaysOnTopChecked'] as const) {
-    // Validated above: each key is absent, null, or a string.
-    const value = (parsed as Record<string, unknown>)[key];
+  const settings = await desktopAPI.importCredentials();
+  if (settings === null) return;
+  await refreshDevices();
+  for (const key of ['uimode', 'alwaysOnTopChecked'] as const) {
+    const value = settings[key];
     if (typeof value === 'string') localStorage.setItem(key, value);
-    else localStorage.removeItem(key);
+    else if (value === null) localStorage.removeItem(key);
   }
   await handleDarkMode();
   setAlwaysOnTop(safeParse(localStorage.getItem('alwaysOnTopChecked'), false));
-  refreshSettings();
+  populateDeviceList();
   handleContextMenu();
   // connect replaces the old connection; without an active device, just drop it.
   if (loadActiveDevice()) {
@@ -937,20 +924,6 @@ function showSettings(): void {
   $('#runningElements')!.style.display = 'none';
   $('#addNewElements')!.style.display = 'none';
   $('#settingsPanel')!.style.display = 'block';
-  refreshSettings();
-}
-
-/** Shows the stored theme, always-on-top choice, and saved devices in the settings panel. */
-function refreshSettings(): void {
-  const currentTheme = localStorage.getItem('uimode') || 'systemmode';
-  const radios = document.querySelectorAll<HTMLInputElement>('#themeRadios input[name="theme"]');
-  radios.forEach((r) => {
-    r.checked = r.value === currentTheme;
-  });
-
-  const topChecked = safeParse(localStorage.getItem('alwaysOnTopChecked'), false);
-  ($('#settingsAlwaysOnTop') as HTMLInputElement).checked = topChecked;
-
   populateDeviceList();
 }
 
@@ -984,16 +957,15 @@ function populateDeviceList(): void {
     removeBtn.textContent = 'Remove';
     removeBtn.className = 'settings-device-remove';
     removeBtn.addEventListener('click', () => {
-      const allCreds = loadDevices();
-      delete allCreds[identifier];
-      saveDevices(allCreds);
-      if (isActive) {
-        saveActiveDevice(null);
-        void desktopAPI.disconnect();
-        setStatus('No device selected. Right-click to choose one.');
-      }
-      populateDeviceList();
-      handleContextMenu();
+      void (async () => {
+        await removeDevice(identifier);
+        if (isActive) {
+          await desktopAPI.disconnect();
+          setStatus('No device selected. Click the device name to choose one.');
+        }
+        populateDeviceList();
+        handleContextMenu();
+      })().catch(showRequestError);
     });
     row.appendChild(removeBtn);
     listEl.appendChild(row);
@@ -1008,24 +980,6 @@ function populateDeviceList(): void {
 }
 
 function initSettingsListeners(): void {
-  // Theme radios
-  const radios = document.querySelectorAll<HTMLInputElement>('#themeRadios input[name="theme"]');
-  radios.forEach((r) => {
-    r.addEventListener('change', () => {
-      localStorage.setItem('uimode', r.value);
-      handleDarkMode();
-      handleContextMenu();
-    });
-  });
-
-  // Always on top
-  $('#settingsAlwaysOnTop')!.addEventListener('change', (e) => {
-    const checked = (e.target as HTMLInputElement).checked;
-    localStorage.setItem('alwaysOnTopChecked', String(checked));
-    setAlwaysOnTop(checked);
-    handleContextMenu();
-  });
-
   // Hotkey button
   $('#settingsHotkeyBtn')!.addEventListener('click', () => {
     void desktopAPI.loadHotkeyWindow();
@@ -1050,7 +1004,7 @@ function initSettingsListeners(): void {
 
 // --- Context Menu ---
 
-function handleContextMenu(popup = false): void {
+function contextMenuConfig(): ContextMenuConfig {
   const creds = loadDevices();
   const activeId = getActiveIdentifier();
   const mode = localStorage.getItem('uimode') || 'systemmode';
@@ -1062,29 +1016,35 @@ function handleContextMenu(popup = false): void {
     checked: identifier === activeId,
   }));
 
-  void desktopAPI
-    .showContextMenu(
-      {
-        devices,
-        uiMode: mode,
-        alwaysOnTop: topChecked,
-        speakers: speakers.map(({ id, name, selected }) => ({
-          label: name,
-          id,
-          checked: selected,
-        })),
-      },
-      popup,
-    )
-    .catch((error: unknown) => setStatus(String(error)));
+  return {
+    devices,
+    uiMode: mode,
+    alwaysOnTop: topChecked,
+    speakers: speakers.map(({ id, name, selected }) => ({
+      label: name,
+      id,
+      checked: selected,
+    })),
+  };
 }
 
-function handleContextMenuAction(action: string, payload?: string): void {
+function handleContextMenu(popup = false): void {
+  void desktopAPI.showContextMenu(contextMenuConfig(), popup).catch(showRequestError);
+}
+
+function showDeviceMenu(): void {
+  const header = $('#topTextHeader')!.getBoundingClientRect();
+  void desktopAPI
+    .showDeviceMenu(contextMenuConfig(), { x: header.left, y: header.bottom + 4 })
+    .catch(showRequestError);
+}
+
+async function handleContextMenuAction(action: string, payload?: string): Promise<void> {
   switch (action) {
     case 'selectDevice': {
       const creds = loadDevices();
       if (payload && Object.hasOwn(creds, payload)) {
-        saveActiveDevice(creds[payload]);
+        await saveActiveDevice(creds[payload]);
         connectToATV();
         handleContextMenu();
       }
@@ -1129,7 +1089,7 @@ export async function init(): Promise<void> {
     void handleDarkMode();
   });
   handleContextMenu();
-  $('#topTextHeader')!.addEventListener('click', () => handleContextMenu(true));
+  $('#topTextHeader')!.addEventListener('click', showDeviceMenu);
   window.addEventListener('contextmenu', (event) => {
     event.preventDefault();
     handleContextMenu(true);
@@ -1145,6 +1105,13 @@ export async function init(): Promise<void> {
   $('#cancelPairing')!.addEventListener('click', () => {
     if (loadActiveDevice()) connectToATV();
     else startScan();
+  });
+  $('#retryPairSave')!.addEventListener('click', () => {
+    const retry = $('#retryPairSave') as HTMLButtonElement;
+    retry.disabled = true;
+    void finishPair('').finally(() => {
+      retry.disabled = false;
+    });
   });
   const pin = $('#pairCode') as HTMLInputElement;
   pin.addEventListener('input', () => {
@@ -1162,14 +1129,14 @@ export async function init(): Promise<void> {
   let creds = loadActiveDevice();
   if (!creds) {
     creds = Object.values(loadDevices())[0] ?? null;
-    if (creds?.credentials) saveActiveDevice(creds);
+    if (creds) await saveActiveDevice(creds);
   }
   if (localStorage.getItem('firstRun') !== 'false') {
     localStorage.setItem('firstRun', 'false');
     void desktopAPI.showWindow();
   }
 
-  if (creds && creds.credentials && creds.identifier) {
+  if (creds) {
     connectToATV();
   } else {
     startScan();

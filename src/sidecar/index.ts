@@ -53,6 +53,12 @@ function stringParam(params: Record<string, unknown>, name: string): string {
   return value;
 }
 
+function textParam(params: Record<string, unknown>): string {
+  const value = params.text;
+  if (typeof value !== 'string') throw new Error('text must be a string');
+  return value;
+}
+
 function send(message: unknown): void {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
@@ -103,12 +109,49 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
       await service.seek(seconds);
       return null;
     }
+    case 'companionStatus':
+      return service.companionStatus();
+    case 'startCompanionPair':
+      await service.startCompanionPair();
+      return null;
+    case 'finishCompanionPair':
+      return service.finishCompanionPair(stringParam(params, 'pin'));
+    case 'cancelCompanionPair':
+      await service.cancelCompanionPair();
+      return null;
+    case 'apps':
+      return service.apps();
+    case 'launchApp':
+      await service.launchApp(stringParam(params, 'bundleId'));
+      return null;
+    case 'setText':
+      return service.setText(textParam(params));
+    case 'clearText':
+      return service.clearText();
+    case 'touch': {
+      const { x, y, phase } = params;
+      if (typeof x !== 'number' || typeof y !== 'number')
+        throw new Error('x and y must be numbers');
+      if (phase !== 'press' && phase !== 'hold' && phase !== 'release')
+        throw new Error('Invalid touch phase');
+      await service.touch(x, y, phase);
+      return null;
+    }
     default:
       throw new Error(`Unknown method: ${method}`);
   }
 }
 
-for (const event of ['state', 'now-playing', 'power-state', 'volume', 'outputs']) {
+for (const event of [
+  'state',
+  'now-playing',
+  'power-state',
+  'volume',
+  'outputs',
+  'companion-state',
+  'text-focus',
+  'text-input',
+]) {
   service.on(event, (data: unknown = null) => send({ event, data }));
 }
 service.on('error', (error: Error) => send({ event: 'error', data: { message: error.message } }));

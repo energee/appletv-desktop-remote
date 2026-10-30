@@ -3,6 +3,8 @@
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { PlaybackState, type ConnectionState } from '../../src/shared/types';
+import type ATVServiceClass from '../../src/sidecar/atv_service';
+import type { Credentials as LibraryCredentials } from '../../app/node_modules/node-appletv-remote/dist/credentials.js';
 
 const mockScan = vi.fn();
 const mockConnect = vi.fn();
@@ -27,6 +29,15 @@ class MockAppleTV extends EventEmitter {
   removeOutputDevices = vi.fn(async (_ids: string[]) => {});
   suspend = vi.fn(async () => {});
   close = vi.fn(async () => {});
+  startCompanionPairing = vi.fn();
+  connectCompanion = vi.fn(async () => {});
+  appList = vi.fn(async () => []);
+  launchApp = vi.fn(async () => {});
+  setText = vi.fn(async (text: string) => text);
+  clearText = vi.fn(async () => '');
+  textFocusState = 'unfocused';
+  getText = vi.fn(async () => '');
+  touchAction = vi.fn(async () => {});
   constructor(discovered: { name?: string; deviceId?: string }) {
     super();
     this.name = discovered.name;
@@ -74,6 +85,7 @@ vi.mock('node-appletv-remote', () => ({
   AppleTV: MockAppleTV,
   Credentials: MockCredentials,
   PowerState: { Unknown: 'unknown', Off: 'off', On: 'on' },
+  TouchAction: { Press: 1, Hold: 3, Release: 4 },
   Key: {
     PlayPause: 'play_pause',
     Left: 'left',
@@ -102,7 +114,7 @@ const tv2 = { credentials: 'creds-2', identifier: 'tv2' };
 /** Runs due timers and lets every pending promise continuation settle. */
 const flush = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
 
-let ATVService: typeof import('../../src/sidecar/atv_service').default;
+let ATVService: typeof ATVServiceClass;
 
 beforeAll(async () => {
   ATVService = (await import('../../src/sidecar/atv_service')).default;
@@ -133,11 +145,107 @@ describe('ATVService', () => {
   });
 
   async function connected(creds = tv1): Promise<MockAppleTV> {
-    service.connect(creds);
+    service.connect({ ...creds });
     await flush();
     expect(service.state).toEqual({ status: 'connected' });
     return devices.at(-1)!;
   }
+
+  describe('Companion lifecycle', () => {
+    it('cancels pairing while the TV is still opening the code prompt', async () => {
+      const device = await connected();
+      const opening = Promise.withResolvers<{
+        finish: (pin: string) => Promise<string>;
+        destroy: () => void;
+      }>();
+      const session = { finish: vi.fn(), destroy: vi.fn() };
+      device.startCompanionPairing.mockReturnValue(opening.promise);
+      const pairing = service.startCompanionPair();
+      await service.cancelCompanionPair();
+      opening.resolve(session);
+      await pairing;
+      expect(session.destroy).toHaveBeenCalledOnce();
+      await expect(service.finishCompanionPair('1234')).rejects.toThrow(
+        'No active Companion pairing',
+      );
+      expect(service.state.status).toBe('connected');
+    });
+
+    it('cancels PIN verification or connection without saving credentials or ending MRP', async () => {
+      for (const stage of ['verification', 'connection'] as const) {
+        const device = await connected();
+        const checking = Promise.withResolvers<string>();
+        const connecting = Promise.withResolvers<void>();
+        const session = { finish: vi.fn(() => checking.promise), destroy: vi.fn() };
+        device.startCompanionPairing.mockResolvedValue(session);
+        if (stage === 'connection') device.connectCompanion.mockReturnValue(connecting.promise);
+        await service.startCompanionPair();
+        const pairing = service.finishCompanionPair('1234');
+        if (stage === 'connection') {
+          checking.resolve('new-companion-keys');
+          await flush();
+        }
+        await service.cancelCompanionPair();
+        checking.resolve('new-companion-keys');
+        connecting.resolve();
+        await expect(pairing).resolves.toBeNull();
+        expect(service.state.status).toBe('connected');
+        expect(device.close).not.toHaveBeenCalled();
+        expect(service.companionStatus().status).toBe('unpaired');
+      }
+    });
+
+    it('reuses newly paired credentials after an automatic MRP reconnect', async () => {
+      const device = await connected();
+      device.startCompanionPairing.mockResolvedValue({
+        finish: vi.fn(async () => 'new-companion-keys'),
+        destroy: vi.fn(),
+      });
+      await service.startCompanionPair();
+      await service.finishCompanionPair('1234');
+      device.emit('close');
+      await flush(500);
+      const replacement = devices.at(-1)!;
+      expect(replacement).not.toBe(device);
+      expect(replacement.connect.mock.lastCall?.[0]).toMatchObject({
+        serialized: 'serialized-creds',
+      });
+      expect(service.companionStatus().status).toBe('connected');
+    });
+
+    it('observes complete text instead of treating incremental TV input as replacement text', async () => {
+      const device = await connected();
+      const observed: string[] = [];
+      service.on('text-input', ({ text }: { text: string }) => observed.push(text));
+      device.textFocusState = 'focused';
+      device.getText.mockResolvedValue('existing');
+      device.emit('textFocusState', 'focused');
+      await flush();
+      expect(observed).toEqual(['existing']);
+      device.getText.mockResolvedValue('existing query');
+      device.emit('textInput', { text: ' query', actionType: 1 });
+      await flush();
+      expect(observed).toEqual(['existing', 'existing query']);
+    });
+
+    it('discards a stale read and queued edit when the TV leaves the field', async () => {
+      const device = await connected();
+      const observed = vi.fn();
+      service.on('text-input', observed);
+      const reading = Promise.withResolvers<string>();
+      device.textFocusState = 'focused';
+      device.getText.mockReturnValue(reading.promise);
+      device.emit('textFocusState', 'focused');
+      await flush();
+      const editing = expect(service.setText('old field')).rejects.toThrow('text field changed');
+      device.textFocusState = 'unfocused';
+      device.emit('textFocusState', 'unfocused');
+      reading.resolve('stale field');
+      await editing;
+      expect(observed).not.toHaveBeenCalled();
+      expect(device.setText).not.toHaveBeenCalled();
+    });
+  });
 
   describe('scan()', () => {
     it('returns formatted device labels and keeps them for pairing', async () => {
@@ -306,15 +414,6 @@ describe('ATVService', () => {
 
       expect(states).toEqual(['connecting', 'connected']);
       expect(service.state).toEqual({ status: 'connected' });
-    });
-
-    it('connects over MRP only, ignoring Companion keys in older saved credentials', async () => {
-      const device = await connected();
-      expect(device.connect).toHaveBeenCalledWith({
-        companionCredentials: 'companion-creds',
-        serialized: 'creds-1',
-      });
-      expect(device.eventNames()).not.toContain('companionClose');
     });
 
     // A scan otherwise runs its full timeout, delaying every connect by two seconds.
@@ -747,6 +846,36 @@ describe('ATVService', () => {
     });
   });
 
+  describe('Companion features', () => {
+    it('restores saved Companion credentials without disturbing MRP', async () => {
+      const device = await connected();
+      await flush();
+
+      expect(device.connectCompanion).toHaveBeenCalledWith('companion-creds');
+      expect(service.state).toEqual({ status: 'connected' });
+      expect(service.companionStatus().status).toBe('connected');
+    });
+
+    it('rejects apps before explicit Companion pairing', async () => {
+      await expect(service.apps()).rejects.toThrow('Companion features are not connected');
+    });
+
+    it('serializes concurrent text replacements in arrival order', async () => {
+      const device = await connected();
+      await flush();
+      const first = Promise.withResolvers<string>();
+      device.setText.mockReturnValueOnce(first.promise).mockResolvedValueOnce('new');
+
+      const oldWrite = service.setText('old');
+      const newWrite = service.setText('new');
+      first.resolve('old');
+
+      await expect(oldWrite).resolves.toBe('old');
+      await expect(newWrite).resolves.toBe('new');
+      expect(device.setText.mock.calls.map(([text]) => text)).toEqual(['old', 'new']);
+    });
+  });
+
   describe('disconnect()', () => {
     it('closes the device, stops reconnecting, and reports idle', async () => {
       const device = await connected();
@@ -800,7 +929,7 @@ describe('saved credentials format', () => {
       serverId: c.serverId,
     };
   };
-  let Credentials: typeof import('../../app/node_modules/node-appletv-remote/dist/credentials.js').Credentials;
+  let Credentials: typeof LibraryCredentials;
 
   beforeAll(async () => {
     ({ Credentials } =

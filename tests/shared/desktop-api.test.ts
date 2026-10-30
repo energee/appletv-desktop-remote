@@ -18,26 +18,6 @@ describe('desktopAPI', () => {
     );
   });
 
-  it('hands the credential export to the native save dialog action', async () => {
-    invoke.mockResolvedValue(true);
-
-    await expect(desktopAPI.exportCredentials('{"version":1}')).resolves.toBe(true);
-    expect(invoke).toHaveBeenCalledWith('desktop_action', {
-      action: 'exportCredentials',
-      args: { contents: '{"version":1}' },
-    });
-  });
-
-  it('reads the credential import through the native open dialog action', async () => {
-    invoke.mockResolvedValue(null);
-
-    await expect(desktopAPI.importCredentials()).resolves.toBeNull();
-    expect(invoke).toHaveBeenCalledWith('desktop_action', {
-      action: 'importCredentials',
-      args: {},
-    });
-  });
-
   it('passes the numeric playback state through with now-playing', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [

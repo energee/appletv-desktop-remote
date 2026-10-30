@@ -1,0 +1,110 @@
+.companion-tools {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 12px 0 4px;
+}
+
+.companion-tools button,
+.companion-dialog button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.companion-tools button[aria-pressed='true'] {
+  background: var(--text-primary);
+  color: var(--surface-solid);
+}
+
+.companion-tools button:disabled,
+.companion-dialog button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.companion-dialog {
+  width: min(252px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  overflow: auto;
+  margin: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+}
+
+.companion-dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.companion-dialog form {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.companion-dialog h2 {
+  font-size: 14px;
+}
+
+.companion-dialog p {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.companion-dialog input,
+#companionText {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-solid);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 7px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#companionText:not([hidden]) {
+  display: block;
+  margin: 7px auto 0;
+  max-width: 252px;
+}
+
+.companion-apps {
+  max-height: 210px;
+  overflow: auto;
+  display: grid;
+  gap: 4px;
+}
+
+.companion-apps button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.companion-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.companion-error,
+.companion-dialog .companion-error {
+  color: var(--text-primary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+#companionError {
+  max-width: 252px;
+  margin: 7px auto 0;
+}

@@ -273,10 +273,10 @@ fn check_item(
         .map_err(|error| error.to_string())
 }
 
-fn build_context_menu(
+fn build_device_menu(
     app: &AppHandle,
     config: &ContextMenuConfig,
-) -> Result<Menu<tauri::Wry>, String> {
+) -> Result<Submenu<tauri::Wry>, String> {
     let devices_menu = Submenu::new(app, "Devices", true).map_err(|error| error.to_string())?;
     for (index, device) in config.devices.iter().enumerate() {
         devices_menu
@@ -299,6 +299,14 @@ fn build_context_menu(
     devices_menu
         .append(&menu_item(app, "repair-current", "Re-pair current device")?)
         .map_err(|error| error.to_string())?;
+    Ok(devices_menu)
+}
+
+fn build_context_menu(
+    app: &AppHandle,
+    config: &ContextMenuConfig,
+) -> Result<Menu<tauri::Wry>, String> {
+    let devices_menu = build_device_menu(app, config)?;
 
     let appearance_menu =
         Submenu::new(app, "Appearance", true).map_err(|error| error.to_string())?;
@@ -344,8 +352,6 @@ fn build_context_menu(
     root.append(&appearance_menu)
         .map_err(|error| error.to_string())?;
     root.append(&menu_item(app, "settings", "Settings")?)
-        .map_err(|error| error.to_string())?;
-    root.append(&menu_item(app, "change-hotkey", "Change hotkey")?)
         .map_err(|error| error.to_string())?;
     root.append(&PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?)
         .map_err(|error| error.to_string())?;
@@ -400,10 +406,6 @@ pub fn handle_menu_event(
         "theme-dark" => Some(("setTheme", Some("darkmode".into()))),
         "theme-light" => Some(("setTheme", Some("lightmode".into()))),
         "settings" => Some(("openSettings", None)),
-        "change-hotkey" => {
-            let _ = open_hotkey_window(app);
-            None
-        }
         "check-for-updates" => {
             let _ = show_window(app);
             Some(("openUpdates", None))
@@ -509,8 +511,39 @@ pub async fn desktop_action(
     action: String,
     args: Value,
     context: tauri::State<'_, Arc<Mutex<Option<ContextMenuConfig>>>>,
+    vault: tauri::State<'_, crate::vault::Vault>,
 ) -> Result<Value, String> {
     match action.as_str() {
+        "loadDevices" => serde_json::to_value(vault.devices()?).map_err(|error| error.to_string()),
+        "activeDevice" => serde_json::to_value(vault.active()?).map_err(|error| error.to_string()),
+        "selectDevice" => {
+            let identifier = match args.get("identifier") {
+                Some(Value::Null) => None,
+                Some(Value::String(identifier)) => Some(identifier.clone()),
+                _ => return Err("selectDevice requires an identifier or null".into()),
+            };
+            vault.select(identifier)?;
+            Ok(Value::Null)
+        }
+        "removeDevice" => {
+            let identifier = args
+                .get("identifier")
+                .and_then(Value::as_str)
+                .ok_or("Missing device identifier")?;
+            vault.remove(identifier)?;
+            Ok(Value::Null)
+        }
+        "migrateDevices" => {
+            vault.migrate(
+                args.get("devices")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned),
+                args.get("active")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned),
+            )?;
+            Ok(Value::Null)
+        }
         "isDevelopment" => Ok(Value::Bool(cfg!(debug_assertions))),
         "restart" => {
             if let Some(backend) = app.try_state::<crate::backend::Backend>() {
@@ -581,11 +614,13 @@ pub async fn desktop_action(
         }
         // wry cancels webview downloads, so the credential backup is saved natively.
         "exportCredentials" => {
-            let contents = args
-                .get("contents")
-                .and_then(Value::as_str)
-                .ok_or("exportCredentials requires string args.contents")?
-                .to_owned();
+            let preferences = serde_json::from_value(
+                args.get("settings")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!({})),
+            )
+            .map_err(|error| error.to_string())?;
+            let contents = vault.export_backup(preferences)?;
             let picked = file_dialog(&app, || {
                 rfd::FileDialog::new()
                     .set_file_name("atv-remote-credentials.json")
@@ -610,9 +645,30 @@ pub async fn desktop_action(
             let Some(path) = picked else {
                 return Ok(Value::Null);
             };
-            Ok(Value::String(
-                fs::read_to_string(path).map_err(|error| error.to_string())?,
-            ))
+            let contents = fs::read_to_string(path).map_err(|error| error.to_string())?;
+            serde_json::to_value(vault.import_backup(&contents)?).map_err(|error| error.to_string())
+        }
+        "showDeviceMenu" => {
+            let config: ContextMenuConfig =
+                serde_json::from_value(args.clone()).map_err(|error| error.to_string())?;
+            let x = args
+                .get("x")
+                .and_then(Value::as_f64)
+                .ok_or("Missing menu x")?;
+            let y = args
+                .get("y")
+                .and_then(Value::as_f64)
+                .ok_or("Missing menu y")?;
+            *context
+                .lock()
+                .map_err(|_| "Context menu state lock poisoned")? = Some(config.clone());
+            main_window(&app)?
+                .popup_menu_at(
+                    &build_device_menu(&app, &config)?,
+                    tauri::LogicalPosition::new(x, y),
+                )
+                .map_err(|error| error.to_string())?;
+            Ok(Value::Null)
         }
         "showContextMenu" => {
             let popup = args.get("popup").and_then(Value::as_bool).unwrap_or(false);
