@@ -113,7 +113,6 @@ function useStorage(values: Record<string, string>) {
   storage.removeItem.mockImplementation((key: string) => void store.delete(key));
 }
 
-let remote: typeof import('../../src/renderer/atv_remote');
 let web: typeof import('../../src/renderer/web_remote');
 let keydown: (event: unknown) => void;
 let setState: (state: ConnectionState) => void;
@@ -131,7 +130,6 @@ const press = (key: string) =>
 
 beforeAll(async () => {
   // Import after webview globals are installed; this module registers browser listeners at load time.
-  remote = await import('../../src/renderer/atv_remote');
   web = await import('../../src/renderer/web_remote');
   keydown = vi
     .mocked(window.addEventListener)
@@ -175,14 +173,14 @@ afterEach(() => {
 
 it('keeps discovery failures visible after rebuilding the device picker', async () => {
   desktopAPI.scan.mockRejectedValue(new Error('Network unavailable'));
-  await remote.scanDevices();
+  await web.scanDevices();
   expect(statusElement.textContent).toBe('Network unavailable');
   expect(statusElement.style.display).toBe('block');
 });
 
 it('says so when the scan finds no Apple TV, instead of an empty picker', async () => {
   desktopAPI.scan.mockResolvedValue([]);
-  await remote.scanDevices();
+  await web.scanDevices();
   expect(statusElement.textContent).toBe(
     'No Apple TV found on this network. Right-click to scan again.',
   );
@@ -611,9 +609,9 @@ describe('requests', () => {
     // Kept until pairing succeeds, so Cancel goes back to it rather than the first saved device.
     expect(storage.getItem('atvcreds')).toBe(JSON.stringify(creds));
 
-    remote.startPair('Living Room (1.2.3.4)');
+    web.startPair('Living Room (1.2.3.4)');
     desktopAPI.finishPair.mockResolvedValue(repaired);
-    await remote.finishPair('1234');
+    await web.finishPair('1234');
 
     expect(desktopAPI.connect).toHaveBeenCalledWith(repaired);
     expect(JSON.parse(storage.getItem('remote_credentials'))).toEqual({
