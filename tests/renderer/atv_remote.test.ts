@@ -394,7 +394,6 @@ describe('keys', () => {
 
     expect(desktopAPI.sendKey).not.toHaveBeenCalled();
     expect(preventDefault).not.toHaveBeenCalled();
-
   });
 
   // Bug (a): a connect that settled during pairing used to make Enter send Select.
