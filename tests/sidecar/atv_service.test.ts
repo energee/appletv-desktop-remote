@@ -16,7 +16,7 @@ class MockAppleTV extends EventEmitter {
   deviceId?: string;
   connect = vi.fn((credentials: unknown) => mockConnect(credentials));
   startPairing = vi.fn(() => mockStartPairing());
-  sendKeyCommand = vi.fn((key: unknown) => mockSendKeyCommand(key));
+  sendKeyCommand = vi.fn((key: unknown, ..._action: unknown[]) => mockSendKeyCommand(key));
   setPosition = vi.fn(async (_seconds: number) => {});
   close = vi.fn(async () => {});
   constructor(discovered: { deviceId?: string }) {
@@ -40,7 +40,24 @@ class MockCredentials {
   }
 }
 
-const mockHidKeyMap = { play_pause: { usagePage: 12, usage: 0xb0 } };
+/** The keys with a HID usage, which are the ones the library can hold. */
+const mockHidKeyMap: Record<string, { usagePage: number; usage: number }> = {
+  ...Object.fromEntries(
+    [
+      'up',
+      'down',
+      'left',
+      'right',
+      'select',
+      'menu',
+      'home',
+      'top_menu',
+      'volume_up',
+      'volume_down',
+    ].map((key) => [key, { usagePage: 1, usage: 0 }]),
+  ),
+  play_pause: { usagePage: 12, usage: 0xb0 },
+};
 vi.mock('node-appletv-remote/dist/mrp/messages.js', () => ({ HID_KEY_MAP: mockHidKeyMap }));
 
 vi.mock('node-appletv-remote', () => ({
@@ -48,22 +65,22 @@ vi.mock('node-appletv-remote', () => ({
   AppleTV: MockAppleTV,
   Credentials: MockCredentials,
   Key: {
-    PlayPause: 0,
-    Left: 1,
-    Right: 2,
-    Down: 3,
-    Up: 4,
-    Select: 5,
-    Menu: 6,
-    TopMenu: 7,
-    Home: 8,
-    HomeHold: 9,
-    SkipBackward: 10,
-    SkipForward: 11,
-    VolumeUp: 12,
-    VolumeDown: 13,
-    Play: 14,
-    Pause: 15,
+    PlayPause: 'play_pause',
+    Left: 'left',
+    Right: 'right',
+    Down: 'down',
+    Up: 'up',
+    Select: 'select',
+    Menu: 'menu',
+    TopMenu: 'top_menu',
+    Home: 'home',
+    HomeHold: 'home_hold',
+    SkipBackward: 'skip_backward',
+    SkipForward: 'skip_forward',
+    VolumeUp: 'volume_up',
+    VolumeDown: 'volume_down',
+    Play: 'play',
+    Pause: 'pause',
   },
 }));
 
@@ -457,7 +474,34 @@ describe('ATVService', () => {
         'volume_down',
       ] as const;
       for (const key of keys) await service.sendKey(key);
-      expect(device.sendKeyCommand.mock.calls).toEqual(keys.map((_key, index) => [index]));
+      expect(device.sendKeyCommand.mock.calls).toEqual(keys.map((key) => [key]));
+    });
+
+    describe('hold', () => {
+      // A long press: Select opens tvOS context menus, Home opens Control Center.
+      it('holds keys that have a HID usage', async () => {
+        const device = await connected();
+        await service.sendKey('select', true);
+        await service.sendKey('home', true);
+        expect(device.sendKeyCommand.mock.calls).toEqual([
+          ['select', 'hold'],
+          ['home', 'hold'],
+        ]);
+      });
+
+      it('presses keys the library cannot hold, such as skip, once', async () => {
+        const device = await connected();
+        await service.sendKey('skip_forward', true);
+        expect(device.sendKeyCommand.mock.calls).toEqual([['skip_forward']]);
+      });
+
+      // Play and Pause have no HID usage, so a held play_pause stays the toggle key.
+      it('holds play_pause as the toggle key, whatever the playback state', async () => {
+        const device = await connected();
+        device.emit('nowPlaying', { playbackState: PlaybackState.Playing });
+        await service.sendKey('play_pause', true);
+        expect(device.sendKeyCommand.mock.calls).toEqual([['play_pause', 'hold']]);
+      });
     });
 
     describe('play_pause', () => {
@@ -473,17 +517,17 @@ describe('ATVService', () => {
       // explicit command.
       it('pauses while playing and plays while paused, stopped, or interrupted', async () => {
         const device = await connected();
-        expect(await sentAfter(device, PlaybackState.Playing)).toBe(15);
-        expect(await sentAfter(device, PlaybackState.Paused)).toBe(14);
-        expect(await sentAfter(device, PlaybackState.Stopped)).toBe(14);
-        expect(await sentAfter(device, PlaybackState.Interrupted)).toBe(14);
+        expect(await sentAfter(device, PlaybackState.Playing)).toBe('pause');
+        expect(await sentAfter(device, PlaybackState.Paused)).toBe('play');
+        expect(await sentAfter(device, PlaybackState.Stopped)).toBe('play');
+        expect(await sentAfter(device, PlaybackState.Interrupted)).toBe('play');
       });
 
       it('sends the play/pause toggle while the state is unknown or seeking', async () => {
         const device = await connected();
-        expect(await sentAfter(device)).toBe(0);
-        expect(await sentAfter(device, PlaybackState.Unknown)).toBe(0);
-        expect(await sentAfter(device, PlaybackState.Seeking)).toBe(0);
+        expect(await sentAfter(device)).toBe('play_pause');
+        expect(await sentAfter(device, PlaybackState.Unknown)).toBe('play_pause');
+        expect(await sentAfter(device, PlaybackState.Seeking)).toBe('play_pause');
       });
 
       // Plex never registers as the now-playing app: the TV reports its empty default player,
@@ -500,19 +544,19 @@ describe('ATVService', () => {
           playerIdentifier: 'MediaRemote-DefaultPlayer',
           playbackState: PlaybackState.Paused,
         });
-        expect(await sentAfter(device)).toBe(0);
+        expect(await sentAfter(device)).toBe('play_pause');
       });
 
       it('forgets the state when the device changes or the connection is replaced', async () => {
         const first = await connected(tv1);
         first.emit('nowPlaying', { playbackState: PlaybackState.Playing });
         const second = await connected(tv2);
-        expect(await sentAfter(second)).toBe(0);
+        expect(await sentAfter(second)).toBe('play_pause');
 
         second.emit('nowPlaying', { playbackState: PlaybackState.Playing });
         service.reconnect(tv2);
         await flush();
-        expect(await sentAfter(devices.at(-1)!)).toBe(0);
+        expect(await sentAfter(devices.at(-1)!)).toBe('play_pause');
       });
 
       it('forgets the state when the connection drops and comes back', async () => {
@@ -521,14 +565,14 @@ describe('ATVService', () => {
         device.emit('close');
         await flush(500);
         expect(service.state).toEqual({ status: 'connected' });
-        expect(await sentAfter(devices.at(-1)!)).toBe(0);
+        expect(await sentAfter(devices.at(-1)!)).toBe('play_pause');
       });
 
       it('ignores now-playing from a replaced device', async () => {
         const first = await connected(tv1);
         const second = await connected(tv2);
         first.emit('nowPlaying', { playbackState: PlaybackState.Playing });
-        expect(await sentAfter(second)).toBe(0);
+        expect(await sentAfter(second)).toBe('play_pause');
       });
     });
 

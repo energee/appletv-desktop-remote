@@ -9,15 +9,12 @@ import {
   type ConnectionState,
   type PairResult,
 } from '../shared/types';
-import type {
-  AppleTV,
-  DiscoveredDevice,
-  Key as KeyType,
-  PairingSession,
-} from 'node-appletv-remote';
+import type { AppleTV, DiscoveredDevice, Key as KeyType, PairSetup } from 'node-appletv-remote';
 
 // node-appletv-remote is ESM-only. Use dynamic import wrapper.
 let atvLib: typeof import('node-appletv-remote') | null = null;
+/** The library's keys with a HID usage: the only ones it can hold. */
+let hidKeys: Record<string, unknown> = {};
 async function getLib(): Promise<typeof import('node-appletv-remote')> {
   if (!atvLib) {
     const [lib, mrp] = await Promise.all([
@@ -27,6 +24,7 @@ async function getLib(): Promise<typeof import('node-appletv-remote')> {
     // ponytail: 0.5.0 maps play_pause to consumer usage 0xB0, which is Play, so the "toggle"
     // key only ever plays. 0xCD is Play/Pause. Drop once the library's HID_KEY_MAP is fixed.
     mrp.HID_KEY_MAP.play_pause.usage = 0xcd;
+    hidKeys = mrp.HID_KEY_MAP;
     atvLib = lib;
   }
   return atvLib;
@@ -61,7 +59,7 @@ class ATVService extends EventEmitter {
   /** The connected device, the one a connect attempt is using, or the one being paired. */
   device: AppleTV | null = null;
   scanResults: Record<string, DiscoveredDevice> = {};
-  pairingSession: PairingSession | null = null;
+  pairingSession: PairSetup | null = null;
   state: ConnectionState = { status: 'idle' };
   /**
    * Bumped by every connect, pairing step, and disconnect. Async work checks it after each
@@ -283,7 +281,12 @@ class ATVService extends EventEmitter {
     this.emit('state', state);
   }
 
-  async sendKey(keyName: ATVKeyName): Promise<void> {
+  /**
+   * Presses `keyName`, or with `hold` holds it for a second, as a long press on the Siri Remote
+   * does (Select opens context menus, Home opens Control Center). Keys the library cannot hold,
+   * the skip keys, get an ordinary press.
+   */
+  async sendKey(keyName: ATVKeyName, hold = false): Promise<void> {
     const { Key } = await getLib();
 
     const keyMap: Record<ATVKeyName, KeyType> = {
@@ -310,12 +313,15 @@ class ATVService extends EventEmitter {
     let key = keyMap[keyName];
     // When the now-playing app's state is known, send the explicit pause or play command so the
     // button never toggles the wrong way; while it is unknown or seeking, the toggle key press.
-    if (keyName === 'play_pause') {
+    // A hold keeps the toggle key: Play and Pause have no HID usage, so they cannot be held.
+    if (keyName === 'play_pause' && !hold) {
       if (this.playbackState === PlaybackState.Playing) key = Key.Pause;
       else if (PAUSED_STATES.includes(this.playbackState)) key = Key.Play;
     }
     await withTimeout(
-      device.sendKeyCommand(key),
+      hold && Object.hasOwn(hidKeys, key)
+        ? device.sendKeyCommand(key, 'hold')
+        : device.sendKeyCommand(key),
       COMMAND_TIMEOUT,
       'The Apple TV did not respond to the key press.',
     );

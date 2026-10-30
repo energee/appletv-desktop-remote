@@ -9,7 +9,13 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "rootDir": "src",
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    // The library is installed in app/ (it ships inside the sidecar), so tsc can't find it from
+    // src/. nodenext needs the .d.ts file itself; the package directory gives TS2307.
+    "paths": {
+      "node-appletv-remote": ["./app/node_modules/node-appletv-remote/dist/index.d.ts"],
+      "node-appletv-remote/*": ["./app/node_modules/node-appletv-remote/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

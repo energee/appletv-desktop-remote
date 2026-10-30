@@ -78,7 +78,7 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
       return null;
     case 'sendKey':
       // ATVService rejects unknown keys, including inherited names like 'toString'.
-      await service.sendKey(stringParam(params, 'key') as ATVKeyName);
+      await service.sendKey(stringParam(params, 'key') as ATVKeyName, params.hold === true);
       return null;
     case 'seek': {
       const seconds = params.seconds;

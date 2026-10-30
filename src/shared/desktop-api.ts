@@ -36,6 +36,9 @@ function nowPlayingInfo(data: unknown): NowPlayingInfo {
   if ('title' in data && typeof data.title === 'string') info.title = data.title;
   if ('artist' in data && typeof data.artist === 'string') info.artist = data.artist;
   if ('album' in data && typeof data.album === 'string') info.album = data.album;
+  if ('appDisplayName' in data && typeof data.appDisplayName === 'string') {
+    info.appDisplayName = data.appDisplayName;
+  }
   const record = data as Record<string, unknown>;
   for (const key of [
     'playbackState',
@@ -144,7 +147,8 @@ export const desktopAPI = {
   /** Wake and sidecar restarts: like connect, but the sidecar ignores it while pairing. */
   reconnect: (credentials: ATVCredentials) => request<void>('reconnect', credentials),
   disconnect: () => request<void>('disconnect'),
-  sendKey: (key: string) => request<void>('sendKey', { key }),
+  /** Presses `key`; `hold` holds it for a second, as a long press does. */
+  sendKey: (key: string, hold = false) => request<void>('sendKey', { key, hold }),
   /** Moves the playing item to `seconds` from its start. */
   seek: (seconds: number) => request<void>('seek', { seconds }),
 
