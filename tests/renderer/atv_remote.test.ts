@@ -731,13 +731,12 @@ describe('requests', () => {
     expect(desktopAPI.disconnect).toHaveBeenCalled();
   });
 
-  it('sends every saved device to the menu with a string identifier', () => {
-    // Older releases stored some devices as JSON strings, which have no identifier property.
+  it('decodes devices older releases saved as JSON strings before listing them', () => {
     useStorage({ remote_credentials: JSON.stringify({ Old: JSON.stringify(creds) }) });
     contextMenuAction('setTheme', 'darkmode');
     expect(desktopAPI.showContextMenu).toHaveBeenLastCalledWith(
       {
-        devices: [{ label: 'Old', identifier: '', checked: false }],
+        devices: [{ label: 'Old', identifier: 'tv', checked: false }],
         uiMode: 'darkmode',
         alwaysOnTop: false,
       },
