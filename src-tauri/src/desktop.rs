@@ -33,6 +33,16 @@ pub struct ContextMenuConfig {
     devices: Vec<DeviceMenuItem>,
     ui_mode: String,
     always_on_top: bool,
+    #[serde(default)]
+    speakers: Vec<SpeakerMenuItem>,
+}
+
+/// An AirPlay speaker; `id` is the output ID that picking it sends back with `toggleSpeaker`.
+#[derive(Clone, Deserialize)]
+pub struct SpeakerMenuItem {
+    label: String,
+    id: String,
+    checked: bool,
 }
 
 /// The renderer also sends each device's `identifier`; the menu doesn't need it, and a legacy
@@ -305,6 +315,23 @@ fn build_context_menu(
     let root = Menu::new(app).map_err(|error| error.to_string())?;
     root.append(&devices_menu)
         .map_err(|error| error.to_string())?;
+    // Shown once a scan, after connecting, has found AirPlay speakers.
+    if !config.speakers.is_empty() {
+        let speakers_menu =
+            Submenu::new(app, "Speakers", true).map_err(|error| error.to_string())?;
+        for (index, speaker) in config.speakers.iter().enumerate() {
+            speakers_menu
+                .append(&check_item(
+                    app,
+                    &format!("speaker:{index}"),
+                    &speaker.label,
+                    speaker.checked,
+                )?)
+                .map_err(|error| error.to_string())?;
+        }
+        root.append(&speakers_menu)
+            .map_err(|error| error.to_string())?;
+    }
     root.append(&check_item(
         app,
         "always-on-top",
@@ -393,6 +420,14 @@ pub fn handle_menu_event(
                     .map(|device| ("selectDevice", Some(device.label.clone())))
             })
         }),
+        item if item.starts_with("speaker:") => context.lock().ok().and_then(|config| {
+            config.as_ref().and_then(|config| {
+                item.strip_prefix("speaker:")
+                    .and_then(|index| index.parse::<usize>().ok())
+                    .and_then(|index| config.speakers.get(index))
+                    .map(|speaker| ("toggleSpeaker", Some(speaker.id.clone())))
+            })
+        }),
         _ => None,
     };
     if let Some((action, payload)) = action {
@@ -413,6 +448,7 @@ pub fn setup(
             devices: Vec::new(),
             ui_mode: "systemmode".into(),
             always_on_top: false,
+            speakers: Vec::new(),
         },
     )?;
     TrayIconBuilder::with_id("tray")
@@ -718,6 +754,26 @@ mod tests {
             place(3380.0, 0.0, 40.0, 48.0),
             LogicalPosition::new(1430.0, 24.0)
         );
+    }
+
+    #[test]
+    fn context_menu_config_reads_speakers_and_defaults_to_none() {
+        let config: ContextMenuConfig = serde_json::from_value(serde_json::json!({
+            "devices": [],
+            "uiMode": "systemmode",
+            "alwaysOnTop": false,
+            "speakers": [{ "label": "Kitchen", "id": "psi-kitchen", "checked": true }],
+        }))
+        .unwrap();
+        assert_eq!(config.speakers[0].id, "psi-kitchen");
+        assert!(config.speakers[0].checked);
+        let config: ContextMenuConfig = serde_json::from_value(serde_json::json!({
+            "devices": [],
+            "uiMode": "systemmode",
+            "alwaysOnTop": false,
+        }))
+        .unwrap();
+        assert!(config.speakers.is_empty());
     }
 
     #[test]

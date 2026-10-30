@@ -23,6 +23,11 @@ const desktopAPI = {
   onAtvState: vi.fn(),
   onAtvNowPlaying: vi.fn(),
   onAtvPowerState: vi.fn(),
+  onAtvVolume: vi.fn(),
+  onAtvOutputs: vi.fn(),
+  speakers: vi.fn(),
+  setSpeaker: vi.fn(),
+  setVolume: vi.fn(),
   onBackendLost: vi.fn(),
   onShortcutWin: vi.fn(),
   onPowerResume: vi.fn(),
@@ -124,6 +129,8 @@ let keydown: (event: unknown) => void;
 let setState: (state: ConnectionState) => void;
 let nowPlaying: (info: NowPlayingInfo) => void;
 let powerState: (state: 'on' | 'off' | 'unknown') => void;
+let volume: (level: number | null) => void;
+let outputs: (ids: string[]) => void;
 let powerResume: () => void;
 let backendLost: () => void;
 let contextMenuAction: (action: string, payload?: string) => void;
@@ -150,6 +157,8 @@ beforeAll(async () => {
   setState = desktopAPI.onAtvState.mock.calls[0][0];
   nowPlaying = desktopAPI.onAtvNowPlaying.mock.calls[0][0];
   powerState = desktopAPI.onAtvPowerState.mock.calls[0][0];
+  volume = desktopAPI.onAtvVolume.mock.calls[0][0];
+  outputs = desktopAPI.onAtvOutputs.mock.calls[0][0];
   powerResume = desktopAPI.onPowerResume.mock.calls[0][0];
   backendLost = desktopAPI.onBackendLost.mock.calls[0][0];
   contextMenuAction = desktopAPI.onContextMenuAction.mock.calls[0][0];
@@ -174,6 +183,7 @@ beforeEach(() => {
     request.mockResolvedValue(undefined);
   }
   desktopAPI.scan.mockResolvedValue([]);
+  desktopAPI.speakers.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -555,6 +565,65 @@ describe('header', () => {
   });
 });
 
+describe('speakers', () => {
+  it('lists AirPlay speakers in the menu once connected, and toggles the one picked', async () => {
+    useElements();
+    const kitchen = { id: 'psi-kitchen', name: 'Kitchen', selected: false };
+    desktopAPI.speakers.mockResolvedValue([kitchen]);
+    desktopAPI.setSpeaker.mockResolvedValue(undefined);
+    const menuSpeakers = () => desktopAPI.showContextMenu.mock.lastCall![0].speakers;
+
+    state('connected');
+    await vi.waitFor(() =>
+      expect(menuSpeakers()).toEqual([{ label: 'Kitchen', id: 'psi-kitchen', checked: false }]),
+    );
+    contextMenuAction('toggleSpeaker', 'psi-kitchen');
+    expect(desktopAPI.setSpeaker).toHaveBeenCalledWith('psi-kitchen', true);
+
+    // The TV confirms the new outputs; the menu follows without scanning again.
+    outputs(['psi-kitchen']);
+    expect(menuSpeakers()).toEqual([{ label: 'Kitchen', id: 'psi-kitchen', checked: true }]);
+    contextMenuAction('toggleSpeaker', 'psi-kitchen');
+    expect(desktopAPI.setSpeaker).toHaveBeenLastCalledWith('psi-kitchen', false);
+    expect(desktopAPI.speakers).toHaveBeenCalledTimes(1);
+
+    state('connecting');
+    expect(menuSpeakers()).toEqual([]);
+  });
+});
+
+describe('volume slider', () => {
+  // TV speakers have no absolute volume; outputs such as AirPods or HomePod do.
+  it('shows the absolute volume, hides without one, and sets it when released', async () => {
+    const dom = useElements();
+    desktopAPI.setVolume.mockResolvedValue(undefined);
+    await web.init();
+    const box = dom.get('#volume');
+    const bar = dom.get('#volumeBar');
+    state('connecting');
+    state('connected');
+    expect(box.style.display).toBe('none');
+
+    volume(40);
+    expect(box.style.display).toBe('');
+    expect(bar.value).toBe('40');
+
+    // While dragging, reports don't move the thumb; releasing sets the level.
+    bar.value = '70';
+    dom.listener('#volumeBar', 'input')();
+    volume(45);
+    expect(bar.value).toBe('70');
+    dom.listener('#volumeBar', 'change')();
+    expect(desktopAPI.setVolume).toHaveBeenCalledWith(70);
+
+    volume(null);
+    expect(box.style.display).toBe('none');
+    volume(40);
+    state('connecting');
+    expect(box.style.display).toBe('none');
+  });
+});
+
 describe('now playing', () => {
   it('names the app that is playing above the title', () => {
     const dom = useElements();
@@ -778,6 +847,7 @@ describe('requests', () => {
         devices: [{ label: 'Old', identifier: '', checked: false }],
         uiMode: 'darkmode',
         alwaysOnTop: false,
+        speakers: [],
       },
       false,
     );
@@ -809,6 +879,7 @@ describe('requests', () => {
         devices: [{ label: 'Living Room', identifier: 'tv', checked: false }],
         uiMode: 'darkmode',
         alwaysOnTop: true,
+        speakers: [],
       },
       false,
     );

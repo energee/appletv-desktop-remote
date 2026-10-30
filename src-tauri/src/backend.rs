@@ -306,6 +306,9 @@ impl Backend {
                 | "sendKey"
                 | "seek"
                 | "power"
+                | "setVolume"
+                | "speakers"
+                | "setSpeaker"
         ) {
             return Err("Unsupported Apple TV operation".into());
         }
