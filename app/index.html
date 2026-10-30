@@ -10,6 +10,7 @@
     <title>Apple TV Remote</title>
     <link rel="stylesheet" href="css/loaders.css" />
     <link rel="stylesheet" href="css/main.css" />
+    <link rel="stylesheet" href="css/updater.css" />
   </head>
 
   <body>
@@ -21,6 +22,11 @@
         ></span>
       </div>
       <div id="topTextKBLink"></div>
+      <button id="updatePill" class="update-pill" hidden>
+        <span class="update-pill-dot" aria-hidden="true"></span>
+        <span id="updatePillLabel">Update available</span>
+        <span aria-hidden="true">&rsaquo;</span>
+      </button>
 
       <div id="initText">
         <p>Starting up...</p>
@@ -197,12 +203,50 @@
           <div class="settings-section">
             <button id="settingsHotkeyBtn" class="settings-btn">Change Hotkey</button>
           </div>
+          <div class="settings-section">
+            <div class="settings-label">Software updates</div>
+            <div id="settingsAppVersion" class="update-version"></div>
+            <label class="settings-toggle">
+              <input type="checkbox" id="settingsAutoUpdate" />
+              <span>Automatically check for updates</span>
+            </label>
+            <button id="settingsUpdateBtn" class="settings-btn">Check for updates</button>
+          </div>
           <button id="settingsBackBtn" class="settings-back-btn">&larr; Back</button>
         </div>
       </div>
 
       <h2 id="statusText"></h2>
     </div>
+    <dialog
+      id="updateDialog"
+      class="update-dialog"
+      aria-labelledby="updateTitle"
+      aria-describedby="updateDescription"
+    >
+      <div class="update-sheet">
+        <div class="update-eyebrow">Apple TV Remote</div>
+        <h1 id="updateTitle" aria-live="polite">Software update</h1>
+        <p id="updateDescription" class="update-description">
+          Check for a newer version of Apple TV Remote.
+        </p>
+        <div id="updateVersion" class="update-version" hidden></div>
+        <section id="updateNotesSection" class="update-notes-section" hidden>
+          <h2>What’s new</h2>
+          <div id="updateNotes" class="update-notes" tabindex="0"></div>
+        </section>
+        <div id="updateProgressSection" class="update-progress-section" hidden>
+          <progress id="updateProgress" max="100" aria-label="Update download"></progress>
+          <div id="updateProgressLabel" class="update-progress-label"></div>
+        </div>
+        <p id="updateError" class="update-error" role="alert" hidden></p>
+        <div class="update-actions">
+          <button id="updatePrimary" class="update-primary">Check for updates</button>
+          <button id="updateLater" class="update-secondary">Not now</button>
+        </div>
+        <p id="updateFootnote" class="update-footnote">Updates are verified before installation.</p>
+      </div>
+    </dialog>
     <script src="renderer.js"></script>
   </body>
 </html>

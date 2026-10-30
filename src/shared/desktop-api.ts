@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 import type { ATVCredentials, ConnectionState, NowPlayingInfo, PairResult } from './types';
+import type { UpdateState } from './update';
 
 export interface ContextMenuConfig {
   devices: Array<{ label: string; identifier: string; checked: boolean }>;
@@ -90,6 +91,7 @@ export const desktopAPI = {
         listen('shortcutWin', () => emit('shortcutWin', undefined)),
         listen('powerResume', () => emit('powerResume', undefined)),
         listen('scrollGestureBegan', () => emit('scrollGestureBegan', undefined)),
+        listen<UpdateState>('updater-state', ({ payload }) => emit('updater-state', payload)),
         listen<{ action: string; payload?: string }>('context-menu-action', ({ payload }) => {
           emit('context-menu-action', payload);
         }),
@@ -124,6 +126,14 @@ export const desktopAPI = {
   importCredentials: () => action<string | null>('importCredentials'),
   showContextMenu: (config: ContextMenuConfig, popup = false) =>
     action<void>('showContextMenu', { ...config, popup }),
+
+  updateStatus: () => action<UpdateState>('updateStatus'),
+  updateCheck: () => action<void>('updateCheck'),
+  updateDownload: () => action<void>('updateDownload'),
+  updateInstall: () => action<void>('updateInstall'),
+  updateAutoCheck: (value: boolean) => action<UpdateState>('updateAutoCheck', { value }),
+  onUpdateState: (callback: (state: UpdateState) => void) =>
+    subscribe('updater-state', (data) => callback(data as UpdateState)),
 
   scan: () => request<string[]>('scan'),
   startPair: (deviceLabel: string) => request<void>('startPair', { deviceLabel }),

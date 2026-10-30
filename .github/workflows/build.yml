@@ -17,16 +17,23 @@ jobs:
         include:
           - os: macos-15-intel
             platform: macos-x64
-            artifact_glob: src-tauri/target/release/bundle/dmg/*.dmg
+            update_arch: x86_64
+            installer_arch: x64
+            family: macos
           - os: macos-latest
             platform: macos-arm64
-            artifact_glob: src-tauri/target/release/bundle/dmg/*.dmg
+            update_arch: aarch64
+            installer_arch: aarch64
+            family: macos
           - os: windows-latest
             platform: windows-x64
-            artifact_glob: |
-              src-tauri/target/release/bundle/**/*.msi
-              src-tauri/target/release/bundle/**/*.exe
+            family: windows
     runs-on: ${{ matrix.os }}
+    env:
+      # Only tag pushes sign. workflow_dispatch remains an unsigned, build-only path,
+      # including when manually run against a tag.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'push' && github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'push' && github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -40,31 +47,105 @@ jobs:
       - name: Install sidecar dependencies
         run: pnpm --dir app install --frozen-lockfile
       - name: Build Tauri bundle
-        run: pnpm build
-      - name: Upload artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]]; then
+            [[ -n "$TAURI_SIGNING_PRIVATE_KEY" ]] || {
+              echo "::error::Tagged releases require the TAURI_SIGNING_PRIVATE_KEY repository secret."
+              exit 1
+            }
+            pnpm build --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            pnpm build
+          fi
+      - name: Collect macOS installers and updater bundle
+        if: matrix.family == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]] || version=manual
+          bundle=src-tauri/target/release/bundle
+          dmgs=()
+          updates=()
+          while IFS= read -r -d '' file; do dmgs+=("$file"); done < <(find "$bundle" -type f -name '*.dmg' -print0)
+          while IFS= read -r -d '' file; do updates+=("$file"); done < <(find "$bundle" -type f -name '*.app.tar.gz' -print0)
+          [[ ${#dmgs[@]} -eq 1 ]] || { echo "Expected one DMG, found ${#dmgs[@]}"; exit 1; }
+          mkdir release-assets
+          cp "${dmgs[0]}" "release-assets/Apple.TV.Remote_${version}_${{ matrix.installer_arch }}.dmg"
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "tag" ]]; then
+            [[ ${#updates[@]} -eq 1 ]] || { echo "Expected one macOS updater bundle, found ${#updates[@]}"; exit 1; }
+            [[ -f "${updates[0]}.sig" ]] || { echo "Missing updater signature for ${updates[0]}"; exit 1; }
+            cp "${updates[0]}" "release-assets/Apple.TV.Remote_${version}_${{ matrix.update_arch }}.app.tar.gz"
+            cp "${updates[0]}.sig" "release-assets/Apple.TV.Remote_${version}_${{ matrix.update_arch }}.app.tar.gz.sig"
+          fi
+      - name: Collect Windows installers and updater bundle
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag') {
+            $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            'manual'
+          }
+          $bundle = 'src-tauri/target/release/bundle'
+          $msis = @(Get-ChildItem -Path $bundle -Recurse -File -Filter *.msi)
+          $nsis = @(Get-ChildItem -Path (Join-Path $bundle 'nsis') -Recurse -File -Filter *.exe)
+          if ($msis.Count -ne 1) { throw "Expected one MSI, found $($msis.Count)" }
+          if ($nsis.Count -ne 1) { throw "Expected one NSIS installer, found $($nsis.Count)" }
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          Copy-Item $msis[0].FullName "release-assets/Apple.TV.Remote_${version}_x64.msi"
+          Copy-Item $nsis[0].FullName "release-assets/Apple.TV.Remote_${version}_x64-setup.exe"
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag') {
+            $signature = "$($nsis[0].FullName).sig"
+            if (!(Test-Path -LiteralPath $signature)) { throw "Missing updater signature for $($nsis[0].FullName)" }
+            Copy-Item $signature "release-assets/Apple.TV.Remote_${version}_x64-setup.exe.sig"
+          }
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform }}-builds
-          path: ${{ matrix.artifact_glob }}
+          path: release-assets/*
           if-no-files-found: error
 
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v7
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
-      - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          # Windows keeps its installers in msi/ and nsis/ subfolders; artifacts/* alone missed
-          # them in v0.6.0. Each pattern must match, so a missing installer fails the release.
-          files: |
-            artifacts/*.dmg
-            artifacts/**/*.msi
-            artifacts/**/*.exe
-          fail_on_unmatched_files: true
+      - name: Create draft release
+        run: gh release create "$GITHUB_REF_NAME" --draft --generate-notes --title "$GITHUB_REF_NAME"
+      - name: Read draft release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$GITHUB_REF_NAME" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
+          echo "RELEASE_CREATED_AT=$(gh release view "$GITHUB_REF_NAME" --json createdAt --jq .createdAt)" >> "$GITHUB_ENV"
+      - name: Generate validated updater manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          node scripts/create-update-manifest.mjs \
+            --assets-dir artifacts \
+            --version "$version" \
+            --base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --pub-date "$RELEASE_CREATED_AT"
+      - name: Upload complete release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          find artifacts -maxdepth 1 -type f -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME" --clobber
+      - name: Publish release
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false

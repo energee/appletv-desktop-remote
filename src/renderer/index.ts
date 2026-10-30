@@ -1,6 +1,7 @@
 import { desktopAPI } from '../shared/desktop-api';
 import { renderIcons } from './icons';
 import { initIPC, init } from './web_remote';
+import { initUpdater } from './updater';
 
 // The macOS window is glass (tauri.conf.json windowEffects); other platforms paint the page.
 if (navigator.userAgent.includes('Mac')) document.documentElement.classList.add('glass');
@@ -18,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
   void (async () => {
     try {
       await desktopAPI.start();
+      initUpdater();
       renderIcons();
       initIPC();
       await init();

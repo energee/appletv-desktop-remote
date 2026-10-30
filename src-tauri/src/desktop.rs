@@ -322,6 +322,8 @@ fn build_context_menu(
         .map_err(|error| error.to_string())?;
     root.append(&PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?)
         .map_err(|error| error.to_string())?;
+    root.append(&menu_item(app, "check-for-updates", "Check for Updates…")?)
+        .map_err(|error| error.to_string())?;
     root.append(
         &PredefinedMenuItem::about(app, Some("About Apple TV Remote"), None)
             .map_err(|error| error.to_string())?,
@@ -374,6 +376,10 @@ pub fn handle_menu_event(
         "change-hotkey" => {
             let _ = open_hotkey_window(app);
             None
+        }
+        "check-for-updates" => {
+            let _ = show_window(app);
+            Some(("openUpdates", None))
         }
         "quit" => {
             app.exit(0);
@@ -467,8 +473,31 @@ pub async fn desktop_action(
     action: String,
     args: Value,
     context: tauri::State<'_, Arc<Mutex<Option<ContextMenuConfig>>>>,
+    updater: tauri::State<'_, Arc<crate::updater::Updater>>,
 ) -> Result<Value, String> {
     match action.as_str() {
+        "updateStatus" => serde_json::to_value(updater.snapshot()?)
+            .map_err(|error| format!("Could not encode updater status: {error}")),
+        "updateCheck" => {
+            updater.check(app)?;
+            Ok(Value::Null)
+        }
+        "updateDownload" => {
+            updater.download(app)?;
+            Ok(Value::Null)
+        }
+        "updateInstall" => {
+            updater.install(app)?;
+            Ok(Value::Null)
+        }
+        "updateAutoCheck" => {
+            let value = args
+                .get("value")
+                .and_then(Value::as_bool)
+                .ok_or("updateAutoCheck requires boolean args.value")?;
+            serde_json::to_value(updater.set_auto_check(&app, value)?)
+                .map_err(|error| format!("Could not encode updater status: {error}"))
+        }
         "showWindow" => {
             show_window(&app)?;
             Ok(Value::Null)
