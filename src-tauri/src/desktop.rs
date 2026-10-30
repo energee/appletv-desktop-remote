@@ -35,11 +35,11 @@ pub struct ContextMenuConfig {
     always_on_top: bool,
 }
 
-/// The renderer also sends each device's `identifier`; the menu doesn't need it, and a legacy
-/// entry lacking one must not make the whole config (and so every menu update) fail to parse.
+/// A saved Apple TV: its name, and the identifier it is saved under, which picking it sends back.
 #[derive(Clone, Deserialize)]
 pub struct DeviceMenuItem {
     label: String,
+    identifier: String,
     checked: bool,
 }
 
@@ -390,7 +390,7 @@ pub fn handle_menu_event(
                 item.strip_prefix("device:")
                     .and_then(|index| index.parse::<usize>().ok())
                     .and_then(|index| config.devices.get(index))
-                    .map(|device| ("selectDevice", Some(device.label.clone())))
+                    .map(|device| ("selectDevice", Some(device.identifier.clone())))
             })
         }),
         _ => None,
@@ -721,16 +721,17 @@ mod tests {
     }
 
     #[test]
-    fn context_menu_config_accepts_a_device_without_identifier() {
-        // A legacy saved device stored as a string has no identifier, so JSON omits the field.
+    fn context_menu_config_reads_each_devices_identifier() {
+        // Picking a device sends back the identifier it is saved under, not its name.
         let config: ContextMenuConfig = serde_json::from_value(serde_json::json!({
-            "devices": [{ "label": "Living Room", "checked": true }],
+            "devices": [{ "label": "Living Room", "identifier": "tv", "checked": true }],
             "uiMode": "darkmode",
             "alwaysOnTop": false,
             "popup": true,
         }))
         .unwrap();
         assert_eq!(config.devices[0].label, "Living Room");
+        assert_eq!(config.devices[0].identifier, "tv");
     }
 
     #[test]
