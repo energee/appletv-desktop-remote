@@ -79,7 +79,6 @@ const mockElement = {
   textContent: '',
   value: '',
   classList: { add: vi.fn(), remove: vi.fn() },
-  firstChild: { textContent: '' },
   appendChild: vi.fn(),
   addEventListener: vi.fn(),
 };
@@ -122,7 +121,6 @@ function fakeElement(value = '') {
     checked: false,
     disabled: false,
     classList: { add: vi.fn(), remove: vi.fn() },
-    firstChild: { textContent: '' },
     appendChild: vi.fn(),
     addEventListener: vi.fn(),
     focus: vi.fn(),
@@ -585,7 +583,7 @@ describe('header', () => {
   // The TV keeps its connection while asleep, so the dot alone can't tell.
   it('says the TV is asleep while it is, and only while connected', () => {
     const dom = useElements();
-    const header = dom.get('#topTextHeader').firstChild;
+    const header = dom.get('#deviceName');
     state('connected');
     expect(header.textContent).toBe('Living Room');
 

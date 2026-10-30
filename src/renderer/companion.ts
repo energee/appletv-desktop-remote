@@ -381,6 +381,7 @@ export function initCompanion(): void {
     smoothButton.setAttribute('aria-pressed', String(smoothTouchEnabled));
     renderText();
     if (next.error) showError(new Error(next.error));
+    else if (next.status === 'connected') inlineError.hidden = true;
     if (waitingFeature?.current === operation && next.status === 'connected') {
       const { action } = waitingFeature;
       waitingFeature = null;
