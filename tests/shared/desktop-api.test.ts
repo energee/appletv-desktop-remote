@@ -55,6 +55,21 @@ describe('desktopAPI', () => {
     expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', playbackState: 1 }], [{}]]);
   });
 
+  it('passes on only known power states', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const power = vi.fn();
+    desktopAPI.onAtvPowerState(power);
+
+    for (const data of ['off', 'on', 'unknown', 'asleep', 1]) {
+      onBackendEvent({ payload: { event: 'power-state', data } });
+    }
+    expect(power.mock.calls).toEqual([['off'], ['on'], ['unknown']]);
+  });
+
   it('passes the app name through with now-playing', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [

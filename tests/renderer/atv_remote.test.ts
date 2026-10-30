@@ -21,6 +21,7 @@ const desktopAPI = {
   importCredentials: vi.fn(),
   onAtvState: vi.fn(),
   onAtvNowPlaying: vi.fn(),
+  onAtvPowerState: vi.fn(),
   onBackendLost: vi.fn(),
   onShortcutWin: vi.fn(),
   onPowerResume: vi.fn(),
@@ -118,6 +119,7 @@ let web: typeof import('../../src/renderer/web_remote');
 let keydown: (event: unknown) => void;
 let setState: (state: ConnectionState) => void;
 let nowPlaying: (info: NowPlayingInfo) => void;
+let powerState: (state: 'on' | 'off' | 'unknown') => void;
 let powerResume: () => void;
 let backendLost: () => void;
 let contextMenuAction: (action: string, payload?: string) => void;
@@ -139,6 +141,7 @@ beforeAll(async () => {
   web.initIPC();
   setState = desktopAPI.onAtvState.mock.calls[0][0];
   nowPlaying = desktopAPI.onAtvNowPlaying.mock.calls[0][0];
+  powerState = desktopAPI.onAtvPowerState.mock.calls[0][0];
   powerResume = desktopAPI.onPowerResume.mock.calls[0][0];
   backendLost = desktopAPI.onBackendLost.mock.calls[0][0];
   contextMenuAction = desktopAPI.onContextMenuAction.mock.calls[0][0];
@@ -434,6 +437,31 @@ describe('PIN entry', () => {
     dom.listener('#cancelPairing', 'click')();
     expect(desktopAPI.scan).toHaveBeenCalled();
     expect(window.location.reload).not.toHaveBeenCalled();
+  });
+});
+
+describe('header', () => {
+  // The TV keeps its connection while asleep, so the dot alone can't tell.
+  it('says the TV is asleep while it is, and only while connected', () => {
+    const dom = useElements();
+    useStorage({
+      atvcreds: JSON.stringify(creds),
+      remote_credentials: JSON.stringify({ 'Living Room (1.2.3.4)': creds }),
+    });
+    const header = dom.get('#topTextHeader').firstChild;
+    state('connected');
+    expect(header.textContent).toBe('Living Room');
+
+    powerState('off');
+    expect(header.textContent).toBe('Living Room · Asleep');
+    powerState('on');
+    expect(header.textContent).toBe('Living Room');
+
+    powerState('off');
+    state('connecting');
+    expect(header.textContent).toBe('Living Room');
+    state('connected');
+    expect(header.textContent).toBe('Living Room');
   });
 });
 

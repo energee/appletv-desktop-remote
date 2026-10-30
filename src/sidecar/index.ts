@@ -3,7 +3,8 @@
 //
 // Protocol: one JSON object per line. Requests are `{ id, method, params }` and are handled
 // concurrently, so replies `{ id, result }` or `{ id, error }` can arrive in any order. Events
-// are `{ event, data }`: `state` (ConnectionState), `now-playing`, and `error`. `connect` and
+// are `{ event, data }`: `state` (ConnectionState), `now-playing`, `power-state` (PowerStatus), and
+// `error`. `connect` and
 // `reconnect` reply at once and report progress as `state`. Logs go only to stderr. When stdin
 // closes, requests that finish within a second are still answered, then the process exits.
 import { Console } from 'node:console';
@@ -93,7 +94,7 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
   }
 }
 
-for (const event of ['state', 'now-playing']) {
+for (const event of ['state', 'now-playing', 'power-state']) {
   service.on(event, (data: unknown = null) => send({ event, data }));
 }
 service.on('error', (error: Error) => send({ event: 'error', data: { message: error.message } }));

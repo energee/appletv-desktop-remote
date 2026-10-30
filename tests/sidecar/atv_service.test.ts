@@ -320,6 +320,18 @@ describe('ATVService', () => {
       expect(service.state).toEqual({ status: 'connected' });
     });
 
+    it('forwards power state only from the current device', async () => {
+      const power = vi.fn();
+      service.on('power-state', power);
+      const first = await connected(tv1);
+      first.emit('powerState', 'off');
+      const second = await connected(tv2);
+
+      first.emit('powerState', 'on');
+      second.emit('powerState', 'on');
+      expect(power.mock.calls).toEqual([['off'], ['on']]);
+    });
+
     it('forwards now-playing only from the current device', async () => {
       const nowPlaying = vi.fn();
       service.on('now-playing', nowPlaying);
