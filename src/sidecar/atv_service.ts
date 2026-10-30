@@ -234,6 +234,10 @@ class ATVService extends EventEmitter {
       console.error('ATV error:', err);
       if (device === this.device) this.emit('error', err);
     });
+    // A new device starts unknown; the TV reports its state at connect and on every sleep and wake.
+    device.on('powerState', (state) => {
+      if (device === this.device) this.emit('power-state', state);
+    });
     device.on('nowPlaying', (info) => {
       if (device !== this.device) return;
       // Apps such as Plex report through the TV's default player, which accepts the explicit
