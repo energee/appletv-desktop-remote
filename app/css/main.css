@@ -193,7 +193,32 @@ a:active {
 /* Connection status dot */
 #topTextHeader {
   position: relative;
-  margin-right: 0;
+  max-width: 256px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+#topTextHeader:hover {
+  background: var(--glass-hover);
+  border-color: var(--border);
+}
+
+#topTextHeader:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+.device-chevron {
+  margin-left: 8px;
+  color: var(--text-secondary);
 }
 
 .connection-dot {
@@ -474,6 +499,15 @@ a:active {
     background var(--transition-fast);
 }
 
+#touchpad::after {
+  content: '';
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
 #touchpad:active {
   background: var(--touchpad-pressed);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -482,7 +516,7 @@ a:active {
 /* Directional arrow indicators */
 .touchpad-arrow {
   position: absolute;
-  opacity: 0;
+  opacity: 0.55;
   color: var(--text-secondary);
   font-size: 16px;
   pointer-events: none;
@@ -522,10 +556,10 @@ a:active {
     opacity: 0.8;
   }
   40% {
-    opacity: 0.5;
+    opacity: 1;
   }
   100% {
-    opacity: 0;
+    opacity: 0.55;
   }
 }
 
@@ -637,8 +671,8 @@ a:active {
   width: 46px;
   height: 46px;
   font-size: 14px;
-  background: transparent;
-  border: none;
+  background: var(--glass);
+  border: 1px solid var(--border);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -647,11 +681,11 @@ a:active {
 .media-btn:hover {
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  border: none;
+  border-color: var(--border);
 }
 
 .media-btn .lucide-icon {
-  opacity: 0.5;
+  opacity: 0.85;
 }
 
 .media-btn:hover .lucide-icon {

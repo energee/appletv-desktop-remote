@@ -45,6 +45,9 @@ const statusElement = { textContent: '', style: { display: '' } };
 const defaultQuery = (selector: string) =>
   selector === '#statusText' ? statusElement : mockElement;
 
+class ButtonElement {}
+vi.stubGlobal('HTMLButtonElement', ButtonElement);
+
 vi.stubGlobal('window', {
   ...globalThis.window,
   addEventListener: vi.fn(),
@@ -375,6 +378,24 @@ describe('two-finger swipe', () => {
 });
 
 describe('keys', () => {
+  it('leaves focused-button activation to the browser without sending TV commands', () => {
+    useElements();
+    state('connected');
+    const preventDefault = vi.fn();
+    const target = new ButtonElement();
+
+    for (const key of ['Enter', ' ']) {
+      keydown({ key, target, getModifierState: () => false, preventDefault });
+    }
+
+    expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+    expect(preventDefault).not.toHaveBeenCalled();
+
+    keydown({ key: 'ArrowUp', target, getModifierState: () => false, preventDefault });
+    expect(desktopAPI.sendKey.mock.calls).toEqual([['up']]);
+    expect(preventDefault).toHaveBeenCalledOnce();
+  });
+
   // Bug (a): a connect that settled during pairing used to make Enter send Select.
   it('Enter in the PIN boxes sends nothing while pairing, even right after a connection', () => {
     const dom = useElements();

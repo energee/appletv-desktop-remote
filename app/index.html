@@ -17,9 +17,15 @@
     <!-- Header -->
     <div class="center" id="keyboardButtonDiv">
       <div class="topText">
-        <span id="topTextHeader"
-          >Apple TV Remote<span id="connectionDot" class="connection-dot"></span
-        ></span>
+        <button
+          id="topTextHeader"
+          type="button"
+          aria-haspopup="menu"
+          title="Switch device or open settings"
+        >
+          Apple TV Remote<span id="connectionDot" class="connection-dot" aria-hidden="true"></span
+          ><span class="device-chevron" aria-hidden="true">⌄</span>
+        </button>
       </div>
       <div id="topTextKBLink"></div>
       <button id="updatePill" class="update-pill" hidden>
