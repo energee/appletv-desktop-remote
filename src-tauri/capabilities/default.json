@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for ATV Remote windows.",
+  "description": "Permissions for Apple TV Remote windows.",
   "windows": ["main", "hotkey"],
   "permissions": [
     "core:default",

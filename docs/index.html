@@ -1,0 +1,782 @@
+<!doctype html>
+<!-- Landing page for Apple TV Remote, served by GitHub Pages from /docs on main. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apple TV Remote for Mac and Windows</title>
+    <meta
+      name="description"
+      content="A small menu bar app that controls your Apple TV from your Mac or PC. Free and open source."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="icon.png" />
+    <style>
+      :root {
+        --bg: #fff;
+        --band: #f5f5f7;
+        --text: #1d1d1f;
+        --muted: #6e6e73;
+        --link: #0066cc;
+        --button: #0071e3;
+        --button-hover: #0077ed;
+        --key: #fff;
+        --key-edge: #d2d2d7;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #000;
+          --band: #161617;
+          --text: #f5f5f7;
+          --muted: #86868b;
+          --link: #2997ff;
+          --key: #2c2c2e;
+          --key-edge: #48484a;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        html {
+          scroll-behavior: smooth;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', sans-serif;
+        font-size: 17px;
+        line-height: 1.47;
+        letter-spacing: -0.022em;
+        -webkit-font-smoothing: antialiased;
+      }
+      a {
+        color: var(--link);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      :focus-visible {
+        outline: 2px solid var(--button);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      h1,
+      h2 {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', 'Segoe UI',
+          sans-serif;
+        font-weight: 600;
+        margin: 0;
+      }
+      h3 {
+        font-size: 21px;
+        font-weight: 600;
+        letter-spacing: 0.011em;
+        margin: 0 0 6px;
+      }
+      p {
+        margin: 0;
+      }
+
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 0 22px;
+      }
+
+      /* Hero */
+      .hero {
+        text-align: center;
+        padding-top: 72px;
+      }
+      .hero img.icon {
+        width: 96px;
+        height: 96px;
+      }
+      .hero h1 {
+        font-size: clamp(44px, 10vw, 96px);
+        line-height: 1.04;
+        letter-spacing: -0.018em;
+        margin-top: 20px;
+      }
+      .hero .lede {
+        font-size: clamp(21px, 2.6vw, 28px);
+        line-height: 1.14;
+        letter-spacing: 0.007em;
+        color: var(--muted);
+        margin-top: 12px;
+      }
+      .actions {
+        display: flex;
+        gap: 28px;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 32px;
+      }
+      .button {
+        background: var(--button);
+        color: #fff;
+        padding: 11px 22px;
+        border-radius: 980px;
+        font-size: 17px;
+      }
+      .button:hover {
+        background: var(--button-hover);
+        text-decoration: none;
+      }
+      .note {
+        font-size: 14px;
+        color: var(--muted);
+        margin-top: 16px;
+      }
+      .shot {
+        display: block;
+        width: min(300px, 76vw);
+        height: auto;
+        margin: 64px auto 0;
+        border-radius: 16px;
+        box-shadow:
+          0 0 0 1px rgb(0 0 0 / 0.06),
+          0 40px 80px -30px rgb(0 0 0 / 0.4);
+      }
+
+      /* Features */
+      .features {
+        padding-block: 112px;
+      }
+      .features h2,
+      .try h2 {
+        font-size: clamp(32px, 5vw, 48px);
+        line-height: 1.08;
+        letter-spacing: -0.003em;
+        max-width: 640px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 40px;
+        margin-top: 56px;
+      }
+      .grid p {
+        color: var(--muted);
+      }
+
+      /* Try it: a pretend tvOS screen driven by the app's keyboard shortcuts. Color appears only here. */
+      .try {
+        background: var(--band);
+        padding-block: 112px;
+      }
+      .try .intro {
+        color: var(--muted);
+        font-size: 21px;
+        line-height: 1.38;
+        max-width: 560px;
+        margin-top: 16px;
+      }
+      .shortcuts {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        column-gap: 56px;
+        margin: 48px 0 0;
+      }
+      .shortcuts div {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--key-edge);
+      }
+      .shortcuts dd {
+        margin: 0;
+      }
+      kbd,
+      .key {
+        display: inline-block;
+        min-width: 34px;
+        padding: 4px 9px;
+        margin-left: 4px;
+        text-align: center;
+        font: inherit;
+        font-size: 15px;
+        color: var(--text);
+        background: var(--key);
+        border: 1px solid var(--key-edge);
+        border-bottom-width: 2px;
+        border-radius: 7px;
+      }
+      .key {
+        cursor: pointer;
+      }
+      .key.pressed {
+        color: #fff;
+        background: var(--button);
+        border-color: var(--button);
+      }
+
+      .tv {
+        margin-top: 48px;
+        padding: 10px;
+        background: #000;
+        border-radius: 22px;
+        box-shadow:
+          0 0 0 1px rgb(255 255 255 / 0.08),
+          0 50px 90px -50px rgb(0 0 0 / 0.6);
+      }
+      .screen {
+        --glow: #3b4aa8;
+        position: relative;
+        display: grid;
+        align-content: center;
+        aspect-ratio: 16 / 9;
+        padding: 0 9%;
+        overflow: hidden;
+        background: #000;
+        border-radius: 13px;
+        cursor: pointer;
+      }
+      .screen:focus-visible {
+        outline-offset: 6px;
+        border-radius: 13px;
+      }
+      /* Ambient light from the focused poster, like the tvOS home screen. */
+      .screen::before {
+        content: '';
+        position: absolute;
+        inset: -30% 15% 40%;
+        border-radius: 50%;
+        background: var(--glow);
+        filter: blur(80px);
+        opacity: 0.45;
+        transition: background-color 0.5s;
+      }
+      .tiles {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: clamp(10px, 2.6vw, 26px);
+      }
+      .tile {
+        position: relative;
+        aspect-ratio: 16 / 10;
+        border-radius: clamp(5px, 1vw, 11px);
+        background: var(--c);
+        transform: perspective(700px);
+        transition:
+          transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+          box-shadow 0.25s;
+      }
+      .tile::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: radial-gradient(
+          circle at var(--sx, 30%) var(--sy, 0%),
+          rgb(255 255 255 / 0.3),
+          transparent 60%
+        );
+        opacity: 0.35;
+        transition: opacity 0.25s;
+      }
+      .tile.focused {
+        z-index: 1;
+        transform: perspective(700px) translateY(-5%) scale(1.14) rotateX(var(--ry, 0deg))
+          rotateY(var(--rx, 0deg));
+        box-shadow: 0 26px 36px -14px rgb(0 0 0 / 0.95);
+      }
+      .tile.focused::after {
+        opacity: 1;
+      }
+      .tile.clicked {
+        transform: perspective(700px) scale(1.06);
+      }
+      .tile:nth-child(1) {
+        --c: #3b4aa8;
+      }
+      .tile:nth-child(2) {
+        --c: #1e7a72;
+      }
+      .tile:nth-child(3) {
+        --c: #8e3b62;
+      }
+      .tile:nth-child(4) {
+        --c: #b5651d;
+      }
+      .tile:nth-child(5) {
+        --c: #2d5d8a;
+      }
+      .tile:nth-child(6) {
+        --c: #5b3c8c;
+      }
+      .tile:nth-child(7) {
+        --c: #6f7f2a;
+      }
+      .tile:nth-child(8) {
+        --c: #a23b3b;
+      }
+      .hud {
+        position: absolute;
+        top: 7%;
+        right: 5%;
+        padding: 7px 16px;
+        border-radius: 980px;
+        background: rgb(255 255 255 / 0.16);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        color: #fff;
+        font-size: 15px;
+        opacity: 0;
+        transform: translateY(-6px);
+        transition:
+          opacity 0.2s,
+          transform 0.2s;
+      }
+      .hud.visible {
+        opacity: 1;
+        transform: none;
+      }
+      .hint {
+        position: absolute;
+        inset: auto 0 6%;
+        text-align: center;
+        color: rgb(255 255 255 / 0.6);
+        font-size: 14px;
+        transition: opacity 0.2s;
+      }
+      .screen:focus .hint {
+        opacity: 0;
+      }
+      .touch {
+        display: none;
+      }
+      @media (hover: none) {
+        .touch {
+          display: inline;
+        }
+        .pointer {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .tile,
+        .tile::after,
+        .screen::before,
+        .hud {
+          transition: none;
+        }
+      }
+
+      /* Setup */
+      .setup {
+        padding-block: 112px;
+      }
+      .setup h2 {
+        font-size: clamp(32px, 5vw, 48px);
+        line-height: 1.08;
+        letter-spacing: -0.003em;
+      }
+      .steps {
+        list-style: none;
+        counter-reset: step;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 40px;
+        padding: 0;
+        margin: 56px 0 0;
+      }
+      .steps li {
+        counter-increment: step;
+        color: var(--muted);
+      }
+      .steps li::before {
+        content: counter(step);
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        margin-bottom: 16px;
+        border: 1.5px solid var(--text);
+        border-radius: 50%;
+        color: var(--text);
+        font-weight: 600;
+      }
+      .steps h3 {
+        color: var(--text);
+      }
+
+      /* Platform-specific copy: Mac text by default, Windows text when the script detects Windows. */
+      .win,
+      .is-windows .mac {
+        display: none;
+      }
+      .is-windows .win {
+        display: revert;
+      }
+
+      footer.wrap {
+        padding-block: 32px 48px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      footer nav {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 12px;
+      }
+
+      @media (max-width: 734px) {
+        .features,
+        .try {
+          padding-block: 72px;
+        }
+        .setup {
+          padding-block: 72px;
+        }
+        .grid,
+        .shortcuts,
+        .steps {
+          grid-template-columns: 1fr;
+        }
+        .grid,
+        .steps {
+          gap: 28px;
+          margin-top: 36px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero wrap">
+        <img class="icon" src="icon.png" alt="" />
+        <h1>Apple TV Remote</h1>
+        <p class="lede">Your Apple TV, one click away in the menu bar.</p>
+        <div class="actions">
+          <a
+            id="download"
+            class="button"
+            data-download
+            href="https://github.com/energee/appletv-desktop-remote/releases/latest"
+            >Download</a
+          >
+          <a href="#setup">How to set it up</a>
+        </div>
+        <p id="note" class="note">Free for macOS and Windows.</p>
+        <img
+          class="shot"
+          src="remote.png"
+          width="560"
+          height="916"
+          alt="The remote window, showing a touchpad, playback buttons, and the show that's playing"
+        />
+      </section>
+
+      <section class="features wrap">
+        <h2>Everything the Siri Remote does. Nothing to pick up.</h2>
+        <div class="grid">
+          <div>
+            <h3>Touchpad</h3>
+            <p>
+              Swipe with two fingers to move around, and click to select. Same as the remote on your
+              couch.
+            </p>
+          </div>
+          <div>
+            <h3>Now playing</h3>
+            <p>See what's on, then play, pause, and scrub from the seek bar.</p>
+          </div>
+          <div>
+            <h3>Always handy</h3>
+            <p>
+              Press <span class="mac"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd></span
+              ><span class="win"><kbd>Win</kbd><kbd>Shift</kbd><kbd>R</kbd></span> to show or hide
+              it from any app. Keep it on top, or let it tuck away.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="try">
+        <div class="wrap">
+          <h2>Or just use the keyboard.</h2>
+          <p class="intro">
+            These are the keys the app understands. Try them on the screen below. In the app, hold
+            <span class="mac">Option</span><span class="win">Alt</span> to see every button's key.
+          </p>
+          <div class="tv">
+            <div
+              id="screen"
+              class="screen"
+              tabindex="0"
+              aria-label="Practice screen. Use the shortcuts listed below."
+            >
+              <div class="tiles" aria-hidden="true">
+                <div class="tile focused"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+                <div class="tile"></div>
+              </div>
+              <p id="hud" class="hud" aria-live="polite"></p>
+              <p class="hint">
+                <span class="pointer">Click here, then press the arrow keys</span
+                ><span class="touch">Tap the keys below</span>
+              </p>
+            </div>
+          </div>
+          <dl class="shortcuts">
+            <div>
+              <dt>Navigate</dt>
+              <dd>
+                <button type="button" class="key" data-key="ArrowLeft" aria-label="Left">←</button
+                ><button type="button" class="key" data-key="ArrowUp" aria-label="Up">↑</button
+                ><button type="button" class="key" data-key="ArrowDown" aria-label="Down">↓</button
+                ><button type="button" class="key" data-key="ArrowRight" aria-label="Right">
+                  →
+                </button>
+              </dd>
+            </div>
+            <div>
+              <dt>Select</dt>
+              <dd><button type="button" class="key" data-key="Enter">Enter</button></dd>
+            </div>
+            <div>
+              <dt>Play or pause</dt>
+              <dd><button type="button" class="key" data-key=" ">Space</button></dd>
+            </div>
+            <div>
+              <dt>Menu</dt>
+              <dd><button type="button" class="key" data-key="Escape">Esc</button></dd>
+            </div>
+            <div>
+              <dt>Home</dt>
+              <dd><button type="button" class="key" data-key="t">T</button></dd>
+            </div>
+            <div>
+              <dt>Top menu</dt>
+              <dd><button type="button" class="key" data-key="g">G</button></dd>
+            </div>
+            <div>
+              <dt>Skip back or ahead</dt>
+              <dd>
+                <button type="button" class="key" data-key="[" aria-label="Skip back">[</button
+                ><button type="button" class="key" data-key="]" aria-label="Skip ahead">]</button>
+              </dd>
+            </div>
+            <div>
+              <dt>Volume</dt>
+              <dd>
+                <button type="button" class="key" data-key="+" aria-label="Volume up">+</button
+                ><button type="button" class="key" data-key="-" aria-label="Volume down">−</button>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section id="setup" class="setup wrap">
+        <h2>Set up in a minute.</h2>
+        <ol class="steps">
+          <li>
+            <h3>Download</h3>
+            <p>
+              <a
+                data-download
+                href="https://github.com/energee/appletv-desktop-remote/releases/latest"
+                >Get the installer</a
+              ><span class="mac">, open it, and drag Apple TV Remote to Applications.</span
+              ><span class="win"> and run it.</span>
+            </p>
+          </li>
+          <li>
+            <h3>Open it</h3>
+            <p class="mac">
+              The app isn't notarized yet, so macOS blocks the first launch. Open System Settings,
+              go to Privacy &amp; Security, and click Open Anyway.
+            </p>
+            <p class="win">If Windows SmartScreen appears, click More info, then Run anyway.</p>
+          </li>
+          <li>
+            <h3>Pair</h3>
+            <p>
+              Pick your Apple TV and type the code it shows on screen. Your computer and Apple TV
+              need to be on the same network.
+            </p>
+          </li>
+        </ol>
+      </section>
+    </main>
+
+    <footer class="wrap">
+      <nav>
+        <a href="https://github.com/energee/appletv-desktop-remote">GitHub</a>
+        <a href="https://github.com/energee/appletv-desktop-remote/releases">Releases</a>
+        <a href="https://github.com/energee/appletv-desktop-remote/blob/main/LICENSE">License</a>
+      </nav>
+      <p>
+        Apple TV and Siri Remote are trademarks of Apple Inc. This app isn't made by or affiliated
+        with Apple.
+      </p>
+    </footer>
+
+    <script>
+      // Point the download links at the right installer for this computer. Without JavaScript, or if
+      // the GitHub API is unreachable, they stay on the releases page.
+      const installers = {
+        // ponytail: Apple silicon is the default; browsers can't reliably tell Intel Macs apart.
+        mac: {
+          label: 'Download for Mac',
+          suffix: '_aarch64.dmg',
+          alternateSuffix: '_x64.dmg',
+          alternateLabel: 'Intel Mac version',
+          requirement: 'macOS 13.5 or later',
+        },
+        windows: {
+          label: 'Download for Windows',
+          suffix: '-setup.exe',
+          alternateSuffix: '.msi',
+          alternateLabel: 'MSI installer',
+          requirement: '64-bit Windows',
+        },
+      };
+
+      const platform = navigator.userAgentData?.platform ?? navigator.platform;
+      let os = null;
+      if (/win/i.test(platform)) os = 'windows';
+      else if (/mac/i.test(platform) && navigator.maxTouchPoints < 2) os = 'mac'; // iPads report Mac too; Chrome says "macOS"
+      if (os === 'windows') document.documentElement.classList.add('is-windows');
+
+      if (os) {
+        const installer = installers[os];
+        fetch('https://api.github.com/repos/energee/appletv-desktop-remote/releases/latest')
+          .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
+          .then((release) => {
+            const assetUrl = (suffix) =>
+              release.assets.find((asset) => asset.name.endsWith(suffix))?.browser_download_url;
+            const main = assetUrl(installer.suffix);
+            if (!main) return;
+            document.querySelectorAll('[data-download]').forEach((a) => (a.href = main));
+            document.getElementById('download').textContent = installer.label;
+
+            const note = document.getElementById('note');
+            const version = release.tag_name.replace(/^v/, '');
+            note.replaceChildren(`Version ${version} for ${installer.requirement}.`);
+            const alternate = assetUrl(installer.alternateSuffix);
+            if (alternate) {
+              const link = document.createElement('a');
+              link.href = alternate;
+              link.textContent = installer.alternateLabel;
+              note.append(' ', link);
+            }
+          })
+          .catch(() => {});
+      }
+
+      // The practice screen: arrow keys move focus across the posters, the other shortcuts show what
+      // they would do on a real Apple TV, and the matching key in the list lights up.
+      const screen = document.getElementById('screen');
+      const tiles = [...screen.querySelectorAll('.tile')];
+      const hud = document.getElementById('hud');
+      const keys = [...document.querySelectorAll('.key')];
+      const columns = 4;
+      const aliases = { Backspace: 'Escape', '=': '+', _: '-', T: 't', G: 'g' };
+      let focused = 0;
+      let playing = true;
+      let hudTimer;
+
+      function focusTile(index) {
+        tiles[focused].classList.remove('focused');
+        focused = index;
+        tiles[focused].classList.add('focused');
+        screen.style.setProperty(
+          '--glow',
+          getComputedStyle(tiles[focused]).getPropertyValue('--c'),
+        );
+      }
+
+      function showHud(message) {
+        hud.textContent = message;
+        hud.classList.add('visible');
+        clearTimeout(hudTimer);
+        hudTimer = setTimeout(() => hud.classList.remove('visible'), 1200);
+      }
+
+      function select() {
+        const tile = tiles[focused];
+        tile.classList.add('clicked');
+        setTimeout(() => tile.classList.remove('clicked'), 150);
+      }
+
+      const actions = {
+        ArrowLeft: () => focused % columns > 0 && focusTile(focused - 1),
+        ArrowRight: () => focused % columns < columns - 1 && focusTile(focused + 1),
+        ArrowUp: () => focused >= columns && focusTile(focused - columns),
+        ArrowDown: () => focused + columns < tiles.length && focusTile(focused + columns),
+        Enter: select,
+        ' ': () => {
+          playing = !playing;
+          showHud(playing ? 'Playing' : 'Paused');
+        },
+        Escape: () => showHud('Menu'),
+        t: () => {
+          focusTile(0);
+          showHud('Home');
+        },
+        g: () => {
+          focusTile(0);
+          showHud('Top menu');
+        },
+        '[': () => showHud('Skipped back'),
+        ']': () => showHud('Skipped ahead'),
+        '+': () => showHud('Volume up'),
+        '-': () => showHud('Volume down'),
+      };
+
+      function press(key) {
+        actions[key]();
+        for (const button of keys.filter((k) => k.dataset.key === key)) {
+          button.classList.add('pressed');
+          setTimeout(() => button.classList.remove('pressed'), 160);
+        }
+      }
+
+      screen.addEventListener('keydown', (event) => {
+        const key = aliases[event.key] ?? event.key;
+        if (!(key in actions) || event.metaKey || event.ctrlKey || event.altKey) return;
+        event.preventDefault();
+        press(key);
+      });
+      keys.forEach((button) => button.addEventListener('click', () => press(button.dataset.key)));
+      tiles.forEach((tile, index) => tile.addEventListener('click', () => focusTile(index)));
+
+      // Moving the pointer over the screen tilts the focused poster, like the Siri Remote touchpad.
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        screen.addEventListener('pointermove', (event) => {
+          const rect = screen.getBoundingClientRect();
+          const x = (event.clientX - rect.left) / rect.width - 0.5;
+          const y = (event.clientY - rect.top) / rect.height - 0.5;
+          screen.style.setProperty('--rx', `${x * 14}deg`);
+          screen.style.setProperty('--ry', `${-y * 14}deg`);
+          screen.style.setProperty('--sx', `${50 + x * 100}%`);
+          screen.style.setProperty('--sy', `${50 + y * 100}%`);
+        });
+        screen.addEventListener('pointerleave', () => {
+          for (const property of ['--rx', '--ry', '--sx', '--sy'])
+            screen.style.removeProperty(property);
+        });
+      }
+    </script>
+  </body>
+</html>

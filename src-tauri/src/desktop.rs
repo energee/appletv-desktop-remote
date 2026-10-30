@@ -128,7 +128,7 @@ pub fn toggle_window(app: &AppHandle) {
 
 /// The Electron app's support directory, exactly as it chose it: `%APPDATA%` whenever set, on
 /// every platform, else `$HOME/Library/Application Support` on macOS and `$HOME/.local/share`
-/// elsewhere (ignoring XDG_DATA_HOME).
+/// elsewhere (ignoring XDG_DATA_HOME). The folder keeps the old "ATV Remote" name on purpose.
 fn legacy_support_dir(
     appdata: Option<PathBuf>,
     home: Option<PathBuf>,
@@ -322,7 +322,7 @@ fn build_context_menu(
     root.append(&PredefinedMenuItem::separator(app).map_err(|error| error.to_string())?)
         .map_err(|error| error.to_string())?;
     root.append(
-        &PredefinedMenuItem::about(app, Some("About ATV Remote"), None)
+        &PredefinedMenuItem::about(app, Some("About Apple TV Remote"), None)
             .map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
@@ -413,7 +413,7 @@ pub fn setup(
         .icon_as_template(true)
         .menu(&default_menu)
         .show_menu_on_left_click(false)
-        .tooltip("ATV Remote")
+        .tooltip("Apple TV Remote")
         .on_menu_event({
             let context = Arc::clone(&context);
             move |app, event| handle_menu_event(app, event.id().as_ref(), &context)

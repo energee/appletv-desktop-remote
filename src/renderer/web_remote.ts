@@ -507,7 +507,7 @@ export function updateConnectionDot(state: ConnectionDotState): void {
 
   const showName = state === 'connected' || state === 'connecting';
   const header = $('#topTextHeader')!;
-  header.firstChild!.textContent = (showName && getConnectedDeviceName()) || 'ATV Remote';
+  header.firstChild!.textContent = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
 }
 
 /**
@@ -631,7 +631,7 @@ async function importCredentials(): Promise<void> {
     ('uimode' in parsed && !isStoredValue(parsed.uimode)) ||
     ('alwaysOnTopChecked' in parsed && !isStoredValue(parsed.alwaysOnTopChecked))
   ) {
-    throw new Error('This is not an ATV Remote credential export.');
+    throw new Error('This is not an Apple TV Remote credential export.');
   }
   // Validate the complete backup before changing any existing saved state.
   function storedObject(value: string): Record<string, unknown> {
