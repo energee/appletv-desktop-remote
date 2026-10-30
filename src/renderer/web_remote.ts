@@ -625,8 +625,8 @@ function getConnectedDeviceName(): string | null {
 
 export function updateConnectionDot(state: ConnectionDotState): void {
   const dot = $('#connectionDot')!;
-  dot.classList.remove('connected', 'connecting', 'disconnected');
-  dot.classList.add(state);
+  dot.classList.remove('connected', 'connecting', 'disconnected', 'asleep');
+  dot.classList.add(asleep && state === 'connected' ? 'asleep' : state);
 
   const showName = state === 'connected' || state === 'connecting';
   const name = (showName && getConnectedDeviceName()) || 'Apple TV Remote';

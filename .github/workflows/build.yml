@@ -118,6 +118,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          release_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/"
           gh release download "$GITHUB_REF_NAME" --pattern latest.json --dir "$RUNNER_TEMP"
-          jq -e '.platforms | ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"] - keys | length == 0' "$RUNNER_TEMP/latest.json"
+          jq -e --arg version "$version" --arg release_url "$release_url" '
+            . as $manifest
+            | (
+              $manifest.version == $version
+              and ($manifest.notes | type == "string")
+              and ($manifest.platforms | type == "object")
+              and (
+                ["darwin-aarch64", "darwin-x86_64", "windows-x86_64"]
+                | all(
+                    .[];
+                    . as $platform
+                    | ($manifest.platforms[$platform] | type == "object")
+                    and ($manifest.platforms[$platform].url | type == "string" and startswith($release_url))
+                    and ($manifest.platforms[$platform].signature | type == "string" and length > 0)
+                  )
+              )
+            )
+          ' "$RUNNER_TEMP/latest.json"
           gh release edit "$GITHUB_REF_NAME" --draft=false

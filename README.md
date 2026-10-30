@@ -25,10 +25,10 @@
 
 ## Everything the Siri Remote does. Nothing to pick up.
 
-- **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Smooth touch** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture.
+- **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Settings → Touchpad → Smooth scrolling** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture.
 - **Now playing.** See what's on, then play, pause, and scrub from the seek bar.
 - **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away.
-- **Device picker.** Click the device name to switch Apple TVs or pair another. Right-click for theme, always-on-top, speakers, updates, and other actions. **Settings** manages saved remotes, the hotkey, backups, and update preferences.
+- **Device picker.** Click the device name to switch Apple TVs or pair another. Right-click for theme, always-on-top, speakers, updates, and other actions. **Settings** manages saved remotes, scrolling, the hotkey, backups, and update preferences.
 
 ## Or just use the keyboard
 
@@ -58,13 +58,13 @@ Hold Option (Alt on Windows) and the remote labels every button with its key.
 2. **Open it.** The app isn't notarized yet, so macOS blocks the first launch. Open System Settings, go to Privacy & Security, and click **Open Anyway**. On Windows, if SmartScreen appears, click **More info**, then **Run anyway**.
 3. **Pair.** Pick your Apple TV and type the code it shows on screen. The code is sent on the fourth digit, and a wrong one brings up a new code. Your computer and Apple TV need to be on the same network.
 
-### Apps, text input, and smooth touch
+### Apps, text input, and scrolling
 
-**Apps**, **Keyboard**, and **Smooth touch** use Apple's Companion connection. The first time you request one, choose **Show pairing code** and enter the second code displayed on the TV. Ordinary remote pairing still needs only the original AirPlay code; scrolling never starts another pairing.
+The **Apps** grid icon, focused text input, and **Settings → Touchpad → Smooth scrolling** use Apple's Companion connection. If Companion isn't paired, opening Apps or enabling smooth scrolling offers **Show pairing code** for the second code displayed on the TV. Ordinary remote pairing still needs only the original AirPlay code; scrolling never starts another pairing.
 
-**Apps** lists installed apps to launch. With Companion connected, focusing a text field on the TV shows an editable text box in the remote. Edits are debounced; typing, spaces, and cursor keys stay in the text field instead of sending remote shortcuts. **Smooth touch** toggles continuous touch gestures for the selected device.
+**Apps** lists installed apps to launch. With Companion connected, the keyboard icon and editable text box appear only while a text field is focused on the TV. Leaving that field also closes the keyboard sheet. Edits are debounced; typing, spaces, and cursor keys stay in the text field instead of sending remote shortcuts. **Smooth scrolling** is saved separately for each selected device.
 
-The header groups the device picker and power control. Companion connection errors clear after a successful reconnect.
+The header groups the device picker and power control. The device dot is green when connected, steady amber while asleep, pulsing amber while connecting, and red when disconnected. Companion connection errors clear after a successful reconnect.
 
 Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code.
 
@@ -106,7 +106,7 @@ Local macOS builds are ad-hoc signed. A notarized release needs a Developer ID i
 
 The release workflow builds macOS Apple silicon, macOS Intel, and Windows x64. Tag pushes require the GitHub Actions secret `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has a password). The matching public key is committed in `src-tauri/tauri.conf.json`; never commit the private key. Keep a secure backup of the signing key: generating a replacement key does not let already-installed apps verify it.
 
-Keep `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` versions in sync with the `v` tag. The official `tauri-apps/tauri-action` builds and uploads installers, signed updater bundles, signatures, and `latest.json` with release notes. Builds run sequentially so the action's metadata merge preserves every platform. The release stays a draft until all builds succeed and the manifest contains all three platforms. Architecture-specific asset names prevent collisions.
+Keep `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` versions in sync with the `v` tag. The official `tauri-apps/tauri-action` builds and uploads installers, signed updater bundles, signatures, and `latest.json` with release notes. Builds run sequentially so the action's metadata merge preserves every platform. The release stays a draft until its manifest has the tagged version, all three platform URLs and non-empty signatures, then publishes it. Architecture-specific asset names prevent collisions.
 
 Normal local builds and manual workflow runs do not generate updater artifacts and require no signing secret. To create signed updater artifacts locally:
 

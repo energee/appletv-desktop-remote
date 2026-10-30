@@ -17,14 +17,18 @@ type Copy = readonly [title: string, action: string, description: string];
 const AUTO_CHECK_KEY = 'autoUpdateChecks';
 const DAY = 24 * 60 * 60 * 1000;
 const COPY: Record<Status, Copy> = {
-  idle: ['Software update', 'Check for updates', 'Check for a newer version.'],
-  checking: ['Checking for updates…', 'Checking…', 'Checking the latest release.'],
-  upToDate: ['You’re up to date', 'Check again', 'Latest version installed.'],
-  available: ['Update available', 'Download update', 'Restart required to install.'],
-  downloading: ['Downloading update', 'Downloading…', 'You can keep using the remote.'],
-  ready: ['Ready to install', 'Install & restart', 'Downloaded and verified.'],
-  installing: ['Installing update', 'Installing…', 'The app will restart automatically.'],
-  error: ['Update failed', 'Try again', 'You can keep using the current version.'],
+  idle: ['Software update', 'Check for updates', 'Check for updates when you are ready.'],
+  checking: ['Software update', 'Checking…', 'Checking for an update…'],
+  upToDate: ['Software update', 'Check again', 'This version is current.'],
+  available: ['Update available', 'Download update', 'A newer version is available.'],
+  downloading: ['Update available', 'Downloading…', 'Downloading the update.'],
+  ready: ['Update ready', 'Install & restart', 'Ready to install.'],
+  installing: [
+    'Installing update',
+    'Installing…',
+    'The app will restart when installation is complete.',
+  ],
+  error: ['Software update', 'Try again', ''],
 };
 
 /** Owns the updater resource so downloads continue while this sheet is dismissed. */
@@ -110,7 +114,7 @@ export function initUpdater(): void {
     render();
     try {
       await task();
-    } catch (reason) {
+    } catch (reason: unknown) {
       status = 'error';
       failed = operation;
       error = reason instanceof Error ? reason.message : String(reason);

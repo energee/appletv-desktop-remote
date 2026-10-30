@@ -1,6 +1,6 @@
 {
   "name": "appletv-desktop-remote",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Apple TV Remote",
   "scripts": {
     "typecheck": "tsc",

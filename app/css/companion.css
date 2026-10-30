@@ -1,8 +1,7 @@
 .companion-tools {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
-  margin: 12px 0 4px;
 }
 
 .companion-tools button,
@@ -18,9 +17,36 @@
   cursor: pointer;
 }
 
-.companion-tools button[aria-pressed='true'] {
-  background: var(--text-primary);
-  color: var(--surface-solid);
+.companion-tools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.companion-tools button[hidden] {
+  display: none;
+}
+
+.companion-tools button:hover {
+  background: var(--glass-hover);
+  color: var(--text-primary);
+}
+
+.companion-tools button:focus-visible {
+  outline: 2px solid var(--text-secondary);
+  outline-offset: 2px;
+}
+
+.companion-tools .lucide-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .companion-tools button:disabled,
@@ -55,7 +81,8 @@
   font-size: 14px;
 }
 
-.companion-dialog p {
+.companion-dialog p,
+.companion-setting-note {
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -75,7 +102,7 @@
 
 #companionText:not([hidden]) {
   display: block;
-  margin: 7px auto 0;
+  margin: 0;
   max-width: 252px;
 }
 
