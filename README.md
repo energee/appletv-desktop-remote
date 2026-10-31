@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/remote.png" alt="The remote window, showing a touchpad, playback buttons, and the show that's playing" width="280"/>
+  <img width="301" height="530" alt="image" src="https://github.com/user-attachments/assets/68cbe526-46ec-493d-8ac4-9753024da6ee" alt="The remote window, showing a touchpad, playback buttons, and the show that's playing" width="280"/>
 </p>
 
 ## Everything the Siri Remote does. Nothing to pick up.
