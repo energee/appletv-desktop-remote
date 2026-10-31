@@ -5,7 +5,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Write},
     path::PathBuf,
-    process::{Child, ChildStdin, Command, Stdio},
+    process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc, Arc, Mutex,
@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::{mpsc as input_channel, oneshot, watch};
 
 type Reply = Result<Value, String>;
 type Pending = Mutex<HashMap<u64, oneshot::Sender<Reply>>>;
@@ -25,8 +25,18 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(35);
 const COMPANION_PAIR_TIMEOUT: Duration = Duration::from_secs(50);
 const TIMEOUT_MESSAGE: &str = "The Apple TV did not respond in time. Please try again.";
 
+#[derive(Debug)]
+enum InputFrame {
+    Request {
+        message: String,
+        deadline: Instant,
+        written: oneshot::Sender<Result<(), String>>,
+    },
+    Shutdown,
+}
+
 struct Inner {
-    input: Mutex<Option<ChildStdin>>,
+    input: input_channel::Sender<InputFrame>,
     child: Mutex<Child>,
     pending: Pending,
     next_id: AtomicU64,
@@ -109,6 +119,77 @@ impl Inner {
     }
 }
 
+/// One worker owns stdin. Async callers never hold a mutex while the pipe is backpressured.
+fn write_input(mut input: impl Write, mut frames: input_channel::Receiver<InputFrame>) {
+    while let Some(frame) = frames.blocking_recv() {
+        let InputFrame::Request {
+            message,
+            deadline,
+            written,
+        } = frame
+        else {
+            let _ = input.write_all(b"{\"id\":0,\"method\":\"shutdown\"}\n");
+            break;
+        };
+        if written.is_closed() {
+            continue;
+        }
+        if Instant::now() >= deadline {
+            let _ = written.send(Err(TIMEOUT_MESSAGE.into()));
+            continue;
+        }
+        let result = input
+            .write_all(message.as_bytes())
+            .map_err(|error| format!("Cannot write to Apple TV backend: {error}"));
+        let failed = result.is_err();
+        let _ = written.send(result);
+        if failed {
+            break;
+        }
+    }
+}
+
+async fn send_frame(
+    input: &input_channel::Sender<InputFrame>,
+    message: String,
+    deadline: tokio::time::Instant,
+) -> Result<(), String> {
+    let (written, received) = oneshot::channel();
+    tokio::time::timeout_at(deadline, async {
+        input
+            .send(InputFrame::Request {
+                message,
+                deadline: deadline.into_std(),
+                written,
+            })
+            .await
+            .map_err(|_| "Apple TV backend input is closed".to_owned())?;
+        received
+            .await
+            .map_err(|_| "Apple TV backend input is closed".to_owned())?
+    })
+    .await
+    .map_err(|_| TIMEOUT_MESSAGE.to_owned())?
+}
+
+/// Killing/reaping must never depend on the stdin worker making progress.
+fn stop_child(child: &Mutex<Child>, grace: Duration) {
+    let deadline = Instant::now() + grace;
+    loop {
+        let mut child = child.lock().unwrap();
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break;
+        }
+        drop(child);
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
 /// Drains the sidecar's diagnostics line by line. Bytes, not `lines()`: invalid UTF-8 would
 /// end that iterator, and an undrained pipe eventually blocks the sidecar's writes.
 fn log_lines(reader: impl BufRead, mut log: impl FnMut(&str)) {
@@ -141,8 +222,9 @@ fn launch(app: &AppHandle) -> Result<Arc<Inner>, String> {
     let input = child.stdin.take().ok_or("Missing backend input")?;
     let output = child.stdout.take().ok_or("Missing backend output")?;
     let errors = child.stderr.take().ok_or("Missing backend diagnostics")?;
+    let (input_send, input_receive) = input_channel::channel(32);
     let inner = Arc::new(Inner {
-        input: Mutex::new(Some(input)),
+        input: input_send,
         child: Mutex::new(child),
         pending: Mutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
@@ -150,6 +232,7 @@ fn launch(app: &AppHandle) -> Result<Arc<Inner>, String> {
         failure: Mutex::new(None),
         app: app.clone(),
     });
+    thread::spawn(move || write_input(input, input_receive));
     let (ready_send, ready_receive) = mpsc::sync_channel(1);
     let reader = inner.clone();
     thread::spawn(move || {
@@ -224,9 +307,9 @@ async fn await_reply(
     pending: &Pending,
     id: u64,
     reply: oneshot::Receiver<Reply>,
-    timeout: Duration,
+    deadline: tokio::time::Instant,
 ) -> Reply {
-    match tokio::time::timeout(timeout, reply).await {
+    match tokio::time::timeout_at(deadline, reply).await {
         Ok(reply) => reply.map_err(|_| "Apple TV backend response channel closed".to_owned())?,
         Err(_) => {
             pending.lock().unwrap().remove(&id);
@@ -328,7 +411,15 @@ impl Backend {
         if !params.is_object() {
             return Err("Backend parameters must be an object".into());
         }
-        let inner = self.started().await?;
+        let timeout = if method == "finishCompanionPair" {
+            COMPANION_PAIR_TIMEOUT
+        } else {
+            REQUEST_TIMEOUT
+        };
+        let deadline = tokio::time::Instant::now() + timeout;
+        let inner = tokio::time::timeout_at(deadline, self.started())
+            .await
+            .map_err(|_| TIMEOUT_MESSAGE.to_owned())??;
         if inner.closing.load(Ordering::Acquire) {
             return Err("Apple TV backend is shutting down".into());
         }
@@ -343,26 +434,13 @@ impl Backend {
             inner.pending.lock().unwrap().insert(id, sender);
         }
         let message = json!({"id":id,"method":method,"params":params}).to_string() + "\n";
-        let written = {
-            let mut input = inner.input.lock().unwrap();
-            input
-                .as_mut()
-                .ok_or_else(|| "Apple TV backend input is closed".to_owned())
-                .and_then(|input| {
-                    input
-                        .write_all(message.as_bytes())
-                        .map_err(|e| e.to_string())
-                })
-        };
-        if let Err(error) = written {
-            inner.fail(format!("Cannot write to Apple TV backend: {error}"));
+        if let Err(error) = send_frame(&inner.input, message, deadline).await {
+            // A write deadline means the pipe itself may be stuck. Reap the process so the
+            // worker cannot later deliver an expired command after the UI reports failure.
+            inner.fail(error.clone());
+            return Err(error);
         }
-        let timeout = if method == "finishCompanionPair" {
-            COMPANION_PAIR_TIMEOUT
-        } else {
-            REQUEST_TIMEOUT
-        };
-        await_reply(&inner.pending, id, receiver, timeout).await
+        await_reply(&inner.pending, id, receiver, deadline).await
     }
 
     pub fn shutdown(&self) {
@@ -379,25 +457,10 @@ impl Inner {
         if self.closing.swap(true, Ordering::AcqRel) {
             return;
         }
-        if let Some(mut input) = self.input.lock().unwrap().take() {
-            let _ = input.write_all(b"{\"id\":0,\"method\":\"shutdown\"}\n");
-        }
+        // Best effort only: a full queue or blocked writer must not delay the kill deadline.
+        let _ = self.input.try_send(InputFrame::Shutdown);
         self.fail("Apple TV backend is shutting down".into());
-        // The application is exiting: reap the child before the OS ends our threads.
-        let deadline = Instant::now() + Duration::from_secs(3);
-        loop {
-            let mut child = self.child.lock().unwrap();
-            if matches!(child.try_wait(), Ok(Some(_))) {
-                break;
-            }
-            if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                break;
-            }
-            drop(child);
-            thread::sleep(Duration::from_millis(25));
-        }
+        stop_child(&self.child, Duration::from_secs(3));
     }
 }
 
@@ -457,10 +520,90 @@ mod tests {
             let pending = Pending::default();
             let (sender, receiver) = oneshot::channel();
             pending.lock().unwrap().insert(7, sender);
-            let reply = await_reply(&pending, 7, receiver, REQUEST_TIMEOUT).await;
+            let deadline = tokio::time::Instant::now() + REQUEST_TIMEOUT;
+            let reply = await_reply(&pending, 7, receiver, deadline).await;
             assert_eq!(reply, Err(TIMEOUT_MESSAGE.into()));
             // The reader finds no entry for a late reply, so it is dropped.
             assert!(pending.lock().unwrap().is_empty());
         });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_nonreading_child_cannot_block_the_write_deadline_or_shutdown() {
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let input = child.stdin.take().unwrap();
+        let child = Mutex::new(child);
+        let (send, receive) = input_channel::channel(1);
+        let worker = thread::spawn(move || write_input(input, receive));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        let result = runtime.block_on(async {
+            send_frame(
+                &send,
+                "x".repeat(8 * 1024 * 1024),
+                tokio::time::Instant::now() + Duration::from_millis(100),
+            )
+            .await
+        });
+        // The stdin worker may still be blocked. Shutdown owns the child independently.
+        stop_child(&child, Duration::from_millis(50));
+        drop(send);
+        worker.join().unwrap();
+        assert_eq!(result, Err(TIMEOUT_MESSAGE.into()));
+        assert!(!child.lock().unwrap().try_wait().unwrap().unwrap().success());
+    }
+
+    #[test]
+    fn expired_or_abandoned_queued_commands_are_not_written() {
+        #[derive(Clone)]
+        struct Output(Arc<Mutex<Vec<u8>>>);
+        impl Write for Output {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let output = Output(Arc::new(Mutex::new(Vec::new())));
+        let (send, receive) = input_channel::channel(3);
+        let (abandoned, received) = oneshot::channel();
+        drop(received);
+        send.try_send(InputFrame::Request {
+            message: "abandoned".into(),
+            deadline: Instant::now() + Duration::from_secs(5),
+            written: abandoned,
+        })
+        .unwrap();
+        let (expired, expired_reply) = oneshot::channel();
+        send.try_send(InputFrame::Request {
+            message: "expired".into(),
+            deadline: Instant::now() - Duration::from_secs(1),
+            written: expired,
+        })
+        .unwrap();
+        let (current, current_reply) = oneshot::channel();
+        send.try_send(InputFrame::Request {
+            message: "current".into(),
+            deadline: Instant::now() + Duration::from_secs(5),
+            written: current,
+        })
+        .unwrap();
+        drop(send);
+        write_input(output.clone(), receive);
+        assert_eq!(
+            expired_reply.blocking_recv().unwrap(),
+            Err(TIMEOUT_MESSAGE.into())
+        );
+        assert_eq!(current_reply.blocking_recv().unwrap(), Ok(()));
+        assert_eq!(*output.0.lock().unwrap(), b"current");
     }
 }

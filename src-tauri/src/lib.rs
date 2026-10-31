@@ -124,8 +124,8 @@ pub fn run() {
                 api.prevent_close();
                 let _ = window.hide();
             }
-            if matches!(event, WindowEvent::Focused(false)) {
-                desktop::hide_on_blur(window.app_handle().clone());
+            if let WindowEvent::Focused(focused) = event {
+                desktop::handle_focus_change(window.app_handle(), *focused);
             }
         })
         .invoke_handler(tauri::generate_handler![backend_request, desktop_action])

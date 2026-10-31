@@ -8,7 +8,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
     time::Duration,
@@ -18,7 +18,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 const MAIN_WINDOW: &str = "main";
 const HOTKEY_WINDOW: &str = "hotkey";
@@ -27,6 +27,15 @@ const DEFAULT_SHORTCUTS: &[&str] = &["SUPER+SHIFT+R", "SUPER+CONTROL+R"];
 /// Set while one of the app's native file dialogs is open. The dialog takes focus from the
 /// main window, which must stay visible to show the import or export result.
 static FILE_DIALOG_OPEN: AtomicBool = AtomicBool::new(false);
+
+#[derive(Default)]
+struct RegisteredHotkeys(Mutex<Vec<Shortcut>>);
+
+#[derive(Default)]
+struct BlurHide {
+    generation: AtomicU64,
+    pending: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+}
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -220,31 +229,149 @@ fn normalize_shortcut(shortcut: &str) -> String {
         .join("+")
 }
 
-/// Registers the saved hotkeys, adding the defaults when there are none or any of them fails,
-/// so a bad saved hotkey never leaves the window without one. Failures (an unreadable
-/// hotkey.txt, a shortcut another app owns) are logged so launch continues.
+fn parsed_hotkeys(contents: &str) -> Result<Vec<Shortcut>, String> {
+    let mut shortcuts = Vec::new();
+    for value in hotkey_list(contents) {
+        let shortcut = normalize_shortcut(value)
+            .parse::<Shortcut>()
+            .map_err(|error| format!("Invalid shortcut {value}: {error}"))?;
+        if !shortcuts.contains(&shortcut) {
+            shortcuts.push(shortcut);
+        }
+    }
+    Ok(shortcuts)
+}
+
+/// Register replacements before retiring old bindings. Track each successful OS operation so
+/// a later failure can restore the previous set, including a failed persistence operation.
+fn replace_hotkeys(
+    current: &mut Vec<Shortcut>,
+    desired: &[Shortcut],
+    mut register: impl FnMut(Shortcut) -> Result<(), String>,
+    mut unregister: impl FnMut(Shortcut) -> Result<(), String>,
+    persist: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    fn reconcile(
+        current: &mut Vec<Shortcut>,
+        desired: &[Shortcut],
+        register: &mut impl FnMut(Shortcut) -> Result<(), String>,
+        unregister: &mut impl FnMut(Shortcut) -> Result<(), String>,
+    ) -> Result<(), String> {
+        for shortcut in desired {
+            if !current.contains(shortcut) {
+                register(*shortcut)?;
+                current.push(*shortcut);
+            }
+        }
+        for index in (0..current.len()).rev() {
+            if !desired.contains(&current[index]) {
+                unregister(current[index])?;
+                current.remove(index);
+            }
+        }
+        Ok(())
+    }
+    let previous = current.clone();
+    let result =
+        reconcile(current, desired, &mut register, &mut unregister).and_then(|()| persist());
+    if let Err(error) = result {
+        return match reconcile(current, &previous, &mut register, &mut unregister) {
+            Ok(()) => Err(error),
+            Err(rollback) => Err(format!(
+                "{error}. Could not fully restore previous shortcuts: {rollback}"
+            )),
+        };
+    }
+    Ok(())
+}
+
+/// Startup is best effort; interactive saves use replace_hotkeys and propagate conflicts.
 fn register_hotkeys(app: &AppHandle) {
     let shortcuts = read_hotkeys().unwrap_or_else(|error| {
         eprintln!("Cannot read saved hotkeys: {error}");
         Vec::new()
     });
-    if let Err(error) = app.global_shortcut().unregister_all() {
-        eprintln!("Cannot unregister hotkeys: {error}");
-    }
+    let state = app.state::<RegisteredHotkeys>();
+    let mut current = state.0.lock().unwrap();
     let mut all_registered = !shortcuts.is_empty();
-    for shortcut in &shortcuts {
-        if let Err(error) = app.global_shortcut().register(shortcut.as_str()) {
-            eprintln!("Cannot register hotkey {shortcut}: {error}");
+    for value in &shortcuts {
+        let result = value
+            .parse::<Shortcut>()
+            .map_err(|error| error.to_string())
+            .and_then(|shortcut| {
+                if !current.contains(&shortcut) {
+                    app.global_shortcut()
+                        .register(shortcut)
+                        .map_err(|error| error.to_string())?;
+                    current.push(shortcut);
+                }
+                Ok(())
+            });
+        if let Err(error) = result {
+            eprintln!("Cannot register hotkey {value}: {error}");
             all_registered = false;
         }
     }
     if !all_registered {
-        for shortcut in DEFAULT_SHORTCUTS {
-            if let Err(error) = app.global_shortcut().register(*shortcut) {
-                eprintln!("Cannot register hotkey {shortcut}: {error}");
+        for value in DEFAULT_SHORTCUTS {
+            let shortcut = value.parse::<Shortcut>().expect("valid default shortcut");
+            if current.contains(&shortcut) {
+                continue;
+            }
+            match app.global_shortcut().register(shortcut) {
+                Ok(()) => current.push(shortcut),
+                Err(error) => eprintln!("Cannot register hotkey {value}: {error}"),
             }
         }
     }
+}
+
+fn change_hotkey(app: &AppHandle, combo: Option<&str>) -> Result<(), String> {
+    let state = app.state::<RegisteredHotkeys>();
+    let mut current = state
+        .0
+        .lock()
+        .map_err(|_| "Hotkey settings are unavailable")?;
+    let path = legacy_hotkey_path()?;
+    let contents = match combo {
+        Some(combo) => Some(saved_hotkeys(&read_hotkey_file()?, combo)),
+        None => None,
+    };
+    let desired = match &contents {
+        Some(contents) => parsed_hotkeys(contents)?,
+        None => parsed_hotkeys(&DEFAULT_SHORTCUTS.join(","))?,
+    };
+    if desired.is_empty() {
+        return Err("Choose a shortcut before saving".into());
+    }
+    replace_hotkeys(
+        &mut current,
+        &desired,
+        |shortcut| {
+            app.global_shortcut()
+                .register(shortcut)
+                .map_err(|error| error.to_string())
+        },
+        |shortcut| {
+            app.global_shortcut()
+                .unregister(shortcut)
+                .map_err(|error| error.to_string())
+        },
+        || {
+            if let Some(contents) = contents {
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                }
+                write_private(&path, &contents).map_err(|error| error.to_string())
+            } else {
+                match fs::remove_file(&path) {
+                    Ok(()) => Ok(()),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                    Err(error) => Err(error.to_string()),
+                }
+            }
+        },
+    )
 }
 
 fn open_hotkey_window(app: &AppHandle) -> Result<(), String> {
@@ -442,6 +569,8 @@ pub fn setup(
     app: &AppHandle,
     context: Arc<Mutex<Option<ContextMenuConfig>>>,
 ) -> Result<(), String> {
+    app.manage(RegisteredHotkeys::default());
+    app.manage(BlurHide::default());
     let tray_icon =
         tauri::image::Image::from_bytes(include_bytes!("../../app/images/IconTemplate.png"))
             .map_err(|error| error.to_string())?;
@@ -594,23 +723,11 @@ pub async fn desktop_action(
                 .get("combo")
                 .and_then(Value::as_str)
                 .ok_or("saveHotkey requires string args.combo")?;
-            let contents = saved_hotkeys(&read_hotkey_file()?, combo);
-            let path = legacy_hotkey_path()?;
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            fs::write(path, contents).map_err(|error| error.to_string())?;
-            register_hotkeys(&app);
+            change_hotkey(&app, Some(combo))?;
             Ok(Value::Null)
         }
         "resetHotkey" => {
-            let path = legacy_hotkey_path()?;
-            match fs::remove_file(path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.to_string()),
-            }
-            register_hotkeys(&app);
+            change_hotkey(&app, None)?;
             Ok(Value::Null)
         }
         // wry cancels webview downloads, so the credential backup is saved natively.
@@ -705,19 +822,40 @@ async fn file_dialog<T: Send + 'static>(
     picked
 }
 
-pub fn hide_on_blur(app: AppHandle) {
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(200));
-        if let Ok(window) = main_window(&app) {
-            if window.is_always_on_top().unwrap_or(false) || FILE_DIALOG_OPEN.load(Ordering::SeqCst)
-            {
+pub fn handle_focus_change(app: &AppHandle, focused: bool) {
+    let Some(state) = app.try_state::<BlurHide>() else {
+        return;
+    };
+    let generation = state
+        .generation
+        .fetch_add(1, Ordering::AcqRel)
+        .wrapping_add(1);
+    let mut pending = state.pending.lock().unwrap();
+    if let Some(task) = pending.take() {
+        task.abort();
+    }
+    if focused {
+        return;
+    }
+    let app = app.clone();
+    *pending = Some(tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let check = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if check.state::<BlurHide>().generation.load(Ordering::Acquire) != generation {
                 return;
             }
-            if !window.is_focused().unwrap_or(true) {
+            if let Ok(window) = main_window(&check) {
+                if window.is_always_on_top().unwrap_or(false)
+                    || FILE_DIALOG_OPEN.load(Ordering::SeqCst)
+                    || window.is_focused().unwrap_or(true)
+                {
+                    return;
+                }
                 let _ = window.hide();
             }
-        }
-    });
+        });
+    }));
 }
 
 /// Tells the webview the system woke, so it replaces the stale Apple TV connection. macOS
@@ -731,7 +869,6 @@ pub fn notify_power_resume(app: &AppHandle) {
 mod tests {
     use super::*;
     use tauri::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
-    use tauri_plugin_global_shortcut::Shortcut;
 
     // Built-in Retina (2x) with a 1x external display above it, as macOS reports them.
     fn monitors() -> Vec<(PhysicalPosition<i32>, PhysicalSize<u32>, f64)> {
@@ -899,6 +1036,110 @@ mod tests {
             saved_hotkeys(" Super+Shift+R , Ctrl+Alt+T,", "Super+Shift+A"),
             "Super+Shift+A,Ctrl+Alt+T"
         );
+    }
+
+    #[test]
+    fn a_conflicting_replacement_preserves_working_shortcuts_and_settings() {
+        use std::cell::{Cell, RefCell};
+        let old = parsed_hotkeys("Super+Shift+R,Ctrl+Alt+T").unwrap();
+        let desired = parsed_hotkeys("Super+Shift+A,Super+Shift+B,Ctrl+Alt+T").unwrap();
+        let blocked = desired[1];
+        let registered = RefCell::new(old.clone());
+        let persisted = Cell::new(false);
+        let mut current = old.clone();
+        let result = replace_hotkeys(
+            &mut current,
+            &desired,
+            |shortcut| {
+                if shortcut == blocked {
+                    return Err("Shortcut is already in use".into());
+                }
+                registered.borrow_mut().push(shortcut);
+                Ok(())
+            },
+            |shortcut| {
+                registered.borrow_mut().retain(|value| *value != shortcut);
+                Ok(())
+            },
+            || {
+                persisted.set(true);
+                Ok(())
+            },
+        );
+        assert!(result.is_err());
+        assert!(!persisted.get());
+        assert_eq!(current, old);
+        assert_eq!(*registered.borrow(), old);
+    }
+
+    #[test]
+    fn a_failed_hotkey_save_restores_the_previous_registered_set() {
+        use std::cell::RefCell;
+        let old = parsed_hotkeys("Super+Shift+R,Ctrl+Alt+T").unwrap();
+        let desired = parsed_hotkeys("Super+Shift+A,Ctrl+Alt+T").unwrap();
+        let registered = RefCell::new(old.clone());
+        let mut current = old.clone();
+        let result = replace_hotkeys(
+            &mut current,
+            &desired,
+            |shortcut| {
+                let mut registered = registered.borrow_mut();
+                if registered.contains(&shortcut) {
+                    return Err("Duplicate shortcut registration".into());
+                }
+                registered.push(shortcut);
+                Ok(())
+            },
+            |shortcut| {
+                registered.borrow_mut().retain(|value| *value != shortcut);
+                Ok(())
+            },
+            || Err("Cannot save hotkey settings".into()),
+        );
+        assert!(result.is_err());
+        assert_eq!(current.len(), old.len());
+        assert!(old.iter().all(|shortcut| current.contains(shortcut)));
+        assert_eq!(registered.borrow().len(), old.len());
+        assert!(old
+            .iter()
+            .all(|shortcut| registered.borrow().contains(shortcut)));
+    }
+
+    #[test]
+    fn a_successful_hotkey_replacement_keeps_unchanged_extra_bindings() {
+        use std::cell::{Cell, RefCell};
+        let mut current = parsed_hotkeys("Super+Shift+R,Ctrl+Alt+T").unwrap();
+        let desired = parsed_hotkeys("Super+Shift+A,Ctrl+Alt+T").unwrap();
+        let registered = RefCell::new(current.clone());
+        let persisted = Cell::new(false);
+        replace_hotkeys(
+            &mut current,
+            &desired,
+            |shortcut| {
+                let mut registered = registered.borrow_mut();
+                if registered.contains(&shortcut) {
+                    return Err("Duplicate shortcut registration".into());
+                }
+                registered.push(shortcut);
+                Ok(())
+            },
+            |shortcut| {
+                registered.borrow_mut().retain(|value| *value != shortcut);
+                Ok(())
+            },
+            || {
+                persisted.set(true);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(persisted.get());
+        assert_eq!(registered.borrow().len(), desired.len());
+        assert!(desired
+            .iter()
+            .all(|shortcut| registered.borrow().contains(shortcut)));
+        assert_eq!(current.len(), desired.len());
+        assert!(desired.iter().all(|shortcut| current.contains(shortcut)));
     }
 
     #[test]

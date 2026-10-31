@@ -1,12 +1,16 @@
 import { desktopAPI } from '../shared/desktop-api';
+
 const DEFAULT_HOTKEY = 'Super+Shift+R';
-const symbolMap: Record<string, string> = {
-  Super: '\u2318',
-  Ctrl: '\u2303',
-  Alt: '\u2325',
-  Shift: '\u21E7',
-};
 const modOrder = ['Super', 'Ctrl', 'Alt', 'Shift'];
+const isMac = navigator.platform.startsWith('Mac');
+const modifierLabels: Record<string, string> = isMac
+  ? { Super: '⌘ Cmd', Ctrl: '⌃ Ctrl', Alt: '⌥ Alt', Shift: '⇧ Shift' }
+  : { Super: 'Win', Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift' };
+const displayModifiers: Record<string, string> = isMac
+  ? { Super: '⌘', Ctrl: '⌃', Alt: '⌥', Shift: '⇧' }
+  : { Super: 'Win', Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift' };
+let pending = false;
+let retryAction: (() => Promise<void>) | null = null;
 
 if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
   document.body.classList.add('darkMode');
@@ -29,15 +33,24 @@ if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
   }
 })();
 
-// Toggle modifier pills
+for (const pill of document.querySelectorAll<HTMLButtonElement>('.mod-pill')) {
+  const modifier = pill.dataset.mod!;
+  pill.textContent = modifierLabels[modifier];
+}
+document.getElementById('resetBtn')!.title = isMac
+  ? 'Clear custom shortcut and use ⌘⇧R'
+  : 'Clear custom shortcut and use Win Shift R';
+
 document.getElementById('modifierRow')!.addEventListener('click', function (e) {
-  const pill = (e.target as HTMLElement).closest('.mod-pill') as HTMLElement | null;
-  if (!pill) return;
+  const pill = (e.target as HTMLElement).closest('.mod-pill') as HTMLButtonElement | null;
+  if (!pill || pending) return;
   pill.classList.toggle('active');
   updatePreview();
 });
 
-document.getElementById('keySelect')!.addEventListener('change', updatePreview);
+document.getElementById('keySelect')!.addEventListener('change', function () {
+  if (!pending) updatePreview();
+});
 
 function getActiveMods(): string[] {
   const mods: string[] = [];
@@ -60,14 +73,15 @@ function buildComboString(): string {
 }
 
 function buildDisplayString(): string {
-  const mods = getActiveMods();
-  const symbols = mods.map((m) => symbolMap[m] || m);
+  const modifiers = getActiveMods().map((modifier) => displayModifiers[modifier] || modifier);
   const key = getSelectedKey();
-  if (key) symbols.push(key);
-  return symbols.join(' ');
+  if (key) modifiers.push(key);
+  return modifiers.join(' ');
 }
 
 function updatePreview(): void {
+  if (pending) return;
+
   // A global shortcut needs a key and a modifier other than Shift; a bare or shifted key would
   // be taken from typing in every app.
   (document.getElementById('saveBtn') as HTMLButtonElement).disabled =
@@ -119,37 +133,104 @@ function setModifiersFromCombo(combo: string): void {
   updatePreview();
 }
 
-async function loadExistingHotkey(): Promise<boolean> {
-  const raw = await desktopAPI.loadHotkey();
-  if (raw) {
-    const hotkeys = raw
-      .split(',')
-      .map((h) => h.trim())
-      .filter((h) => h !== '');
-    if (hotkeys.length > 0) {
-      setModifiersFromCombo(hotkeys[0]);
-      return true;
-    }
+function setPendingState(operation: string): void {
+  pending = true;
+  for (const control of document.querySelectorAll<HTMLButtonElement>(
+    '.mod-pill, #saveBtn, #resetBtn',
+  )) {
+    control.disabled = true;
   }
-  setModifiersFromCombo(DEFAULT_HOTKEY);
-  return false;
+  (document.getElementById('keySelect') as HTMLSelectElement).disabled = true;
+  const status = document.getElementById('hotkeyStatus')!;
+  status.textContent = `${operation}…`;
+  status.hidden = false;
+}
+
+function clearPendingState(): void {
+  pending = false;
+  for (const control of document.querySelectorAll<HTMLButtonElement>(
+    '.mod-pill, #saveBtn, #resetBtn',
+  )) {
+    control.disabled = false;
+  }
+  (document.getElementById('keySelect') as HTMLSelectElement).disabled = false;
+  const status = document.getElementById('hotkeyStatus')!;
+  status.textContent = '';
+  status.hidden = true;
+  updatePreview();
+}
+
+function clearError(): void {
+  document.getElementById('hotkeyErrorText')!.textContent = '';
+  document.getElementById('hotkeyError')!.hidden = true;
+
+  const retry = document.getElementById('retryBtn') as HTMLButtonElement;
+  retry.hidden = true;
+}
+
+function showError(operation: string, error: unknown, action: () => Promise<void>): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  const message = detail ? `Unable to ${operation}: ${detail}` : `Unable to ${operation}.`;
+  document.getElementById('hotkeyErrorText')!.textContent = message;
+  document.getElementById('hotkeyError')!.hidden = false;
+  const retry = document.getElementById('retryBtn') as HTMLButtonElement;
+  retry.textContent = `Retry ${operation}`;
+  retry.hidden = false;
+  retryAction = action;
+}
+
+async function runOperation(operation: string, request: () => Promise<void>): Promise<void> {
+  if (pending) return;
+
+  retryAction = null;
+  clearError();
+  setPendingState(`${operation[0].toUpperCase()}${operation.slice(1)} hotkey`);
+  try {
+    await request();
+  } catch (error) {
+    showError(operation, error, () => runOperation(operation, request));
+  } finally {
+    clearPendingState();
+  }
+}
+
+async function loadExistingHotkey(): Promise<void> {
+  await runOperation('load', async () => {
+    const raw = await desktopAPI.loadHotkey();
+    if (!raw) {
+      setModifiersFromCombo(DEFAULT_HOTKEY);
+      return;
+    }
+
+    const firstHotkey = raw
+      .split(',')
+      .map((hotkey) => hotkey.trim())
+      .find((hotkey) => hotkey !== '');
+    if (firstHotkey) setModifiersFromCombo(firstHotkey);
+    else setModifiersFromCombo(DEFAULT_HOTKEY);
+  });
 }
 
 async function saveHotkey(): Promise<void> {
-  const combo = buildComboString();
-  if (!combo) return;
-  await desktopAPI.saveHotkey(combo);
-  await desktopAPI.closeHotkeyWindow();
+  await runOperation('save', async () => {
+    const combo = buildComboString();
+    if (!combo) return;
+    await desktopAPI.saveHotkey(combo);
+    await desktopAPI.closeHotkeyWindow();
+  });
 }
 
 async function resetToDefault(): Promise<void> {
-  await desktopAPI.resetHotkey();
-  await desktopAPI.closeHotkeyWindow();
+  await runOperation('reset', async () => {
+    await desktopAPI.resetHotkey();
+    await desktopAPI.closeHotkeyWindow();
+  });
 }
 
-// Attach click handlers via addEventListener (no inline onclick)
-document.getElementById('saveBtn')!.addEventListener('click', saveHotkey);
-document.getElementById('resetBtn')!.addEventListener('click', resetToDefault);
+document.getElementById('saveBtn')!.addEventListener('click', () => void saveHotkey());
+document.getElementById('resetBtn')!.addEventListener('click', () => void resetToDefault());
+document.getElementById('retryBtn')!.addEventListener('click', () => {
+  if (retryAction) void retryAction();
+});
 
-// Init
-loadExistingHotkey();
+void loadExistingHotkey();
