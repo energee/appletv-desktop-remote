@@ -390,48 +390,40 @@ class ATVService extends EventEmitter {
         30000,
         'Companion pairing verification timed out. Please try again.',
       );
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       const { Credentials } = await getLib();
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       const credentials = Credentials.deserialize(this.requireCredentials().credentials);
       const merged = new Credentials(credentials, companionCredentials).serialize();
       this.companionPairing = null;
       session.destroy();
       try {
         await this.openCompanion(device, companionCredentials, epoch);
-        if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-          return null;
-        this.requireCredentials().credentials = merged;
-        this.companionRecoveryEnabled = true;
+        if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
+        this.commitCompanionCredentials(merged);
         this.companionFailures = 0;
         this.setCompanionState('connected');
         const focused = device.textFocusState === 'focused';
         this.emit('text-focus', { focused });
         if (focused) this.refreshText(device, epoch, ++this.textFocusGeneration);
       } catch (error) {
-        if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-          return null;
-        this.requireCredentials().credentials = merged;
-        this.companionRecoveryEnabled = true;
+        if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
+        const activeCredentials = this.commitCompanionCredentials(merged);
         this.recoverCompanion(
           device,
-          this.requireCredentials(),
+          activeCredentials,
           epoch,
           error instanceof Error ? error.message : 'Unable to connect Companion.',
         );
       }
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       return {
         credentials: merged,
         identifier: this.requireCredentials().identifier,
         name: device.name,
       };
     } catch (error) {
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       this.setCompanionState(
         'unavailable',
         undefined,
@@ -654,6 +646,17 @@ class ATVService extends EventEmitter {
   private requireCredentials(): ATVCredentials {
     if (!this.activeCredentials) throw new Error('No active device credentials.');
     return this.activeCredentials;
+  }
+
+  private isCurrentCompanionPair(device: AppleTV, epoch: number, pairEpoch: number): boolean {
+    return epoch === this.epoch && pairEpoch === this.companionPairEpoch && device === this.device;
+  }
+
+  private commitCompanionCredentials(credentials: string): ATVCredentials {
+    const activeCredentials = this.requireCredentials();
+    activeCredentials.credentials = credentials;
+    this.companionRecoveryEnabled = true;
+    return activeCredentials;
   }
 
   private enqueueText(edit: (device: AppleTV) => Promise<string>): Promise<string> {

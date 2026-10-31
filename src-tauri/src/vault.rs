@@ -190,15 +190,59 @@ impl Vault {
         Ok(account)
     }
 
+    fn stage_all(
+        store: &dyn SecretStore,
+        index: &mut Index,
+        pairs: Vec<StoredCredential>,
+    ) -> Result<Vec<(StoredCredential, String)>, String> {
+        let mut staged = Vec::with_capacity(pairs.len());
+        for pair in pairs {
+            let account = Self::stage(store, index, &pair)?;
+            staged.push((pair, account));
+        }
+        Ok(staged)
+    }
+
+    fn replace_device(index: &mut Index, device: SavedDevice, account: String) {
+        let identifier = device.identifier.clone();
+        let existing = index
+            .devices
+            .iter()
+            .position(|device| device.identifier == identifier);
+        let old_account = existing.map(|_| Self::account(index, &identifier));
+        if let Some(existing) = existing {
+            index.devices[existing] = device;
+        } else {
+            index.devices.push(device);
+        }
+        index.cleanup_accounts.retain(|pending| pending != &account);
+        index.accounts.insert(identifier, account);
+        if let Some(old_account) = old_account {
+            index.cleanup_accounts.push(old_account);
+        }
+    }
+
+    fn commit_staged(
+        store: &dyn SecretStore,
+        index: &mut Index,
+        mut staged_index: Index,
+    ) -> Result<(), String> {
+        if let Err(error) = Self::save_index(store, index) {
+            let _ = Self::finish_cleanup(store, &mut staged_index);
+            return Err(error);
+        }
+        let _ = Self::finish_cleanup(store, index);
+        Ok(())
+    }
+
     pub fn devices(&self) -> Result<Vec<SavedDevice>, String> {
         let store = self
             .store
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
         let mut index = Self::index(store.as_ref())?;
-        let devices = index.devices.clone();
         let _ = Self::finish_cleanup(store.as_ref(), &mut index);
-        Ok(devices)
+        Ok(index.devices)
     }
 
     pub fn active(&self) -> Result<Option<String>, String> {
@@ -207,9 +251,8 @@ impl Vault {
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
         let mut index = Self::index(store.as_ref())?;
-        let active = index.active.clone();
         let _ = Self::finish_cleanup(store.as_ref(), &mut index);
-        Ok(active)
+        Ok(index.active)
     }
 
     pub fn select(&self, identifier: Option<String>) -> Result<(), String> {
@@ -267,33 +310,9 @@ impl Vault {
             .map_err(|_| "Credential vault is unavailable")?;
         let mut index = Self::index(store.as_ref())?;
         let account = Self::stage(store.as_ref(), &mut index, &pair)?;
-        let mut staged_index = index.clone();
-        let old_account = index
-            .devices
-            .iter()
-            .any(|device| device.identifier == saved.identifier)
-            .then(|| Self::account(&index, &saved.identifier));
-        if let Some(existing) = index
-            .devices
-            .iter_mut()
-            .find(|device| device.identifier == saved.identifier)
-        {
-            *existing = saved.clone();
-        } else {
-            index.devices.push(saved.clone());
-        }
-        index
-            .accounts
-            .insert(saved.identifier.clone(), account.clone());
-        index.cleanup_accounts.retain(|pending| pending != &account);
-        if let Some(old_account) = old_account {
-            index.cleanup_accounts.push(old_account);
-        }
-        if let Err(error) = Self::save_index(store.as_ref(), &index) {
-            let _ = Self::finish_cleanup(store.as_ref(), &mut staged_index);
-            return Err(error);
-        }
-        let _ = Self::finish_cleanup(store.as_ref(), &mut index);
+        let staged_index = index.clone();
+        Self::replace_device(&mut index, saved.clone(), account);
+        Self::commit_staged(store.as_ref(), &mut index, staged_index)?;
         Ok(saved)
     }
 
@@ -396,48 +415,29 @@ impl Vault {
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
         let mut index = Self::index(store.as_ref())?;
-        let mut staged = Vec::with_capacity(pairs.len());
-        for pair in pairs {
-            let account = Self::stage(store.as_ref(), &mut index, &pair)?;
-            staged.push((pair, account));
-        }
-        let mut staged_index = index.clone();
+        let staged = Self::stage_all(store.as_ref(), &mut index, pairs)?;
+        let staged_index = index.clone();
         for (pair, account) in staged {
-            let saved = SavedDevice {
-                identifier: pair.identifier.clone(),
-                name: pair.name,
-                companion_paired: pair.companion_paired,
-            };
-            let old_account = index
-                .devices
-                .iter()
-                .any(|device| device.identifier == saved.identifier)
-                .then(|| Self::account(&index, &saved.identifier));
-            if let Some(existing) = index
-                .devices
-                .iter_mut()
-                .find(|device| device.identifier == saved.identifier)
-            {
-                *existing = saved.clone();
-            } else {
-                index.devices.push(saved.clone());
-            }
-            index.accounts.insert(saved.identifier, account.clone());
-            index.cleanup_accounts.retain(|pending| pending != &account);
-            if let Some(old_account) = old_account {
-                index.cleanup_accounts.push(old_account);
-            }
+            Self::replace_device(
+                &mut index,
+                SavedDevice {
+                    identifier: pair.identifier,
+                    name: pair.name,
+                    companion_paired: pair.companion_paired,
+                },
+                account,
+            );
         }
         if let Some(active) = active {
-            if index.devices.iter().any(|item| item.identifier == active) {
+            if index
+                .devices
+                .iter()
+                .any(|device| device.identifier == active)
+            {
                 index.active = Some(active);
             }
         }
-        if let Err(error) = Self::save_index(store.as_ref(), &index) {
-            let _ = Self::finish_cleanup(store.as_ref(), &mut staged_index);
-            return Err(error);
-        }
-        let _ = Self::finish_cleanup(store.as_ref(), &mut index);
+        Self::commit_staged(store.as_ref(), &mut index, staged_index)?;
         Ok(())
     }
 
@@ -539,12 +539,8 @@ impl Vault {
             .map_err(|_| "Credential vault is unavailable")?;
         let old_index = Self::index(store.as_ref())?;
         let mut index = old_index.clone();
-        let mut staged = Vec::with_capacity(pairs.len());
-        for pair in pairs {
-            let account = Self::stage(store.as_ref(), &mut index, &pair)?;
-            staged.push((pair, account));
-        }
-        let mut staged_index = index.clone();
+        let staged = Self::stage_all(store.as_ref(), &mut index, pairs)?;
+        let staged_index = index.clone();
         let mut devices = Vec::with_capacity(staged.len());
         let mut accounts = HashMap::with_capacity(staged.len());
         for (pair, account) in staged {
@@ -568,12 +564,8 @@ impl Vault {
                 index.cleanup_accounts.push(account);
             }
         }
-        if let Err(error) = Self::save_index(store.as_ref(), &index) {
-            let _ = Self::finish_cleanup(store.as_ref(), &mut staged_index);
-            return Err(error);
-        }
         // Cleanup is deferred and nonfatal: the durable index is the logical commit point.
-        let _ = Self::finish_cleanup(store.as_ref(), &mut index);
+        Self::commit_staged(store.as_ref(), &mut index, staged_index)?;
         Ok(preferences)
     }
 }
