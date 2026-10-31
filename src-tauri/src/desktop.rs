@@ -1141,7 +1141,6 @@ mod tests {
         assert_eq!(current.len(), desired.len());
         assert!(desired.iter().all(|shortcut| current.contains(shortcut)));
     }
-
     #[test]
     fn legacy_command_aliases_preserve_the_registered_shortcut() {
         let expected = "Super+Shift+R".parse::<Shortcut>().unwrap();
