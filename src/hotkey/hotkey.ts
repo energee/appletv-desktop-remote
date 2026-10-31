@@ -133,31 +133,18 @@ function setModifiersFromCombo(combo: string): void {
   updatePreview();
 }
 
-function setPendingState(operation: string): void {
-  pending = true;
+function setPendingState(operation: string | null): void {
+  pending = operation !== null;
   for (const control of document.querySelectorAll<HTMLButtonElement>(
     '.mod-pill, #saveBtn, #resetBtn',
   )) {
-    control.disabled = true;
+    control.disabled = pending;
   }
-  (document.getElementById('keySelect') as HTMLSelectElement).disabled = true;
+  (document.getElementById('keySelect') as HTMLSelectElement).disabled = pending;
   const status = document.getElementById('hotkeyStatus')!;
-  status.textContent = `${operation}…`;
-  status.hidden = false;
-}
-
-function clearPendingState(): void {
-  pending = false;
-  for (const control of document.querySelectorAll<HTMLButtonElement>(
-    '.mod-pill, #saveBtn, #resetBtn',
-  )) {
-    control.disabled = false;
-  }
-  (document.getElementById('keySelect') as HTMLSelectElement).disabled = false;
-  const status = document.getElementById('hotkeyStatus')!;
-  status.textContent = '';
-  status.hidden = true;
-  updatePreview();
+  status.textContent = operation === null ? '' : `${operation}…`;
+  status.hidden = !pending;
+  if (!pending) updatePreview();
 }
 
 function clearError(): void {
@@ -190,24 +177,18 @@ async function runOperation(operation: string, request: () => Promise<void>): Pr
   } catch (error) {
     showError(operation, error, () => runOperation(operation, request));
   } finally {
-    clearPendingState();
+    setPendingState(null);
   }
 }
 
 async function loadExistingHotkey(): Promise<void> {
   await runOperation('load', async () => {
     const raw = await desktopAPI.loadHotkey();
-    if (!raw) {
-      setModifiersFromCombo(DEFAULT_HOTKEY);
-      return;
-    }
-
     const firstHotkey = raw
-      .split(',')
+      ?.split(',')
       .map((hotkey) => hotkey.trim())
       .find((hotkey) => hotkey !== '');
-    if (firstHotkey) setModifiersFromCombo(firstHotkey);
-    else setModifiersFromCombo(DEFAULT_HOTKEY);
+    setModifiersFromCombo(firstHotkey ?? DEFAULT_HOTKEY);
   });
 }
 
