@@ -109,6 +109,7 @@ function renderState(next: ConnectionState): void {
   connection = next;
   if (next.status !== 'connected') asleep = false;
   $('#powerButton')!.style.display = next.status === 'connected' ? '' : 'none';
+  if (next.status !== 'connected') cancelPresses();
   if (next.status !== 'connected') {
     showVolume(null);
     if (speakers.length > 0) {
@@ -153,6 +154,7 @@ function showScreen(): void {
 }
 
 window.addEventListener('blur', () => {
+  cancelPresses();
   toggleAltText(true);
 });
 
@@ -179,7 +181,7 @@ window.addEventListener('keyup', (e) => {
 });
 
 window.addEventListener('keydown', (e) => {
-  if (companionKeyboardGuard(e)) return;
+  if (settingsOpen() || companionKeyboardGuard(e)) return;
   // Let focused buttons activate natively instead of sending their activation keys to the TV.
   if (e.target instanceof HTMLButtonElement && (e.key === 'Enter' || e.key === ' ')) return;
   let key = e.key;
@@ -394,6 +396,7 @@ function showKeyboardHint(): void {
 }
 
 let buttonAbort: AbortController | null = null;
+let cancelPresses = (): void => {};
 
 function showKeyMap(): void {
   // The keyboard hint is for the first connection after launch, not reconnects after a wake.
@@ -401,6 +404,7 @@ function showKeyMap(): void {
   if (buttonAbort) buttonAbort.abort();
   buttonAbort = new AbortController();
   const { signal } = buttonAbort;
+  const deviceIdentifier = getActiveIdentifier();
 
   $('#initText')!.style.display = 'none';
   const touchpad = document.getElementById('touchpad')!;
@@ -409,6 +413,37 @@ function showKeyMap(): void {
 
   // --- Touchpad gesture detection ---
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  const longPressTimers = new Map<Element, ReturnType<typeof setTimeout>>();
+  const longPressedButtons = new Set<Element>();
+  const activeButtons = new Set<Element>();
+  const cancelledButtons = new Set<Element>();
+  let clickStart: { x: number; y: number; t: number } | null = null;
+
+  function canSendPress(): boolean {
+    return (
+      !signal.aborted &&
+      connection.status === 'connected' &&
+      getActiveIdentifier() === deviceIdentifier
+    );
+  }
+
+  function cancelLocalPresses(): void {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    clickStart = null;
+    for (const [button, timer] of longPressTimers) {
+      clearTimeout(timer);
+      button.classList.remove('pressing', 'longpress-triggered');
+    }
+    for (const button of activeButtons) cancelledButtons.add(button);
+    longPressTimers.clear();
+    longPressedButtons.clear();
+    activeButtons.clear();
+  }
+  cancelPresses = cancelLocalPresses;
+  signal.addEventListener('abort', cancelLocalPresses, { once: true });
   function flashArrow(direction: string): void {
     const el = $('.touchpad-arrow-' + direction);
     if (!el) return;
@@ -433,19 +468,78 @@ function showKeyMap(): void {
   let touchActive = false;
   let touchX = 500;
   let touchY = 500;
-  let touchQueue = Promise.resolve();
+  type TouchGesture = {
+    identifier: string | null;
+    press: { x: number; y: number };
+    hold: { x: number; y: number } | null;
+    release: { x: number; y: number } | null;
+    pressSent: boolean;
+  };
+  let touchInFlight = false;
+  let activeTouch: TouchGesture | null = null;
+  let pendingTouch: TouchGesture | null = null;
+
+  function dispatchTouch(): void {
+    if (touchInFlight) return;
+    if (!activeTouch) {
+      activeTouch = pendingTouch;
+      pendingTouch = null;
+    }
+    const gesture = activeTouch;
+    if (!gesture) return;
+
+    let phase: 'press' | 'hold' | 'release';
+    let point: { x: number; y: number };
+    if (!gesture.pressSent) {
+      gesture.pressSent = true;
+      phase = 'press';
+      point = gesture.press;
+    } else if (gesture.hold) {
+      point = gesture.hold;
+      gesture.hold = null;
+      phase = 'hold';
+    } else if (gesture.release) {
+      point = gesture.release;
+      activeTouch = null;
+      phase = 'release';
+    } else {
+      return;
+    }
+
+    touchInFlight = true;
+    void (async () => {
+      if (
+        gesture.identifier === getActiveIdentifier() &&
+        (!signal.aborted || phase === 'release')
+      ) {
+        await companionTouchAdapter(point.x, point.y, phase);
+      }
+    })()
+      .catch(showRequestError)
+      .finally(() => {
+        touchInFlight = false;
+        dispatchTouch();
+      });
+  }
+
   function queueTouch(x: number, y: number, phase: 'press' | 'hold' | 'release'): void {
-    const identifier = loadActiveDevice()?.identifier;
-    touchQueue = touchQueue
-      .then(async () => {
-        if (
-          (!signal.aborted || phase === 'release') &&
-          loadActiveDevice()?.identifier === identifier
-        ) {
-          await companionTouchAdapter(x, y, phase);
-        }
-      })
-      .catch(showRequestError);
+    if (phase === 'press') {
+      const gesture = {
+        identifier: getActiveIdentifier(),
+        press: { x, y },
+        hold: null,
+        release: null,
+        pressSent: false,
+      };
+      if (activeTouch) pendingTouch = gesture;
+      else activeTouch = gesture;
+    } else {
+      const gesture = pendingTouch ?? activeTouch;
+      if (!gesture) return;
+      if (phase === 'hold') gesture.hold = { x, y };
+      else gesture.release = { x, y };
+    }
+    dispatchTouch();
   }
   const SCROLL_THRESHOLD = 90;
   /** Quiet time that ends a gesture; events arrive about every 16 ms until momentum stops. */
@@ -464,6 +558,13 @@ function showKeyMap(): void {
   const stopGestureListener = desktopAPI.onScrollGestureBegan(endGesture);
   signal.addEventListener('abort', stopGestureListener);
   signal.addEventListener('abort', endGesture, { once: true });
+  signal.addEventListener(
+    'abort',
+    () => {
+      pendingTouch = null;
+    },
+    { once: true },
+  );
 
   touchpad.addEventListener(
     'wheel',
@@ -504,17 +605,17 @@ function showKeyMap(): void {
   );
 
   // --- Tap (click) and long-press ---
-  let clickStart: { x: number; y: number; t: number } | null = null;
 
   // Only the primary button presses. A right-click opens the context menu, which takes the
   // mouseup, so a long-press timer it started would fire and press the key.
   touchpad.addEventListener(
     'mousedown',
     function (e) {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || (e.target as Element | null)?.closest('button')) return;
       clickStart = { x: e.clientX, y: e.clientY, t: Date.now() };
       longPressTimer = setTimeout(function () {
-        sendCommand('select', true);
+        if (!canSendPress()) return;
+        void sendCommand('select', true);
         clickStart = null;
       }, 1000);
     },
@@ -533,8 +634,8 @@ function showKeyMap(): void {
       const dy = e.clientY - clickStart.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const elapsed = Date.now() - clickStart.t;
-      if (dist < 15 && elapsed < 300) {
-        sendCommand('select');
+      if (dist < 15 && elapsed < 300 && canSendPress()) {
+        void sendCommand('select');
       }
       clickStart = null;
     },
@@ -553,62 +654,55 @@ function showKeyMap(): void {
   );
 
   // --- Media / secondary button long-press handlers ---
-  const longPressTimers: Record<string, ReturnType<typeof setTimeout>> = {};
-  const isLongPressing: Record<string, boolean> = {};
-
-  const dataKeyEls = $$('[data-key]');
-
-  dataKeyEls.forEach(function (button) {
+  $$('[data-key]').forEach(function (button) {
     button.addEventListener(
       'mousedown',
       function (e) {
         if (e.button !== 0) return;
         const key = (button as HTMLElement).dataset.key!;
-
-        if (longPressTimers[key]) {
-          clearTimeout(longPressTimers[key]);
-        }
-
-        isLongPressing[key] = true;
-        button.classList.add('pressing');
-
-        longPressTimers[key] = setTimeout(() => {
-          if (!isLongPressing[key]) return;
-
+        const timer = setTimeout(() => {
+          if (!canSendPress() || !longPressTimers.has(button)) return;
+          longPressTimers.delete(button);
+          longPressedButtons.add(button);
           button.classList.add('longpress-triggered');
-
-          sendCommand(key, true);
-
-          isLongPressing[key] = false;
-
-          setTimeout(() => {
-            button.classList.remove('pressing', 'longpress-triggered');
-          }, 200);
+          void sendCommand(key, true);
+          setTimeout(() => button.classList.remove('pressing', 'longpress-triggered'), 200);
         }, 1000);
+        longPressTimers.set(button, timer);
+        activeButtons.add(button);
+        cancelledButtons.delete(button);
+        button.classList.add('pressing');
       },
       { signal },
     );
 
-    function handleMouseUpLeave(e: Event): void {
-      const key = (button as HTMLElement).dataset.key!;
-
-      if (isLongPressing[key]) {
-        if (longPressTimers[key]) {
-          clearTimeout(longPressTimers[key]);
-          delete longPressTimers[key];
-        }
-
-        isLongPressing[key] = false;
-        button.classList.remove('pressing');
-
-        if (e.type === 'mouseup') {
-          sendCommand(key);
-        }
+    function endPress(e: Event): void {
+      const timer = longPressTimers.get(button);
+      if (timer) {
+        clearTimeout(timer);
+        longPressTimers.delete(button);
+      }
+      button.classList.remove('pressing');
+      if (e.type === 'mouseleave') {
+        activeButtons.delete(button);
+        longPressedButtons.delete(button);
       }
     }
 
-    button.addEventListener('mouseup', handleMouseUpLeave, { signal });
-    button.addEventListener('mouseleave', handleMouseUpLeave, { signal });
+    button.addEventListener('mouseup', endPress, { signal });
+    button.addEventListener('mouseleave', endPress, { signal });
+    button.addEventListener(
+      'click',
+      (e) => {
+        activeButtons.delete(button);
+        const cancelled = cancelledButtons.delete(button);
+        if ((cancelled && e.detail !== 0) || longPressedButtons.delete(button) || !canSendPress()) {
+          return;
+        }
+        void sendCommand((button as HTMLElement).dataset.key!);
+      },
+      { signal },
+    );
   });
 
   if (firstConnection) showKeyboardHint();
@@ -937,6 +1031,14 @@ function hideSettings(): void {
   showScreen();
 }
 
+let deviceMutation = Promise.resolve();
+
+function queueDeviceMutation(operation: () => Promise<void>): Promise<void> {
+  const next = deviceMutation.then(operation, operation);
+  deviceMutation = next.catch(() => {});
+  return next;
+}
+
 function populateDeviceList(): void {
   const listEl = $('#settingsDeviceList')!;
   listEl.innerHTML = '';
@@ -956,15 +1058,16 @@ function populateDeviceList(): void {
     removeBtn.textContent = 'Remove';
     removeBtn.className = 'settings-device-remove';
     removeBtn.addEventListener('click', () => {
-      void (async () => {
+      void queueDeviceMutation(async () => {
+        const removingActiveDevice = getActiveIdentifier() === identifier;
         await removeDevice(identifier);
-        if (isActive) {
+        if (removingActiveDevice && getActiveIdentifier() === null) {
           await desktopAPI.disconnect();
           setStatus('No device selected. Click the device name to choose one.');
         }
         populateDeviceList();
         handleContextMenu();
-      })().catch(showRequestError);
+      }).catch(showRequestError);
     });
     row.appendChild(removeBtn);
     listEl.appendChild(row);
@@ -1041,12 +1144,15 @@ function showDeviceMenu(): void {
 async function handleContextMenuAction(action: string, payload?: string): Promise<void> {
   switch (action) {
     case 'selectDevice': {
-      const creds = loadDevices();
-      if (payload && Object.hasOwn(creds, payload)) {
+      await queueDeviceMutation(async () => {
+        const creds = loadDevices();
+        if (!payload || !Object.hasOwn(creds, payload)) return;
         await saveActiveDevice(creds[payload]);
+        cancelPresses();
         connectToATV();
+        if (settingsOpen()) populateDeviceList();
         handleContextMenu();
-      }
+      });
       break;
     }
     // Pairing is an explicit navigation, so it leaves Settings (which would stay in front). The

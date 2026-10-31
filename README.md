@@ -25,14 +25,14 @@
 
 ## Everything the Siri Remote does. Nothing to pick up.
 
-- **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Settings → Touchpad → Smooth scrolling** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture.
+- **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Settings → Touchpad → Smooth scrolling** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture. Smooth scrolling coalesces obsolete positions when the backend is busy instead of replaying every sample after the gesture ends.
 - **Now playing.** See what's on, then play, pause, and scrub from the seek bar. The current item is requested on connection rather than waiting for a playback change.
 - **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away. **Settings → Change Hotkey** uses platform-appropriate labels and reports conflicts or storage errors without silently replacing a working shortcut; failed operations can be retried. Returning focus cancels a pending automatic hide.
 - **Device picker.** Click the device name to switch Apple TVs or pair another. Right-click for theme, always-on-top, speakers, updates, and other actions. **Settings** manages saved remotes, scrolling, the hotkey, backups, and update preferences.
 
 ## Or just use the keyboard
 
-Hold Option (Alt on Windows) and the remote labels every button with its key.
+Hold Option (Alt on Windows) and the remote labels every button with its key. You can also Tab through named remote buttons, including Select, and activate the focused button with Enter or Space. Remote shortcuts do not send commands from Settings. Pending presses are canceled when focus, connection, or the selected TV changes; selection and removal are ordered so a stale Settings action cannot control the wrong device.
 
 | Key             | Action                  |
 | --------------- | ----------------------- |
