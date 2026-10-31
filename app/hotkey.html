@@ -226,6 +226,33 @@
         background: var(--glass);
         border-color: var(--glass-border);
       }
+      .hotkey-message {
+        width: 100%;
+        max-width: 360px;
+        margin: 0 0 12px;
+        color: var(--text-secondary);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .hotkey-error {
+        color: #a2342c;
+      }
+
+      .retry-btn {
+        margin-top: 8px;
+        padding: 4px 10px;
+        border: 1px solid currentColor;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .retry-btn:hover {
+        background: var(--glass);
+      }
     </style>
   </head>
   <body>
@@ -234,22 +261,27 @@
     <div class="builder-section">
       <div class="builder-label">Modifiers</div>
       <div class="modifier-row" id="modifierRow">
-        <button class="mod-pill" data-mod="Super" data-symbol="⌘">⌘ Cmd</button>
-        <button class="mod-pill" data-mod="Ctrl" data-symbol="⌃">⌃ Ctrl</button>
-        <button class="mod-pill" data-mod="Alt" data-symbol="⌥">⌥ Alt</button>
-        <button class="mod-pill" data-mod="Shift" data-symbol="⇧">⇧ Shift</button>
+        <button class="mod-pill" data-mod="Super">Super</button>
+        <button class="mod-pill" data-mod="Ctrl">Ctrl</button>
+        <button class="mod-pill" data-mod="Alt">Alt</button>
+        <button class="mod-pill" data-mod="Shift">Shift</button>
       </div>
       <div class="builder-label">Key</div>
       <select class="key-select" id="keySelect">
         <option value="">Choose a key...</option>
       </select>
     </div>
-
     <div class="actions">
       <button class="btn btn-accent" id="saveBtn" title="Save this shortcut and close">Save</button>
-      <button class="btn btn-ghost" id="resetBtn" title="Clear custom shortcut and use ⌘⇧R">
+      <button class="btn btn-ghost" id="resetBtn" title="Clear custom shortcut and use the default">
         Reset to Default
       </button>
+    </div>
+
+    <div class="hotkey-message" id="hotkeyStatus" role="status" aria-live="polite" hidden></div>
+    <div class="hotkey-message hotkey-error" id="hotkeyError" role="alert" hidden>
+      <span id="hotkeyErrorText"></span>
+      <button class="retry-btn" id="retryBtn" type="button" hidden>Retry</button>
     </div>
 
     <script src="hotkey.js"></script>

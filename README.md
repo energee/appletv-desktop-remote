@@ -27,7 +27,7 @@
 
 - **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Settings → Touchpad → Smooth scrolling** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture.
 - **Now playing.** See what's on, then play, pause, and scrub from the seek bar. The current item is requested on connection rather than waiting for a playback change.
-- **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away.
+- **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away. **Settings → Change Hotkey** uses platform-appropriate labels and reports conflicts or storage errors without silently replacing a working shortcut; failed operations can be retried. Returning focus cancels a pending automatic hide.
 - **Device picker.** Click the device name to switch Apple TVs or pair another. Right-click for theme, always-on-top, speakers, updates, and other actions. **Settings** manages saved remotes, scrolling, the hotkey, backups, and update preferences.
 
 ## Or just use the keyboard
@@ -96,7 +96,7 @@ pnpm test         # vitest; also: pnpm typecheck, pnpm lint, cargo test in src-t
 pnpm build        # bundle for this machine (pnpm build:mac for Apple silicon)
 ```
 
-The webview (`src/renderer`) displays connection state and owns the standard Tauri updater resource; the Node backend (`src/sidecar`) owns the Apple TV connection, and the Rust host (`src-tauri`) handles the tray, window, hotkeys, native update verification/installation, and macOS Liquid Glass. CI runs the checks on every pull request; version tags build the macOS and Windows releases. The landing page lives in `docs/` and is served by GitHub Pages.
+The webview (`src/renderer`) displays connection state and owns the standard Tauri updater resource; the Node backend (`src/sidecar`) owns the Apple TV connection, and the Rust host (`src-tauri`) handles the tray, window, hotkeys, native update verification/installation, and macOS Liquid Glass. Host request deadlines cover startup, queue admission, stdin writes, and replies; a blocked stdin worker cannot prevent the shutdown deadline from terminating the child. CI runs the checks on every pull request; version tags build the macOS and Windows releases. The landing page lives in `docs/` and is served by GitHub Pages.
 
 The sidecar's pnpm patch opens the Companion remote-service session before `TVRCSessionStart`, matching the [required protocol order](https://github.com/postlund/pyatv/pull/2855). Keep this patch until the dependency includes that initialization; frozen installs apply it from `app/patches`.
 
