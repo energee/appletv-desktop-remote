@@ -234,13 +234,13 @@ async function finishPair(
   }
   pairingOpen = false;
   dialog.close();
-  if (current === operation) {
-    try {
-      await refreshDevices();
-      if (current === operation) await action();
-    } catch (error) {
-      if (current === operation) showError(error);
-    }
+  if (current !== operation) return;
+  try {
+    await refreshDevices();
+    if (current !== operation) return;
+    await action();
+  } catch (error) {
+    if (current === operation) showError(error);
   }
 }
 
