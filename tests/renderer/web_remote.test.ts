@@ -58,12 +58,6 @@ vi.mock('../../src/renderer/companion', () => ({
 const deviceState = vi.hoisted(() => ({
   devices: {} as Record<string, SavedDevice>,
   active: null as SavedDevice | null,
-}));
-vi.mock('../../src/renderer/state', async (importOriginal) => ({
-  ...(await importOriginal<typeof RendererState>()),
-  loadDevices: () => deviceState.devices,
-  loadActiveDevice: () => deviceState.active,
-  refreshDevices: vi.fn(async () => {}),
   saveActiveDevice: vi.fn(async (device: SavedDevice | null) => {
     deviceState.active = device;
   }),
@@ -71,6 +65,14 @@ vi.mock('../../src/renderer/state', async (importOriginal) => ({
     delete deviceState.devices[identifier];
     if (deviceState.active?.identifier === identifier) deviceState.active = null;
   }),
+}));
+vi.mock('../../src/renderer/state', async (importOriginal) => ({
+  ...(await importOriginal<typeof RendererState>()),
+  loadDevices: () => deviceState.devices,
+  loadActiveDevice: () => deviceState.active,
+  refreshDevices: vi.fn(async () => {}),
+  saveActiveDevice: deviceState.saveActiveDevice,
+  removeDevice: deviceState.removeDevice,
 }));
 
 const mockElement = {
@@ -358,6 +360,47 @@ describe('remote', () => {
     ]);
   });
 
+  it('cancels a held button before a device switch can send it to the new device', async () => {
+    vi.useFakeTimers();
+    const button = { ...fakeElement(), dataset: { key: 'home' } };
+    vi.mocked(document.querySelectorAll).mockImplementation(
+      (selector: string) => (selector === '[data-key]' ? [button] : []) as never,
+    );
+    useDevices([creds, other], creds.identifier);
+    state('connected');
+    (
+      button.addEventListener.mock.calls.find(([name]) => name === 'mousedown')![1] as (
+        event: unknown,
+      ) => void
+    )({ button: 0 });
+
+    contextMenuAction('selectDevice', other.identifier);
+    await vi.waitFor(() => expect(desktopAPI.connect).toHaveBeenCalledWith(other.identifier));
+    vi.advanceTimersByTime(1000);
+    (
+      button.addEventListener.mock.calls.find(([name]) => name === 'click')![1] as (
+        event: unknown,
+      ) => void
+    )({ detail: 1 });
+
+    expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+  });
+
+  it('does not start a touchpad hold from a Select child control', () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    state('connected');
+    (dom.listener('#touchpad', 'mousedown') as (event: unknown) => void)({
+      button: 0,
+      target: { closest: () => ({}) },
+      clientX: 10,
+      clientY: 10,
+    });
+    vi.advanceTimersByTime(1000);
+
+    expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+  });
+
   // The hint is for a new user at launch; after a wake the window is usually hidden.
   it('shows the keyboard hint once per launch, not after every reconnect', () => {
     useElements();
@@ -427,6 +470,44 @@ describe('two-finger swipe', () => {
       ['right', false],
     ]);
   });
+
+  it('coalesces slow touch holds to the latest position before releasing', async () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    companionTouch.available.mockReturnValue(true);
+    let completeRequest: () => void = () => {};
+    let nextRequest = Promise.withResolvers<void>();
+    companionTouch.send.mockImplementation(() => {
+      const request = Promise.withResolvers<boolean>();
+      completeRequest = () => request.resolve(true);
+      nextRequest.resolve();
+      return request.promise;
+    });
+    state('connected');
+    const wheel = dom.listener('#touchpad', 'wheel') as (event: unknown) => void;
+
+    scroll(wheel, 30, 1);
+    vi.advanceTimersByTime(200);
+    scroll(wheel, 3, 2);
+    vi.advanceTimersByTime(200);
+    scroll(wheel, 3, 3);
+    vi.advanceTimersByTime(200);
+    expect(companionTouch.send).toHaveBeenCalledTimes(1);
+
+    for (let i = 0; i < 5; i++) {
+      nextRequest = Promise.withResolvers<void>();
+      completeRequest();
+      await nextRequest.promise;
+    }
+    expect(companionTouch.send.mock.calls.map(([, , phase]) => phase)).toEqual([
+      'press',
+      'hold',
+      'release',
+      'press',
+      'hold',
+      'release',
+    ]);
+  });
 });
 
 describe('keys', () => {
@@ -442,6 +523,34 @@ describe('keys', () => {
 
     expect(desktopAPI.sendKey).not.toHaveBeenCalled();
     expect(preventDefault).not.toHaveBeenCalled();
+  });
+
+  it('keeps remote shortcuts out of Settings and restores them on return', async () => {
+    const dom = useElements();
+    await web.init();
+    state('connected');
+    contextMenuAction('openSettings');
+    press('ArrowDown');
+    press('Backspace');
+    press('m');
+    expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+
+    dom.listener('#settingsBackBtn', 'click')();
+    press('ArrowDown');
+    expect(desktopAPI.sendKey).toHaveBeenCalledWith('down', false);
+  });
+
+  it('sends a native button activation exactly once', () => {
+    const button = { ...fakeElement(), dataset: { key: 'home' } };
+    vi.mocked(document.querySelectorAll).mockImplementation(
+      (selector: string) => (selector === '[data-key]' ? [button] : []) as never,
+    );
+    state('connected');
+
+    (button.addEventListener.mock.calls.find(([name]) => name === 'click')![1] as () => void)();
+
+    expect(desktopAPI.sendKey).toHaveBeenCalledTimes(1);
+    expect(desktopAPI.sendKey).toHaveBeenCalledWith('home', false);
   });
 
   // Bug (a): a connect that settled during pairing used to make Enter send Select.
@@ -871,6 +980,46 @@ describe('requests', () => {
 
     await vi.waitFor(() => expect(desktopAPI.disconnect).toHaveBeenCalled());
     expect(deviceState.active).toBeNull();
+  });
+
+  it('does not disconnect the newly selected device when removing a stale Settings row', async () => {
+    useElements();
+    useDevices([creds, other], creds.identifier);
+    await web.init();
+    contextMenuAction('openSettings');
+    const remove = mockElement.addEventListener.mock.calls.find(
+      ([name]) => name === 'click',
+    )![1] as () => void;
+
+    contextMenuAction('selectDevice', other.identifier);
+    await vi.waitFor(() => expect(deviceState.active).toEqual(other));
+    remove();
+
+    await vi.waitFor(() => expect(deviceState.devices[creds.identifier]).toBeUndefined());
+    expect(desktopAPI.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('disconnects a device removed after its pending selection settles', async () => {
+    useElements();
+    useDevices([creds, other], creds.identifier);
+    await web.init();
+    contextMenuAction('openSettings');
+    const remove = mockElement.addEventListener.mock.calls.filter(
+      ([name]) => name === 'click',
+    )[1][1] as () => void;
+    const selection = Promise.withResolvers<void>();
+    deviceState.saveActiveDevice.mockImplementationOnce(async (device: SavedDevice | null) => {
+      await selection.promise;
+      deviceState.active = device;
+    });
+
+    contextMenuAction('selectDevice', other.identifier);
+    remove();
+    selection.resolve();
+
+    await vi.waitFor(() => expect(deviceState.active).toBeNull());
+    expect(desktopAPI.disconnect).toHaveBeenCalledTimes(1);
+    expect(desktopAPI.connect).toHaveBeenCalledWith(other.identifier);
   });
 
   it('applies imported appearance settings to the window and native menu', async () => {

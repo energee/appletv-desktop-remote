@@ -94,6 +94,15 @@
         <div class="remote-body">
           <!-- Touchpad -->
           <div id="touchpad">
+            <button
+              id="touchpadSelect"
+              type="button"
+              data-key="select"
+              aria-label="Select"
+              class="touchpad-select"
+            >
+              Select
+            </button>
             <div class="touchpad-arrow touchpad-arrow-up"><span data-icon="chevron-up"></span></div>
             <div class="touchpad-arrow touchpad-arrow-down">
               <span data-icon="chevron-down"></span>
@@ -108,66 +117,80 @@
 
           <!-- Media controls -->
           <div class="media-row">
-            <div
+            <button
+              type="button"
+              aria-label="Menu"
               data-key="menu"
               data-tippy-content="Menu (Esc) · G for Top Menu"
               class="directionCircle media-btn"
             >
               <span class="keyText"><span data-icon="arrow-left"></span></span
               ><span class="keyTextAlt">Esc</span>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
+              aria-label="Play or pause"
               data-key="play_pause"
               data-tippy-content="Play / Pause"
               class="directionCircle media-btn play-btn"
             >
               <span class="keyText"><span id="playPauseIcon" data-icon="play"></span></span
               ><span class="keyTextAlt">Space</span>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
+              aria-label="Home"
               data-key="home"
               data-tippy-content="Home (T) · L for Long-press"
               class="directionCircle media-btn"
             >
               <span class="keyText"><span data-icon="tv"></span></span
               ><span class="keyTextAlt">T</span>
-            </div>
+            </button>
           </div>
 
           <!-- Secondary controls -->
           <div class="secondary-row">
-            <div
+            <button
+              type="button"
+              aria-label="Skip backward"
               data-key="skip_backward"
               data-tippy-content="Skip Back"
               class="directionCircle secondary-btn"
             >
               <span class="keyText"><span data-icon="skip-back"></span></span
               ><span class="keyTextAlt">[</span>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
+              aria-label="Lower volume"
               data-key="volume_down"
               data-tippy-content="Lower Volume"
               class="directionCircle secondary-btn vol-btn"
             >
               <span class="keyText"><span data-icon="volume-1"></span></span
               ><span class="keyTextAlt">-</span>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
+              aria-label="Raise volume"
               data-key="volume_up"
               data-tippy-content="Raise Volume"
               class="directionCircle secondary-btn vol-btn"
             >
               <span class="keyText"><span data-icon="volume-2"></span></span
               ><span class="keyTextAlt">+</span>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
+              aria-label="Skip forward"
               data-key="skip_forward"
               data-tippy-content="Skip Forward"
               class="directionCircle secondary-btn"
             >
               <span class="keyText"><span data-icon="skip-forward"></span></span
               ><span class="keyTextAlt">]</span>
-            </div>
+            </button>
           </div>
 
           <!-- Absolute volume: only for outputs that report one (AirPods, HomePod) -->
