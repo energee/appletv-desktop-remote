@@ -2,7 +2,8 @@
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
+use uuid::Uuid;
 
 const SERVICE: &str = "com.tedslesinski.atv-desktop-remote";
 const INDEX_ACCOUNT: &str = "device-index-v1";
@@ -24,16 +25,22 @@ struct StoredCredential {
     companion_paired: bool,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Index {
     #[serde(default)]
     devices: Vec<SavedDevice>,
     #[serde(default)]
     active: Option<String>,
-    /// Credential accounts removed from metadata but awaiting a successful OS deletion.
+    /// Legacy device identifiers removed from metadata but awaiting a successful OS deletion.
     #[serde(default)]
     cleanup: Vec<String>,
+    /// Credential accounts awaiting deletion after a committed replacement or failed staging.
+    #[serde(default)]
+    cleanup_accounts: Vec<String>,
+    /// Versioned credential accounts. Missing entries use the legacy deterministic account.
+    #[serde(default)]
+    accounts: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -105,6 +112,18 @@ impl Vault {
         account
     }
 
+    fn account(index: &Index, identifier: &str) -> String {
+        index
+            .accounts
+            .get(identifier)
+            .cloned()
+            .unwrap_or_else(|| Self::device_account(identifier))
+    }
+
+    fn staged_account() -> String {
+        format!("device-{}", Uuid::new_v4())
+    }
+
     fn index(store: &dyn SecretStore) -> Result<Index, String> {
         let Some(value) = store.read(INDEX_ACCOUNT)? else {
             return Ok(Index::default());
@@ -118,9 +137,12 @@ impl Vault {
     }
 
     fn finish_cleanup(store: &dyn SecretStore, index: &mut Index) -> Result<(), String> {
-        let mut failed = Vec::new();
+        if index.cleanup.is_empty() && index.cleanup_accounts.is_empty() {
+            return Ok(());
+        }
+
+        let mut failed_identifiers = Vec::new();
         for identifier in std::mem::take(&mut index.cleanup) {
-            // A later pairing or import may have restored a previously removed device.
             if index
                 .devices
                 .iter()
@@ -129,16 +151,88 @@ impl Vault {
                 continue;
             }
             if store.delete(&Self::device_account(&identifier)).is_err() {
-                failed.push(identifier);
+                failed_identifiers.push(identifier);
             }
         }
-        index.cleanup = failed;
+        index.cleanup = failed_identifiers;
+
+        let mut failed_accounts = Vec::new();
+        for account in std::mem::take(&mut index.cleanup_accounts) {
+            if index.accounts.values().any(|current| current == &account) {
+                continue;
+            }
+            if store.delete(&account).is_err() {
+                failed_accounts.push(account);
+            }
+        }
+        index.cleanup_accounts = failed_accounts;
         Self::save_index(store, index)?;
-        if index.cleanup.is_empty() {
+        if index.cleanup.is_empty() && index.cleanup_accounts.is_empty() {
             Ok(())
         } else {
             Err("Could not remove old secure credentials; retry the operation".into())
         }
+    }
+
+    fn stage(
+        store: &dyn SecretStore,
+        index: &mut Index,
+        pair: &StoredCredential,
+    ) -> Result<String, String> {
+        let account = Self::staged_account();
+        index.cleanup_accounts.push(account.clone());
+        Self::save_index(store, index)?;
+        let encoded = serde_json::to_string(pair).map_err(|error| error.to_string())?;
+        if let Err(error) = store.write(&account, &encoded) {
+            let _ = Self::finish_cleanup(store, index);
+            return Err(error);
+        }
+        Ok(account)
+    }
+
+    fn stage_all(
+        store: &dyn SecretStore,
+        index: &mut Index,
+        pairs: Vec<StoredCredential>,
+    ) -> Result<Vec<(StoredCredential, String)>, String> {
+        let mut staged = Vec::with_capacity(pairs.len());
+        for pair in pairs {
+            let account = Self::stage(store, index, &pair)?;
+            staged.push((pair, account));
+        }
+        Ok(staged)
+    }
+
+    fn replace_device(index: &mut Index, device: SavedDevice, account: String) {
+        let identifier = device.identifier.clone();
+        let existing = index
+            .devices
+            .iter()
+            .position(|device| device.identifier == identifier);
+        let old_account = existing.map(|_| Self::account(index, &identifier));
+        if let Some(existing) = existing {
+            index.devices[existing] = device;
+        } else {
+            index.devices.push(device);
+        }
+        index.cleanup_accounts.retain(|pending| pending != &account);
+        index.accounts.insert(identifier, account);
+        if let Some(old_account) = old_account {
+            index.cleanup_accounts.push(old_account);
+        }
+    }
+
+    fn commit_staged(
+        store: &dyn SecretStore,
+        index: &mut Index,
+        mut staged_index: Index,
+    ) -> Result<(), String> {
+        if let Err(error) = Self::save_index(store, index) {
+            let _ = Self::finish_cleanup(store, &mut staged_index);
+            return Err(error);
+        }
+        let _ = Self::finish_cleanup(store, index);
+        Ok(())
     }
 
     pub fn devices(&self) -> Result<Vec<SavedDevice>, String> {
@@ -146,7 +240,9 @@ impl Vault {
             .store
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
-        Ok(Self::index(store.as_ref())?.devices)
+        let mut index = Self::index(store.as_ref())?;
+        let _ = Self::finish_cleanup(store.as_ref(), &mut index);
+        Ok(index.devices)
     }
 
     pub fn active(&self) -> Result<Option<String>, String> {
@@ -154,7 +250,9 @@ impl Vault {
             .store
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
-        Ok(Self::index(store.as_ref())?.active)
+        let mut index = Self::index(store.as_ref())?;
+        let _ = Self::finish_cleanup(store.as_ref(), &mut index);
+        Ok(index.active)
     }
 
     pub fn select(&self, identifier: Option<String>) -> Result<(), String> {
@@ -182,18 +280,21 @@ impl Vault {
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
         let mut index = Self::index(store.as_ref())?;
+        let account = Self::account(&index, identifier);
         index
             .devices
             .retain(|device| device.identifier != identifier);
+        index.accounts.remove(identifier);
         if index.active.as_deref() == Some(identifier) {
             index.active = None;
         }
-        if !index.cleanup.iter().any(|pending| pending == identifier) {
-            index.cleanup.push(identifier.to_owned());
+        if !index.cleanup_accounts.contains(&account) {
+            index.cleanup_accounts.push(account);
         }
         // Metadata commits before deletion, so an index write failure cannot lose the secret.
         Self::save_index(store.as_ref(), &index)?;
-        Self::finish_cleanup(store.as_ref(), &mut index)
+        let _ = Self::finish_cleanup(store.as_ref(), &mut index);
+        Ok(())
     }
 
     fn save_pair(&self, pair: StoredCredential) -> Result<SavedDevice, String> {
@@ -207,19 +308,11 @@ impl Vault {
             .store
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
-        let encoded = serde_json::to_string(&pair).map_err(|error| error.to_string())?;
-        store.write(&Self::device_account(&pair.identifier), &encoded)?;
         let mut index = Self::index(store.as_ref())?;
-        if let Some(existing) = index
-            .devices
-            .iter_mut()
-            .find(|device| device.identifier == saved.identifier)
-        {
-            *existing = saved.clone();
-        } else {
-            index.devices.push(saved.clone());
-        }
-        Self::save_index(store.as_ref(), &index)?;
+        let account = Self::stage(store.as_ref(), &mut index, &pair)?;
+        let staged_index = index.clone();
+        Self::replace_device(&mut index, saved.clone(), account);
+        Self::commit_staged(store.as_ref(), &mut index, staged_index)?;
         Ok(saved)
     }
 
@@ -228,8 +321,9 @@ impl Vault {
             .store
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
+        let index = Self::index(store.as_ref())?;
         let encoded = store
-            .read(&Self::device_account(identifier))?
+            .read(&Self::account(&index, identifier))?
             .ok_or("No credentials for saved Apple TV")?;
         let credential: StoredCredential = serde_json::from_str(&encoded)
             .map_err(|_| "Saved credentials are corrupted".to_owned())?;
@@ -299,8 +393,8 @@ impl Vault {
         Ok(serde_json::json!({"identifier": pair.identifier, "credentials": pair.credentials}))
     }
 
-    /// Imports the renderer's old storage atomically from its perspective: an error leaves the
-    /// renderer data untouched, and metadata is not changed until every secret has been written.
+    /// Migrates legacy renderer storage without replacing credentials referenced by the current
+    /// index until every imported secret is safely staged.
     pub fn migrate(&self, devices: Option<String>, active: Option<String>) -> Result<(), String> {
         let mut pairs = legacy_devices(devices.as_deref())?;
         let active_pair = legacy_active_pair(active.as_deref())?;
@@ -313,39 +407,38 @@ impl Vault {
                 pairs.push(pair);
             }
         }
+        for pair in &pairs {
+            validate_credential(pair)?;
+        }
         let store = self
             .store
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
         let mut index = Self::index(store.as_ref())?;
-        let mut additions = Vec::new();
-        for pair in pairs {
-            validate_credential(&pair)?;
-            let encoded = serde_json::to_string(&pair).map_err(|error| error.to_string())?;
-            store.write(&Self::device_account(&pair.identifier), &encoded)?;
-            additions.push(SavedDevice {
-                identifier: pair.identifier,
-                name: pair.name,
-                companion_paired: pair.companion_paired,
-            });
-        }
-        for saved in additions {
-            if let Some(existing) = index
-                .devices
-                .iter_mut()
-                .find(|item| item.identifier == saved.identifier)
-            {
-                *existing = saved;
-            } else {
-                index.devices.push(saved);
-            }
+        let staged = Self::stage_all(store.as_ref(), &mut index, pairs)?;
+        let staged_index = index.clone();
+        for (pair, account) in staged {
+            Self::replace_device(
+                &mut index,
+                SavedDevice {
+                    identifier: pair.identifier,
+                    name: pair.name,
+                    companion_paired: pair.companion_paired,
+                },
+                account,
+            );
         }
         if let Some(active) = active {
-            if index.devices.iter().any(|item| item.identifier == active) {
+            if index
+                .devices
+                .iter()
+                .any(|device| device.identifier == active)
+            {
                 index.active = Some(active);
             }
         }
-        Self::save_index(store.as_ref(), &index)
+        Self::commit_staged(store.as_ref(), &mut index, staged_index)?;
+        Ok(())
     }
 
     /// JSON passed only to native desktop backup file code; never exposed through IPC.
@@ -358,7 +451,7 @@ impl Vault {
         let mut devices = Vec::with_capacity(index.devices.len());
         for device in &index.devices {
             let encoded = store
-                .read(&Self::device_account(&device.identifier))?
+                .read(&Self::account(&index, &device.identifier))?
                 .ok_or("A saved Apple TV credential is missing")?;
             devices.push(
                 serde_json::from_str::<StoredCredential>(&encoded)
@@ -445,39 +538,34 @@ impl Vault {
             .lock()
             .map_err(|_| "Credential vault is unavailable")?;
         let old_index = Self::index(store.as_ref())?;
-        for pair in &pairs {
-            let encoded = serde_json::to_string(pair).map_err(|error| error.to_string())?;
-            store.write(&Self::device_account(&pair.identifier), &encoded)?;
-        }
-        let devices = pairs
-            .iter()
-            .map(|pair| SavedDevice {
+        let mut index = old_index.clone();
+        let staged = Self::stage_all(store.as_ref(), &mut index, pairs)?;
+        let staged_index = index.clone();
+        let mut devices = Vec::with_capacity(staged.len());
+        let mut accounts = HashMap::with_capacity(staged.len());
+        for (pair, account) in staged {
+            devices.push(SavedDevice {
                 identifier: pair.identifier.clone(),
-                name: pair.name.clone(),
+                name: pair.name,
                 companion_paired: pair.companion_paired,
-            })
-            .collect::<Vec<_>>();
-        let mut index = Index {
-            active,
-            cleanup: old_index.cleanup,
-            devices,
-        };
-        for old in old_index.devices {
-            if !index
-                .devices
-                .iter()
-                .any(|device| device.identifier == old.identifier)
-                && !index
-                    .cleanup
-                    .iter()
-                    .any(|identifier| identifier == &old.identifier)
-            {
-                index.cleanup.push(old.identifier);
+            });
+            accounts.insert(pair.identifier, account);
+        }
+        index.active = active;
+        index.devices = devices;
+        index.accounts = accounts;
+        let accounts = &index.accounts;
+        index
+            .cleanup_accounts
+            .retain(|account| !accounts.values().any(|current| current == account));
+        for old in &old_index.devices {
+            let account = Self::account(&old_index, &old.identifier);
+            if !index.cleanup_accounts.contains(&account) {
+                index.cleanup_accounts.push(account);
             }
         }
-        // This durable index makes omitted credentials recoverable for later cleanup.
-        Self::save_index(store.as_ref(), &index)?;
-        Self::finish_cleanup(store.as_ref(), &mut index)?;
+        // Cleanup is deferred and nonfatal: the durable index is the logical commit point.
+        Self::commit_staged(store.as_ref(), &mut index, staged_index)?;
         Ok(preferences)
     }
 }
@@ -660,6 +748,91 @@ mod tests {
         }
     }
 
+    struct ScriptedStore {
+        records: Mutex<HashMap<String, String>>,
+        secret_failure: Mutex<Option<usize>>,
+        index_failure: Mutex<Option<usize>>,
+        fail_deletes: bool,
+    }
+
+    impl SecretStore for ScriptedStore {
+        fn read(&self, account: &str) -> Result<Option<String>, String> {
+            Ok(self.records.lock().unwrap().get(account).cloned())
+        }
+
+        fn write(&self, account: &str, value: &str) -> Result<(), String> {
+            let failure = if account == INDEX_ACCOUNT {
+                &self.index_failure
+            } else {
+                &self.secret_failure
+            };
+            let mut remaining = failure.lock().unwrap();
+            if remaining.is_some_and(|count| count == 1) {
+                *remaining = None;
+                return Err("injected write failure".into());
+            }
+            if let Some(count) = remaining.as_mut() {
+                *count -= 1;
+            }
+            self.records
+                .lock()
+                .unwrap()
+                .insert(account.into(), value.into());
+            Ok(())
+        }
+
+        fn delete(&self, account: &str) -> Result<(), String> {
+            if self.fail_deletes {
+                Err("injected delete failure".into())
+            } else {
+                self.records.lock().unwrap().remove(account);
+                Ok(())
+            }
+        }
+    }
+
+    fn scripted_vault(
+        secret_failure: Option<usize>,
+        index_failure: Option<usize>,
+        fail_deletes: bool,
+    ) -> Vault {
+        let pair = StoredCredential {
+            identifier: "old".into(),
+            name: "Old".into(),
+            credentials: "working-secret".into(),
+            companion_paired: false,
+        };
+        let mut records = HashMap::new();
+        records.insert(
+            Vault::device_account("old"),
+            serde_json::to_string(&pair).unwrap(),
+        );
+        records.insert(
+            INDEX_ACCOUNT.into(),
+            serde_json::to_string(&Index {
+                devices: vec![SavedDevice {
+                    identifier: "old".into(),
+                    name: "Old".into(),
+                    companion_paired: false,
+                }],
+                active: Some("old".into()),
+                cleanup: Vec::new(),
+                cleanup_accounts: Vec::new(),
+                accounts: HashMap::new(),
+            })
+            .unwrap(),
+        );
+        Vault {
+            store: Mutex::new(Box::new(ScriptedStore {
+                records: Mutex::new(records),
+                secret_failure: Mutex::new(secret_failure),
+                index_failure: Mutex::new(index_failure),
+                fail_deletes,
+            })),
+            pending_pair: Mutex::new(None),
+        }
+    }
+
     #[test]
     fn migration_keeps_secrets_out_of_metadata_and_preserves_active() {
         let vault = vault();
@@ -761,6 +934,8 @@ mod tests {
                 }],
                 active: Some("id".into()),
                 cleanup: Vec::new(),
+                cleanup_accounts: Vec::new(),
+                accounts: HashMap::new(),
             })
             .unwrap(),
         );
@@ -831,5 +1006,99 @@ mod tests {
         assert_eq!(vault.retry_pending_pair(true).unwrap(), None);
         vault.clear_pending_pair().unwrap();
         assert!(vault.pending_pair.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn failed_import_secret_stage_preserves_existing_pairing() {
+        let vault = scripted_vault(Some(2), None, false);
+
+        assert!(vault
+            .import_backup(
+                r#"{"version":1,"devices":[{"identifier":"old","name":"Replaced","credentials":"obsolete"},{"identifier":"new","name":"New","credentials":"new"}],"active":"new"}"#,
+            )
+            .is_err());
+
+        assert_eq!(vault.active().unwrap().as_deref(), Some("old"));
+        assert_eq!(vault.devices().unwrap()[0].name, "Old");
+        assert_eq!(
+            vault.credentials("old").unwrap().credentials,
+            "working-secret"
+        );
+    }
+
+    #[test]
+    fn failed_pair_commit_preserves_existing_credentials() {
+        let vault = scripted_vault(None, Some(2), false);
+
+        assert!(vault
+            .save_pair(StoredCredential {
+                identifier: "old".into(),
+                name: "Replaced".into(),
+                credentials: "obsolete".into(),
+                companion_paired: false,
+            })
+            .is_err());
+
+        assert_eq!(
+            vault.credentials("old").unwrap().credentials,
+            "working-secret"
+        );
+    }
+
+    #[test]
+    fn failed_migration_commit_preserves_existing_credentials() {
+        let vault = scripted_vault(None, Some(2), false);
+
+        assert!(vault
+            .migrate(
+                Some(
+                    r#"{"old":{"identifier":"old","name":"Replaced","credentials":"obsolete"}}"#
+                        .into(),
+                ),
+                None,
+            )
+            .is_err());
+
+        assert_eq!(
+            vault.credentials("old").unwrap().credentials,
+            "working-secret"
+        );
+    }
+
+    #[test]
+    fn failed_import_index_commit_preserves_existing_pairing() {
+        let vault = scripted_vault(None, Some(3), false);
+
+        assert!(vault
+            .import_backup(
+                r#"{"version":1,"devices":[{"identifier":"old","name":"Replaced","credentials":"obsolete"},{"identifier":"new","name":"New","credentials":"new"}],"active":"new"}"#,
+            )
+            .is_err());
+
+        assert_eq!(vault.active().unwrap().as_deref(), Some("old"));
+        assert_eq!(vault.devices().unwrap()[0].name, "Old");
+        assert_eq!(
+            vault.credentials("old").unwrap().credentials,
+            "working-secret"
+        );
+    }
+
+    #[test]
+    fn cleanup_failure_after_import_is_nonfatal_and_durable() {
+        let vault = scripted_vault(None, None, true);
+
+        vault
+            .import_backup(
+                r#"{"version":1,"devices":[{"identifier":"new","name":"New","credentials":"new"}],"active":"new"}"#,
+            )
+            .unwrap();
+
+        assert_eq!(vault.active().unwrap().as_deref(), Some("new"));
+        assert_eq!(vault.credentials("new").unwrap().credentials, "new");
+        let store = vault.store.lock().unwrap();
+        assert!(!Vault::index(store.as_ref())
+            .unwrap()
+            .cleanup_accounts
+            .is_empty());
     }
 }
