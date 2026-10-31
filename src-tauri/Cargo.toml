@@ -26,8 +26,9 @@ tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-ap
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
+tempfile = "3"
 tokio = { version = "1", features = ["sync", "time"] }
-
+uuid = { version = "1", features = ["v4"] }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Power", "Win32_UI_WindowsAndMessaging"] }
 

@@ -2,6 +2,7 @@
 //! observers, the macOS scroll gesture monitor, and the `backend_request` /
 //! `desktop_action` commands the webview invokes.
 mod backend;
+mod backup;
 mod desktop;
 #[cfg(target_os = "macos")]
 mod macos_gesture;

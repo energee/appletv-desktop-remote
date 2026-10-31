@@ -66,9 +66,9 @@ The **Apps** grid icon, focused text input, and **Settings → Touchpad → Smoo
 
 The header groups the device picker and power control. The device dot is green when connected, steady amber while asleep, pulsing amber while connecting, and red when disconnected. The main remote and Companion reconnect separately. Old Companion warnings clear when the next Companion status has no error.
 
-Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code.
+Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code. Replacement keys are staged separately, so a failed import or save leaves existing pairings usable. Cleanup of superseded keys is retried without treating an already-committed import or removal as a failure.
 
-Credential backups are read and written through native file dialogs; the renderer receives device names and IDs, not pairing keys. Exported backups contain keys in plaintext: keep them private. Importing replaces the saved-device list and active selection with the backup.
+Credential backups are read and written through native file dialogs; the renderer receives device names and IDs, not pairing keys. Exported backups contain keys in plaintext: keep them private. Export writes a complete private replacement before atomically replacing an existing backup. Importing replaces the saved-device list and active selection with the backup only after its keys have been staged successfully.
 
 ### Upgrading from the Electron version (0.5.x)
 

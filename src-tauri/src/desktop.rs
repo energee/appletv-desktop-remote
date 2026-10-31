@@ -1,6 +1,7 @@
 //! Native desktop behaviour behind the `desktop_action` command: the main and hotkey windows,
 //! tray icon and context menu, global hotkeys (saved in the 0.5.x hotkey.txt), and credential
 //! files.
+use crate::backup::write_private;
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -704,20 +705,6 @@ async fn file_dialog<T: Send + 'static>(
     picked
 }
 
-/// Writes the credential backup readable only by its owner on Unix; it is a secret.
-fn write_private(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
-    use std::io::Write;
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let mut file = options.open(path)?;
-    // `mode` only applies to a new file; the save dialog may be replacing an existing one.
-    #[cfg(unix)]
-    file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
-    file.write_all(contents.as_bytes())
-}
-
 pub fn hide_on_blur(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(200));
@@ -912,22 +899,6 @@ mod tests {
             saved_hotkeys(" Super+Shift+R , Ctrl+Alt+T,", "Super+Shift+A"),
             "Super+Shift+A,Ctrl+Alt+T"
         );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn exported_credentials_are_readable_only_by_the_owner() {
-        use std::os::unix::fs::PermissionsExt;
-        let path = std::env::temp_dir().join(format!("atv-export-{}.json", std::process::id()));
-        // The save dialog may replace an existing world-readable file.
-        fs::write(&path, "old").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-        write_private(&path, "secret").unwrap();
-        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        let contents = fs::read_to_string(&path).unwrap();
-        fs::remove_file(&path).unwrap();
-        assert_eq!(mode, 0o600);
-        assert_eq!(contents, "secret");
     }
 
     #[test]
