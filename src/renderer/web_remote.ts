@@ -468,11 +468,12 @@ function showKeyMap(): void {
   let touchActive = false;
   let touchX = 500;
   let touchY = 500;
+  type TouchPoint = { x: number; y: number };
   type TouchGesture = {
     identifier: string | null;
-    press: { x: number; y: number };
-    hold: { x: number; y: number } | null;
-    release: { x: number; y: number } | null;
+    press: TouchPoint;
+    hold: TouchPoint | null;
+    release: TouchPoint | null;
     pressSent: boolean;
   };
   let touchInFlight = false;
@@ -489,7 +490,7 @@ function showKeyMap(): void {
     if (!gesture) return;
 
     let phase: 'press' | 'hold' | 'release';
-    let point: { x: number; y: number };
+    let point: TouchPoint;
     if (!gesture.pressSent) {
       gesture.pressSent = true;
       phase = 'press';
@@ -556,11 +557,11 @@ function showKeyMap(): void {
     gestureMoved = false;
   }
   const stopGestureListener = desktopAPI.onScrollGestureBegan(endGesture);
-  signal.addEventListener('abort', stopGestureListener);
-  signal.addEventListener('abort', endGesture, { once: true });
   signal.addEventListener(
     'abort',
     () => {
+      stopGestureListener();
+      endGesture();
       pendingTouch = null;
     },
     { once: true },
