@@ -10,7 +10,8 @@ const mockScan = vi.fn();
 const mockConnect = vi.fn();
 const mockStartPairing = vi.fn();
 const mockSendKeyCommand = vi.fn();
-const mockPairingSession = { finish: vi.fn() };
+const mockCompanionConnect = vi.fn();
+const mockPairingSession = { finish: vi.fn(), destroy: vi.fn() };
 /** Every AppleTV the service created, in order, so tests can tell old devices from new. */
 let devices: MockAppleTV[] = [];
 
@@ -30,8 +31,12 @@ class MockAppleTV extends EventEmitter {
   removeOutputDevices = vi.fn(async (_ids: string[]) => {});
   suspend = vi.fn(async () => {});
   close = vi.fn(async () => {});
+  companionOpen = false;
+  closeCompanion = vi.fn(async () => {
+    this.companionOpen = false;
+  });
   startCompanionPairing = vi.fn();
-  connectCompanion = vi.fn(async () => {});
+  connectCompanion = vi.fn(() => mockCompanionConnect(this));
   appList = vi.fn(async () => []);
   launchApp = vi.fn(async () => {});
   setText = vi.fn(async (text: string) => text);
@@ -134,6 +139,10 @@ describe('ATVService', () => {
     mockConnect.mockResolvedValue(undefined);
     mockStartPairing.mockResolvedValue(mockPairingSession);
     mockSendKeyCommand.mockResolvedValue(undefined);
+    mockCompanionConnect.mockImplementation(async (device: MockAppleTV) => {
+      if (device.companionOpen) throw new Error('Companion already connected');
+      device.companionOpen = true;
+    });
     service = new ATVService();
     states = [];
     service.on('state', (state: ConnectionState) => states.push(state.status));
@@ -162,6 +171,7 @@ describe('ATVService', () => {
       const session = { finish: vi.fn(), destroy: vi.fn() };
       device.startCompanionPairing.mockReturnValue(opening.promise);
       const pairing = service.startCompanionPair();
+      await flush();
       await service.cancelCompanionPair();
       opening.resolve(session);
       await pairing;
@@ -194,6 +204,58 @@ describe('ATVService', () => {
         expect(device.close).not.toHaveBeenCalled();
         expect(service.companionStatus().status).toBe('unpaired');
       }
+    });
+
+    it('does not restore cancelled Companion credentials after MRP reconnects', async () => {
+      const device = await connected();
+      await device.closeCompanion();
+      const connecting = Promise.withResolvers<void>();
+      const session = { finish: vi.fn(async () => 'new-companion-keys'), destroy: vi.fn() };
+      device.startCompanionPairing.mockResolvedValue(session);
+      device.connectCompanion.mockImplementationOnce(async () => {
+        device.companionOpen = true;
+        await connecting.promise;
+      });
+
+      await service.startCompanionPair();
+      const finishing = service.finishCompanionPair('1234');
+      await service.cancelCompanionPair();
+      connecting.resolve();
+      await expect(finishing).resolves.toBeNull();
+      device.emit('close');
+      await flush(500);
+
+      expect(devices.at(-1)?.connect.mock.lastCall?.[0]).toMatchObject({ serialized: 'creds-1' });
+    });
+
+    it('closes a cancelled Companion setup before a late transport can poison a retry', async () => {
+      const device = await connected();
+      await device.closeCompanion();
+      const connecting = Promise.withResolvers<void>();
+      const firstSession = { finish: vi.fn(async () => 'new-companion-keys'), destroy: vi.fn() };
+      device.startCompanionPairing.mockResolvedValue(firstSession);
+      device.connectCompanion.mockImplementationOnce(async () => {
+        if (device.companionOpen) throw new Error('Companion already connected');
+        device.companionOpen = true;
+        await connecting.promise;
+      });
+
+      await service.startCompanionPair();
+      const finishing = service.finishCompanionPair('1234');
+      await service.cancelCompanionPair();
+      expect(device.closeCompanion).toHaveBeenCalled();
+      connecting.resolve();
+      await expect(finishing).resolves.toBeNull();
+      expect(device.companionOpen).toBe(false);
+
+      const retrySession = { finish: vi.fn(async () => 'new-companion-keys'), destroy: vi.fn() };
+      device.startCompanionPairing.mockResolvedValue(retrySession);
+      await service.startCompanionPair();
+      await expect(service.finishCompanionPair('1234')).resolves.toMatchObject({
+        identifier: 'tv1',
+      });
+      expect(device.companionOpen).toBe(true);
+      expect(service.state.status).toBe('connected');
     });
 
     it('reuses newly paired credentials after an automatic MRP reconnect', async () => {
@@ -302,6 +364,22 @@ describe('ATVService', () => {
       const [device] = devices;
       expect(device.listenerCount('error')).toBe(1);
       expect(() => device.emit('error', new Error('socket'))).not.toThrow();
+    });
+
+    it('destroys a pairing session created after its pairing mode was superseded', async () => {
+      await service.scan();
+      const opening = Promise.withResolvers<{ destroy: () => void }>();
+      const lateSession = { destroy: vi.fn() };
+      mockStartPairing.mockReturnValueOnce(opening.promise);
+      const starting = service.startPair('Living Room (1.2.3.4)');
+      await flush();
+
+      await service.disconnect();
+      opening.resolve(lateSession);
+      await starting;
+
+      expect(lateSession.destroy).toHaveBeenCalledOnce();
+      expect(service.pairingSession).toBeNull();
     });
 
     // Bugs (a) and (b): an older connect finishing during pairing must not mark the remote
@@ -496,6 +574,18 @@ describe('ATVService', () => {
       first.emit('nowPlaying', { title: 'old' });
       second.emit('nowPlaying', { title: 'new' });
       expect(nowPlaying.mock.calls).toEqual([[{ title: 'new' }]]);
+    });
+
+    it('closes the dropped device before replacing its main transport', async () => {
+      const device = await connected();
+
+      device.emit('close');
+      expect(device.close).toHaveBeenCalledOnce();
+      await flush(500);
+
+      expect(devices.at(-1)).not.toBe(device);
+      await service.disconnect();
+      expect(device.close).toHaveBeenCalledOnce();
     });
 
     it('reconnects with backoff after the connection drops, reusing the found device', async () => {
@@ -855,6 +945,45 @@ describe('ATVService', () => {
       expect(device.connectCompanion).toHaveBeenCalledWith('companion-creds');
       expect(service.state).toEqual({ status: 'connected' });
       expect(service.companionStatus().status).toBe('connected');
+    });
+
+    it('reconnects Companion after its socket closes without replacing healthy MRP', async () => {
+      const device = await connected();
+      const mainConnects = mockConnect.mock.calls.length;
+      await device.closeCompanion();
+
+      device.emit('companionClose');
+      expect(service.state).toEqual({ status: 'connected' });
+      await flush(500);
+
+      expect(device.connectCompanion).toHaveBeenCalledTimes(2);
+      expect(mockConnect).toHaveBeenCalledTimes(mainConnects);
+      expect(service.companionStatus().status).toBe('connected');
+    });
+
+    it('retries initial saved-credential Companion setup without re-pairing', async () => {
+      mockCompanionConnect.mockRejectedValueOnce(new Error('temporarily unavailable'));
+      const restored = await connected();
+
+      expect(service.companionStatus().status).toBe('unavailable');
+      await flush(500);
+      expect(restored.connectCompanion).toHaveBeenCalledTimes(2);
+      expect(service.companionStatus().status).toBe('connected');
+      expect(service.state).toEqual({ status: 'connected' });
+    });
+
+    it('keeps retrying saved Companion credentials slowly after transient failures', async () => {
+      mockCompanionConnect.mockRejectedValue(new Error('temporarily unavailable'));
+      const device = await connected();
+
+      await flush(15_500);
+      expect(device.connectCompanion).toHaveBeenCalledTimes(6);
+      expect(service.companionStatus().status).toBe('unavailable');
+      expect(service.state).toEqual({ status: 'connected' });
+      await flush(29_999);
+      expect(device.connectCompanion).toHaveBeenCalledTimes(6);
+      await flush(1);
+      expect(device.connectCompanion).toHaveBeenCalledTimes(7);
     });
 
     it('rejects apps before explicit Companion pairing', async () => {

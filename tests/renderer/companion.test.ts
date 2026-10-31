@@ -7,9 +7,14 @@ const companionAPI = vi.hoisted(() => ({
   onState: vi.fn(),
   onTextFocus: vi.fn(),
   onTextInput: vi.fn(),
+  apps: vi.fn(async () => []),
+  startPair: vi.fn(async () => {}),
 }));
 vi.mock('../../src/shared/companion-api', () => ({ companionAPI }));
-vi.mock('../../src/renderer/state', () => ({ refreshDevices: vi.fn() }));
+vi.mock('../../src/renderer/state', () => ({
+  refreshDevices: vi.fn(),
+  loadActiveDevice: () => ({ identifier: 'tv', name: 'TV', companionPaired: true }),
+}));
 
 // Minimal webview DOM, matching the existing renderer test convention.
 class Element {
@@ -19,7 +24,28 @@ class Element {
   open = false;
   value = '';
   textContent = '';
-  addEventListener(): void {}
+  children: Element[] = [];
+  get lastElementChild(): Element | null {
+    return this.children.at(-1) ?? null;
+  }
+  private listeners = new Map<string, () => void>();
+  addEventListener(name: string, listener: () => void): void {
+    this.listeners.set(name, listener);
+  }
+  fire(name: string): void {
+    this.listeners.get(name)?.();
+  }
+  replaceChildren(...children: Element[]): void {
+    this.children = children;
+  }
+  append(...children: Element[]): void {
+    this.children.push(...children);
+  }
+  showModal(): void {
+    this.open = true;
+  }
+  setAttribute(): void {}
+  focus(): void {}
   insertAdjacentHTML(): void {}
   close(): void {
     this.open = false;
@@ -48,6 +74,7 @@ beforeEach(async () => {
       if (!elements.has(id)) elements.set(id, new Element());
       return elements.get(id);
     },
+    createElement: () => new Element(),
   });
   vi.stubGlobal('window', { addEventListener: vi.fn() });
   vi.stubGlobal('localStorage', { getItem: () => null });
@@ -77,5 +104,28 @@ describe('Companion error recovery', () => {
     expect(banner.hidden).toBe(true);
     emit({ identifier: 'tv', status: 'connected', error: 'Text field is unavailable.' });
     expect(banner.hidden).toBe(false);
+  });
+
+  it('waits for saved Companion recovery instead of requesting another PIN', async () => {
+    emit({ identifier: 'tv', status: 'unavailable', error: 'Connection lost.' });
+    elements.get('companionApps')!.fire('click');
+
+    expect(companionAPI.startPair).not.toHaveBeenCalled();
+    expect(companionAPI.apps).not.toHaveBeenCalled();
+    emit({ identifier: 'tv', status: 'connecting' });
+    emit({ identifier: 'tv', status: 'connected' });
+    await vi.waitFor(() => expect(companionAPI.apps).toHaveBeenCalledOnce());
+    expect(companionAPI.startPair).not.toHaveBeenCalled();
+  });
+
+  it('starts explicit re-pairing without running a stale waiting feature', async () => {
+    emit({ identifier: 'tv', status: 'unavailable', error: 'Connection lost.' });
+    elements.get('companionApps')!.fire('click');
+    const actions = elements.get('companionActions')!;
+    actions.children.at(-1)!.fire('click');
+    await vi.waitFor(() => expect(companionAPI.startPair).toHaveBeenCalledOnce());
+
+    emit({ identifier: 'tv', status: 'connected' });
+    expect(companionAPI.apps).not.toHaveBeenCalled();
   });
 });

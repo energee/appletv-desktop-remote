@@ -1,8 +1,33 @@
 diff --git a/dist/appletv.js b/dist/appletv.js
-index 15d6a354b3114b0bf4663b988a05797537f8aaef..ffe838a3769486c9f5b9d731e9b9688ed77d53a6 100644
+index 15d6a354b3114b0bf4663b988a05797537f8aaef..0000000000000000000000000000000000000000 100644
 --- a/dist/appletv.js
 +++ b/dist/appletv.js
-@@ -434,6 +434,8 @@ export class AppleTV extends EventEmitter {
+@@ -376,8 +376,24 @@ export class AppleTV extends EventEmitter {
+         if (companion && this.readyTransports.has(companion))
+             this.emit('companionClose');
+         if (connection && this.readyTransports.has(connection))
+             this.emit('close');
+     }
++    /** Close only Companion resources while preserving MRP controls. */
++    async closeCompanion() {
++        this.gestureController?.abort();
++        const companion = this.companionConnection;
++        // Invalidate all Companion state before socket close emits synchronous events.
++        this.companionConnection = undefined;
++        this.companionErrorSource = undefined;
++        this.touchSession = undefined;
++        this.touchStarting = undefined;
++        this.activeTouch = undefined;
++        companion?.close();
++        this.clearCompanionControlState();
++        this.updateTextFocusState(KeyboardFocusState.Unknown);
++        if (companion && this.readyTransports.has(companion))
++            this.emit('companionClose');
++    }
+     // --- Companion protocol ---
+     /**
+      * Begin Companion pair-setup; the Apple TV shows a PIN to pass to the returned CompanionPairSetup.
+@@ -434,12 +450,17 @@ export class AppleTV extends EventEmitter {
                  ['_idsID', credentials.clientId], ['_pubID', this.deviceId], ['_sf', 256], ['_sv', '170.18'],
                  ['model', this.model], ['name', this.name],
              ]));
@@ -11,3 +36,38 @@ index 15d6a354b3114b0bf4663b988a05797537f8aaef..ffe838a3769486c9f5b9d731e9b9688e
              connection.sendMessage('_interest', new Map([['_regEvents', ['_iMC']]]));
              // tvOS 26.4+ (Apple TV HD on 26.6) silently drops power and app-list requests until a TV Remote session
              // is registered (pyatv #2845). Older TVs reject the message, so failure is ignored.
+             await connection.sendRequest('TVRCSessionStart', new Map([['ProtocolVersionKey', '1.2']])).catch(() => { });
+             // The TV pushes _tiStarted/_tiStopped only to clients with an open RTI session.
+             // Best effort: a TV that rejects _tiStart still serves every other Companion request.
+-            await this.startTextSession().catch((err) => this.emit('companionError', err));
++            await this.startTextSession().catch((err) => {
++                if (this.companionConnection === connection)
++                    this.emit('companionError', err);
++            });
+             if (this.companionConnection !== connection)
+                 throw new Error('Companion closed during setup');
+@@ -930,1 +951,1 @@ export class AppleTV extends EventEmitter {
+-        this.touchStarting = (async () => {
++        const touchStarting = this.touchStarting = (async () => {
+@@ -955,6 +976,7 @@ export class AppleTV extends EventEmitter {
+         try {
+-            await this.touchStarting;
++            await touchStarting;
+         }
+         finally {
+-            this.touchStarting = undefined;
++            if (this.touchStarting === touchStarting)
++                this.touchStarting = undefined;
+         }
+diff --git a/dist/appletv.d.ts b/dist/appletv.d.ts
+--- a/dist/appletv.d.ts
++++ b/dist/appletv.d.ts
+@@ -204,6 +204,8 @@ export declare class AppleTV extends EventEmitter {
+      * still in flight is abandoned (closing Companion ends it), not awaited.
+      */
+     close(): Promise<void>;
++    /** Close only Companion resources while preserving MRP controls. */
++    closeCompanion(): Promise<void>;
+     /**
+      * Begin Companion pair-setup; the Apple TV shows a PIN to pass to the returned CompanionPairSetup.
+      * @throws If no Companion port was given or discovered.
