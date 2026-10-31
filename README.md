@@ -64,7 +64,7 @@ The **Apps** grid icon, focused text input, and **Settings → Touchpad → Smoo
 
 **Apps** lists installed apps to launch. With Companion connected, the keyboard icon and editable text box appear only while a text field is focused on the TV. Leaving that field also closes the keyboard sheet. Edits are debounced; typing, spaces, and cursor keys stay in the text field instead of sending remote shortcuts. **Smooth scrolling** is saved separately for each selected device.
 
-The header groups the device picker and power control. The device dot is green when connected, steady amber while asleep, pulsing amber while connecting, and red when disconnected. Companion connection errors clear after a successful reconnect.
+The header groups the device picker and power control. The device dot is green when connected, steady amber while asleep, pulsing amber while connecting, and red when disconnected. The main remote and Companion reconnect separately. Old Companion warnings clear when the next Companion status has no error.
 
 Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code.
 

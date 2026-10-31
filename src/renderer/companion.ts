@@ -385,7 +385,7 @@ export function initCompanion(): void {
     smoothToggle.disabled = !next.identifier;
     renderText();
     if (next.error) showError(new Error(next.error));
-    else if (next.status === 'connected') inlineError.hidden = true;
+    else inlineError.hidden = true;
     if (waitingFeature?.current === operation && next.status === 'connected') {
       const { action } = waitingFeature;
       waitingFeature = null;
