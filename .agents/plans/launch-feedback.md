@@ -4,7 +4,7 @@
 
 Do not post until all three are true:
 
-1. The reviewed release is published (not a draft), its macOS/Windows installers are downloadable, and the release/setup checks are complete. Use that release's actual capabilities and caveats, not unreleased promises.
+1. **Completed for [v0.7.4](https://github.com/energee/appletv-desktop-remote/releases/tag/v0.7.4), published 2026-11-02.** The [release workflow](https://github.com/energee/appletv-desktop-remote/actions/runs/41488227375) passed for Apple silicon, Intel Mac, and Windows x64. All three stable installer URLs returned HTTP 200 and their SHA-256 digests matched the versioned originals; all three updater signatures and trusted comments verified against the committed public key. Use this release's actual capabilities and caveats, not unreleased promises.
 2. Authentic footage demonstrates the desktop app controlling a **real Apple TV**. **Actual footage is not yet available.** No connected recording hardware or existing project video has been identified. Website interaction is a simulation, not hardware proof; do not substitute it or invent a media link.
 3. Read the current [r/appletv rules](https://www.reddit.com/r/appletv/about/rules/) and obtain any required moderator permission for a maintainer/project post. Rules or permission have **not** been verified by this kit. Send the modmail below first when permission is unclear; no response is not permission.
 
@@ -24,11 +24,11 @@ Record after pairing, using a neutral TV screen and non-private test text. Disab
 
 Prerequisites: Node.js 24, `gh` already authenticated to github.com with appropriate repository access. Run from the repository root. The script always targets `energee/appletv-desktop-remote`, regardless of the local `gh` repository context. It makes read-only API calls, follows pagination for releases, each release's assets, and all-state issues, and excludes pull requests and draft releases.
 
-After the verified release is published, **before outreach**, capture the baseline:
+The first post-release baseline was captured at **2026-11-02T17:37:04Z** for v0.7.4 and saved locally to `.agents/launch-metrics/baseline.json` with owner-only permissions. It is deliberately excluded from Git. Refresh the snapshot immediately **before outreach**, using a new filename:
 
 ```sh
 mkdir -p .agents/launch-metrics
-pnpm metrics:launch --output .agents/launch-metrics/baseline.json
+pnpm metrics:launch --output ".agents/launch-metrics/pre-post-$(date -u +%Y%m%dT%H%M%SZ).json"
 ```
 
 Capture a later snapshot with a distinct filename, for example seven days after outreach:
@@ -45,7 +45,7 @@ pnpm metrics:launch --traffic --output .agents/launch-metrics/private-day-7.json
 
 The direct Node equivalent is `node scripts/launch-metrics.mjs` with the same flags; `--help` prints usage. The JSON is also printed to stdout; the output file contains the same snapshot. New files use owner-only permissions where supported, and existing files are never overwritten. Parent directories must already exist. Do not run private traffic captures in public CI/logs, paste their stdout publicly, or commit their files. Use the ignored `.agents/launch-metrics/` directory or a private directory outside the checkout; never force-add snapshots. Restrict access and share only a deliberately reviewed public-only summary. The snapshot contains aggregate counters, release tags/asset names, and timestamps, not tokens, user/commenter identities, issue bodies, or app credentials. The script does not print raw `gh` errors. Public collection failure exits nonzero without saving a new snapshot; optional traffic failure is recorded as unavailable, not a zero count. If output writing fails, discard any incomplete file before choosing a new path.
 
-Record the release tag, outreach time/permalink (only after posting), permission decision, and known maintainer/test download activity alongside private notes. **No baseline snapshot has been captured by this kit.**
+Record the release tag, outreach time/permalink (only after posting), permission decision, and known maintainer/test download activity alongside private notes. The initial baseline includes release verification activity; download counters can lag and never establish unique users or installations.
 
 ### Interpret the denominators honestly
 
