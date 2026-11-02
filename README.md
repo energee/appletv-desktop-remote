@@ -14,25 +14,25 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/energee/appletv-desktop-remote/releases/latest"><b>Download for macOS or Windows</b></a>
+  <a href="https://energ.ee/appletv-desktop-remote/#downloads"><b>Choose your download: Mac Apple silicon · Mac Intel · Windows x64</b></a>
   <br/>
-  <a href="https://energ.ee/appletv-desktop-remote/">Try the remote on the website</a>
+  <a href="https://energ.ee/appletv-desktop-remote/#stage">Practice with the simulated website remote</a> · <a href="https://github.com/energee/appletv-desktop-remote/issues/new/choose">Report a problem or share feedback</a>
 </p>
 
 <p align="center">
-  <img width="301" height="530" alt="image" src="https://github.com/user-attachments/assets/68cbe526-46ec-493d-8ac4-9753024da6ee" alt="The remote window, showing a touchpad, playback buttons, and the show that's playing" width="280"/>
+  <img width="301" height="530" src="https://github.com/user-attachments/assets/68cbe526-46ec-493d-8ac4-9753024da6ee" alt="The remote window, showing a touchpad, playback buttons, and the show that's playing"/>
 </p>
 
 ## Everything the Siri Remote does. Nothing to pick up.
 
-- **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Settings → Touchpad → Smooth scrolling** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture.
+- **Touchpad.** Scroll with two fingers to navigate, click to select, and hold for a second to open context menus. Enable **Settings → Touchpad → Smooth scrolling** for continuous Companion gestures; otherwise, scrolling sends one arrow press per gesture. Smooth scrolling coalesces obsolete positions when the backend is busy instead of replaying every sample after the gesture ends. Sent gestures retain their final position and release even when another gesture begins during a slow release.
 - **Now playing.** See what's on, then play, pause, and scrub from the seek bar. The current item is requested on connection rather than waiting for a playback change.
 - **Always handy.** Press `Cmd+Shift+R` (`Win+Shift+R` on Windows) to show or hide it from any app, or click the menu bar icon. Keep it on top, or let it tuck away. **Settings → Change Hotkey** uses platform-appropriate labels and reports conflicts or storage errors without silently replacing a working shortcut; failed operations can be retried. Returning focus cancels a pending automatic hide.
 - **Device picker.** Click the device name to switch Apple TVs or pair another. Right-click for theme, always-on-top, speakers, updates, and other actions. **Settings** manages saved remotes, scrolling, the hotkey, backups, and update preferences.
 
 ## Or just use the keyboard
 
-Hold Option (Alt on Windows) and the remote labels every button with its key.
+Hold Option (Alt on Windows) and the remote labels every button with its key. You can also Tab through named remote buttons, including Select, and activate the focused button with Enter or Space. Holding Enter acts once for playback, Select, Menu, Home, and skip controls; volume buttons keep repeating. Remote shortcuts do not send commands from Settings. Pending presses are canceled when focus, connection, or the selected TV changes, before waiting for device selection to save. Canceled mouse releases stay canceled across reconnects without blocking fresh mouse or keyboard activation. Selection and removal are ordered so a stale Settings action cannot control the wrong device.
 
 | Key             | Action                  |
 | --------------- | ----------------------- |
@@ -47,16 +47,24 @@ Hold Option (Alt on Windows) and the remote labels every button with its key.
 
 ## Set up in a minute
 
-1. **Download** the installer for your computer from the [latest release](https://github.com/energee/appletv-desktop-remote/releases/latest). On a Mac, open it and drag Apple TV Remote to Applications.
+1. **Choose your installer** below, or use the [download chooser](https://energ.ee/appletv-desktop-remote/#downloads). These links always download the matching installer from the latest release, without needing JavaScript.
 
-   | Computer           | File                        |
-   | ------------------ | --------------------------- |
-   | Mac, Apple silicon | `…_aarch64.dmg`             |
-   | Mac, Intel         | `…_x64.dmg`                 |
-   | Windows            | `…_x64-setup.exe` or `.msi` |
+   | Computer                      | Download choice                                                                                                                                      | Filename ending                  |
+   | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+   | Mac, Apple silicon (M-series) | [Download for Mac Apple silicon](https://github.com/energee/appletv-desktop-remote/releases/latest/download/Apple-TV-Remote-macOS-Apple-silicon.dmg) | `_aarch64.dmg`                   |
+   | Mac, Intel                    | [Download for Mac Intel](https://github.com/energee/appletv-desktop-remote/releases/latest/download/Apple-TV-Remote-macOS-Intel.dmg)                 | `_x64.dmg`                       |
+   | Windows x64                   | [Download for Windows x64](https://github.com/energee/appletv-desktop-remote/releases/latest/download/Apple-TV-Remote-Windows-x64-setup.exe)         | `_x64-setup.exe` (or `_x64.msi`) |
 
-2. **Open it.** The app isn't notarized yet, so macOS blocks the first launch. Open System Settings, go to Privacy & Security, and click **Open Anyway**. On Windows, if SmartScreen appears, click **More info**, then **Run anyway**.
-3. **Pair.** Pick your Apple TV and type the code it shows on screen. The code is sent on the fourth digit, and a wrong one brings up a new code. Your computer and Apple TV need to be on the same network.
+   **Mac requirements:** macOS **13.5 or later**. To choose a CPU, open **Apple menu → About This Mac**: **Chip: Apple M…** means Apple silicon; **Processor: Intel…** means Intel. Open the DMG and drag Apple TV Remote to Applications. On Windows x64, run the EXE installer; the MSI is an alternative on the [latest release page](https://github.com/energee/appletv-desktop-remote/releases/latest). That page also has the original versioned installers with the filename endings above.
+
+2. **Review the first-launch warning.** macOS builds are not notarized; Windows may show SmartScreen's “unrecognized app” warning. These are not Apple- or Microsoft-trusted OS builds; updater signatures are separate from OS code signing. Only proceed if you trust the source and downloaded from this project's GitHub release. On macOS, try opening the app, then use **System Settings → Privacy & Security → Open Anyway** if offered. On Windows, **More info → Run anyway** may be offered. If your organization's security policy blocks installation, don't bypass it; [tell us what happened](https://github.com/energee/appletv-desktop-remote/issues/new?template=bug_report.yml).
+3. **Pair on the same network.** Pick your Apple TV and type the code it shows on screen. The code is sent on the fourth digit, and a wrong one brings up a new code. Your computer and Apple TV need to be on the same local network; a guest network, VPN, or client isolation can prevent discovery.
+
+The website's interactive remote is a **practice simulation**. It does not connect to an Apple TV and is not footage or proof of a real-TV session.
+
+### Tell us how it went
+
+[Report an install, pairing, or remote-control problem](https://github.com/energee/appletv-desktop-remote/issues/new?template=bug_report.yml) or [share your use case, feature idea, and whether you'd keep using it](https://github.com/energee/appletv-desktop-remote/issues/new?template=usage_feedback.yml). A GitHub account is needed to submit an issue. Reports are public: never attach pairing keys, credential backups, PINs, or private network details. Logs are optional and should be redacted.
 
 ### Apps, text input, and scrolling
 
@@ -64,7 +72,7 @@ The **Apps** grid icon, focused text input, and **Settings → Touchpad → Smoo
 
 **Apps** lists installed apps to launch. With Companion connected, the keyboard icon and editable text box appear only while a text field is focused on the TV. Leaving that field also closes the keyboard sheet. Edits are debounced; typing, spaces, and cursor keys stay in the text field instead of sending remote shortcuts. **Smooth scrolling** is saved separately for each selected device.
 
-The header groups the device picker and power control. The device dot is green when connected, steady amber while asleep, pulsing amber while connecting, and red when disconnected. The main remote and Companion reconnect separately. Old Companion warnings clear when the next Companion status has no error.
+The header groups the device picker and power control. The device dot is green when connected, steady amber while asleep, pulsing amber while connecting, and red when disconnected. The main remote and Companion reconnect separately, with slower background retries after quick attempts fail. A Companion feature waits for saved-pairing recovery rather than asking for another PIN; **Pair again** remains an explicit option if keys need replacing. Explicit authentication rejection stops automatic retries and offers pairing without disconnecting the main remote. If opening a pairing prompt fails, the feature offers an explicit retry rather than claiming automatic recovery. Canceling pairing releases its session and does not adopt unsaved Companion keys. Old Companion warnings clear when the next Companion status has no error.
 
 Pairing keys stay in macOS Keychain or Windows Credential Manager. Existing renderer-stored pairings migrate on startup and are removed from browser storage only after secure storage acknowledges them. If secure storage is locked or unavailable, the app retains the old data and offers a retry. A failed save after pairing can be retried without requesting another TV code. Replacement keys are staged separately, so a failed import or save leaves existing pairings usable. Cleanup of superseded keys is retried without treating an already-committed import or removal as a failure.
 
@@ -84,7 +92,7 @@ The update sheet shows release notes and download progress. Downloads are signat
 
 ## Free and open source
 
-Found a problem? [Report it](https://github.com/energee/appletv-desktop-remote/issues/new). Pull requests are welcome.
+Found a problem? [Report a bug](https://github.com/energee/appletv-desktop-remote/issues/new?template=bug_report.yml) or [share usage feedback](https://github.com/energee/appletv-desktop-remote/issues/new?template=usage_feedback.yml). Pull requests are welcome. If you'd like to find the project again, bookmark the [download page](https://energ.ee/appletv-desktop-remote/#downloads) or optionally star it on GitHub.
 
 Apple TV Remote is built with Tauri and talks to the Apple TV through a bundled Node backend using [node-appletv-remote](https://github.com/energee/node-appletv-remote), so there's nothing else to install. Development requires Node.js 24, pnpm, and Rust with the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
 
@@ -98,7 +106,7 @@ pnpm build        # bundle for this machine (pnpm build:mac for Apple silicon)
 
 The webview (`src/renderer`) displays connection state and owns the standard Tauri updater resource; the Node backend (`src/sidecar`) owns the Apple TV connection, and the Rust host (`src-tauri`) handles the tray, window, hotkeys, native update verification/installation, and macOS Liquid Glass. Host request deadlines cover startup, queue admission, stdin writes, and replies; a blocked stdin worker cannot prevent the shutdown deadline from terminating the child. CI runs the checks on every pull request; version tags build the macOS and Windows releases. The landing page lives in `docs/` and is served by GitHub Pages.
 
-The sidecar's pnpm patch opens the Companion remote-service session before `TVRCSessionStart`, matching the [required protocol order](https://github.com/postlund/pyatv/pull/2855). Keep this patch until the dependency includes that initialization; frozen installs apply it from `app/patches`.
+The sidecar's pnpm patch opens the Companion remote-service session before `TVRCSessionStart`, matching the [required protocol order](https://github.com/postlund/pyatv/pull/2855). It also adds Companion-only teardown, guards stale setup completion, and tags authentication rejection separately from transient failures, so cancellation and recovery preserve the healthy main transport. Keep this patch until the dependency includes these changes; frozen installs apply it from `app/patches`.
 
 Local macOS builds are ad-hoc signed. A notarized release needs a Developer ID identity (`bundle.macOS.signingIdentity`) and must re-sign the bundled `node` (see `scripts/build-sidecar.mjs`). The transparent glass window uses Tauri's `macOSPrivateApi`, which rules out the Mac App Store.
 

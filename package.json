@@ -1,6 +1,6 @@
 {
   "name": "appletv-desktop-remote",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Apple TV Remote",
   "scripts": {
     "typecheck": "tsc",
@@ -16,6 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "metrics:launch": "node scripts/launch-metrics.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

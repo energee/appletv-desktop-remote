@@ -134,6 +134,36 @@
         color: var(--muted);
         margin-top: 12px;
       }
+      .downloads {
+        max-width: 820px;
+        margin: 28px auto 0;
+        padding: 24px;
+        border: 1px solid var(--key-edge);
+        border-radius: 16px;
+        text-align: left;
+      }
+      .downloads h2 {
+        font-size: 24px;
+      }
+      .download-choices {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 20px;
+        padding: 0;
+        margin: 16px 0;
+        list-style: none;
+      }
+      .download-choices a {
+        font-weight: 600;
+      }
+      .download-choices small {
+        display: block;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .downloads p + p {
+        margin-top: 10px;
+      }
 
       /* Stage: the remote drives a pretend tvOS screen, sized so both fit above the fold.
          Color appears only on the screen. */
@@ -537,22 +567,60 @@
         <h1>Apple TV Remote</h1>
         <p class="lede">Your Apple TV, one click away in the menu bar.</p>
         <div class="actions">
-          <a
-            id="download"
-            class="button"
-            data-download
-            href="https://github.com/energee/appletv-desktop-remote/releases/latest"
-            >Download</a
-          >
+          <a id="download" class="button" data-download href="#downloads">Choose your download</a>
           <a href="#setup">How to set it up</a>
+          <a href="#feedback">Report a problem / share feedback</a>
         </div>
         <p id="note" class="note">Free for macOS and Windows.</p>
+
+        <section id="downloads" class="downloads" aria-labelledby="downloads-title">
+          <h2 id="downloads-title">Download for your computer</h2>
+          <ul class="download-choices">
+            <li id="download-mac-arm64">
+              <a
+                href="https://github.com/energee/appletv-desktop-remote/releases/latest/download/Apple-TV-Remote-macOS-Apple-silicon.dmg"
+                >Mac · Apple silicon</a
+              >
+              <small>M-series chip · DMG installer</small>
+            </li>
+            <li id="download-mac-intel">
+              <a
+                href="https://github.com/energee/appletv-desktop-remote/releases/latest/download/Apple-TV-Remote-macOS-Intel.dmg"
+                >Mac · Intel</a
+              >
+              <small>Intel processor · DMG installer</small>
+            </li>
+            <li id="download-windows">
+              <a
+                href="https://github.com/energee/appletv-desktop-remote/releases/latest/download/Apple-TV-Remote-Windows-x64-setup.exe"
+                >Windows · x64</a
+              >
+              <small>64-bit Intel / AMD · EXE installer</small>
+            </li>
+          </ul>
+          <p>
+            <strong>Mac: macOS 13.5 or later.</strong> In Apple menu → About This Mac, “Chip: Apple
+            M…” means Apple silicon; “Processor: Intel…” means Intel.
+          </p>
+          <p class="note">
+            All three links download from the latest GitHub release, even without JavaScript.
+            <a href="https://github.com/energee/appletv-desktop-remote/releases/latest"
+              >Release notes, versioned installers, and optional Windows MSI</a
+            >. <a href="#setup">Read the first-launch warnings and pairing steps</a>.
+          </p>
+        </section>
+
+        <p id="practice-note" class="note">
+          <strong>Practice simulation below — not a real-TV recording.</strong>
+          This website does not connect to or control an Apple TV.
+        </p>
 
         <div
           id="stage"
           class="stage"
           tabindex="0"
-          aria-label="Practice remote and TV. Use the arrow keys, Enter, Space, Escape, T, G, the bracket keys, plus, and minus."
+          aria-label="Simulated practice remote and TV. Use the arrow keys, Enter, Space, Escape, T, G, the bracket keys, plus, and minus."
+          aria-describedby="practice-note"
         >
           <div class="remote">
             <img
@@ -715,52 +783,69 @@
           <li>
             <h3>Download</h3>
             <p>
-              <a
-                data-download
-                href="https://github.com/energee/appletv-desktop-remote/releases/latest"
-                >Get the installer</a
-              ><span class="mac">, open it, and drag Apple TV Remote to Applications.</span
-              ><span class="win"> and run it.</span>
+              <a href="#downloads">Choose Mac Apple silicon, Mac Intel, or Windows x64</a>. On a
+              Mac, open the DMG and drag Apple TV Remote to Applications. On Windows, run the EXE
+              installer.
             </p>
           </li>
           <li>
             <h3>Open it</h3>
-            <p class="mac">
-              The app isn't notarized yet, so macOS blocks the first launch. Open System Settings,
-              go to Privacy &amp; Security, and click Open Anyway.
+            <p>
+              <strong>Mac:</strong> builds are not notarized. After trying to open the app, System
+              Settings → Privacy &amp; Security may offer <strong>Open Anyway</strong>.
+              <strong>Windows:</strong> SmartScreen may show an “unrecognized app” warning;
+              <strong>More info → Run anyway</strong> may be offered.
             </p>
-            <p class="win">If Windows SmartScreen appears, click More info, then Run anyway.</p>
+            <p class="note">
+              These are not Apple- or Microsoft-trusted OS builds. Updater signatures are separate
+              from OS code signing. Only proceed if you trust the source and downloaded from this
+              project's GitHub release. Don't bypass your organization's security policy.
+            </p>
           </li>
           <li>
             <h3>Pair</h3>
             <p>
               Pick your Apple TV and type the code it shows on screen. Your computer and Apple TV
-              need to be on the same network.
+              need to be on the same local network. Guest Wi-Fi, VPNs, or client isolation can
+              prevent discovery. No Apple ID password is needed.
             </p>
           </li>
         </ol>
       </section>
 
-      <section class="source">
+      <section id="feedback" class="source">
         <div class="wrap">
           <svg viewBox="0 0 16 16" aria-hidden="true">
             <path
               d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
             />
           </svg>
-          <h2>Free and open source.</h2>
+          <h2>Tell us how it went.</h2>
           <p>
-            Apple TV Remote is built in the open on GitHub. Read the code, watch for new releases,
-            or send a pull request.
+            Did installation and pairing work? What would make this useful enough to keep? Report a
+            reproducible problem or share your use case and feature ideas on GitHub. A GitHub
+            account is needed to submit an issue.
           </p>
           <div class="actions">
-            <a class="button-outline" href="https://github.com/energee/appletv-desktop-remote"
-              >View on GitHub</a
-            >
-            <a href="https://github.com/energee/appletv-desktop-remote/issues/new"
+            <a
+              class="button-outline"
+              href="https://github.com/energee/appletv-desktop-remote/issues/new?template=bug_report.yml"
               >Report a problem</a
             >
+            <a
+              href="https://github.com/energee/appletv-desktop-remote/issues/new?template=usage_feedback.yml"
+              >Share usage / feature feedback</a
+            >
           </div>
+          <p class="note">
+            Reports are public. Never include pairing keys, credential backups, PINs, or private
+            network details. Logs are optional; redact anything sensitive.
+          </p>
+          <p class="note">
+            Free and open source.
+            <a href="https://github.com/energee/appletv-desktop-remote">View the code on GitHub</a>,
+            or optionally star the project / bookmark this page to find it again.
+          </p>
         </div>
       </section>
     </main>
@@ -778,20 +863,20 @@
     </footer>
 
     <script>
-      // Point the download links at the right installer for this computer. Without JavaScript, or if
-      // the GitHub API is unreachable, they stay on the releases page.
+      // The primary button can link directly to this computer's installer. The explicit platform
+      // choices above use stable release aliases and work without JavaScript or the GitHub API.
       const installers = {
-        // ponytail: Apple silicon is the default; browsers can't reliably tell Intel Macs apart.
+        // Browsers can't reliably distinguish Mac CPUs; label the default architecture explicitly.
         mac: {
-          label: 'Download for Mac',
+          label: 'Download for Mac · Apple silicon',
           suffix: '_aarch64.dmg',
           alternateSuffix: '_x64.dmg',
           alternateLabel: 'Intel Mac version',
           requirement: 'macOS 13.5 or later',
         },
         windows: {
-          label: 'Download for Windows',
-          suffix: '-setup.exe',
+          label: 'Download for Windows · x64',
+          suffix: '_x64-setup.exe',
           alternateSuffix: '.msi',
           alternateLabel: 'MSI installer',
           requirement: '64-bit Windows',

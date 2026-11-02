@@ -1,0 +1,79 @@
+name: Usage feedback or feature idea
+description: Tell us how it went, what you use it for, or what would make it more useful.
+title: '[Feedback]: '
+labels: [feedback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing your experience. Success reports, friction, and reasons you stopped using the app are all useful. For a reproducible fault, please use the **Bug report** form instead.
+
+        **This issue is public.** Do not include pairing keys, credential backups, PINs, Apple ID details, or private network identifiers. Logs are not needed. Redact sensitive details from any optional screenshots.
+  - type: input
+    id: app-version
+    attributes:
+      label: App version (if tried)
+      description: Find it in Settings → What's new or the installer filename. “Not tried” or “unknown” is fine.
+      placeholder: 'For example: 0.7.4; or not tried'
+  - type: input
+    id: computer
+    attributes:
+      label: Computer OS and architecture
+      description: Include the OS version and Apple silicon, Intel Mac, or Windows x64 if relevant.
+      placeholder: 'For example: macOS 15.5, Apple M2; or Windows 11 24H2, x64'
+  - type: input
+    id: apple-tv
+    attributes:
+      label: Apple TV model and tvOS version
+      description: If known, find these in Apple TV Settings → General → About.
+  - type: dropdown
+    id: install-outcome
+    attributes:
+      label: Installation outcome (if tried)
+      options:
+        - Installed and opened successfully
+        - Download or installation failed
+        - First launch blocked by macOS or SmartScreen
+        - App wouldn't open
+        - Not tried / not applicable
+  - type: dropdown
+    id: pairing-outcome
+    attributes:
+      label: Pairing outcome (if tried)
+      options:
+        - Paired and connected successfully
+        - Apple TV not discovered
+        - Initial TV-code pairing failed
+        - Companion pairing failed
+        - Previously paired TV wouldn't reconnect
+        - Not tried / not applicable
+  - type: textarea
+    id: feedback
+    attributes:
+      label: What worked, got in the way, or should change?
+      description: Describe your experience or feature idea and the problem it would solve.
+    validations:
+      required: true
+  - type: textarea
+    id: actual-expected
+    attributes:
+      label: Actual vs. expected behavior (if relevant)
+      description: For an interaction that felt wrong, what happened and what did you expect? Include steps to reproduce if helpful; use the Bug report form for a reproducible fault.
+  - type: textarea
+    id: use-case
+    attributes:
+      label: What is your use case? (optional)
+      description: When would you reach for a desktop remote instead of another remote?
+  - type: dropdown
+    id: keep-using
+    attributes:
+      label: Would you keep using it? (optional)
+      options:
+        - 'Yes'
+        - Maybe / still trying it
+        - 'No'
+        - Haven't tried it yet
+  - type: textarea
+    id: reason
+    attributes:
+      label: Why, or what would change your answer? (optional)
