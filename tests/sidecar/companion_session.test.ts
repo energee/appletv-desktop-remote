@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { AppleTV } from '../../app/node_modules/node-appletv-remote/dist/appletv.js';
 import { CompanionConnection } from '../../app/node_modules/node-appletv-remote/dist/companion/connection.js';
+import { TlvTag, tlvEncode } from '../../app/node_modules/node-appletv-remote/dist/util/tlv.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -73,3 +74,32 @@ it('lists installed apps immediately after Companion connects, without a first t
     await tv.close();
   }
 });
+
+it.each([2, 3, 6, 7])(
+  'distinguishes authentication rejection from retryable Pair Verify error %i',
+  async (errorCode) => {
+    const connection = new CompanionConnection('127.0.0.1', 49152, {
+      clientId: 'test-controller',
+      clientLTSK: Buffer.alloc(32),
+      clientLTPK: Buffer.alloc(32),
+      serverId: 'test-tv',
+      serverLTPK: Buffer.alloc(32),
+    });
+    // Inject a peer's TLV response; keep the real verification decoder and error propagation.
+    const peer = connection as unknown as {
+      openSocket(): Promise<void>;
+      sendPairingData(): void;
+      receivePairingData(): Promise<Buffer>;
+    };
+    vi.spyOn(peer, 'openSocket').mockResolvedValue(undefined);
+    vi.spyOn(peer, 'sendPairingData').mockImplementation(() => {});
+    vi.spyOn(peer, 'receivePairingData').mockResolvedValue(
+      tlvEncode({ [TlvTag.SeqNo]: Buffer.from([2]), [TlvTag.Error]: Buffer.from([errorCode]) }),
+    );
+    const failure = await connection.connect().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error & { code?: string }).code).toBe(
+      errorCode === 2 ? 'COMPANION_AUTHENTICATION_FAILED' : undefined,
+    );
+  },
+);

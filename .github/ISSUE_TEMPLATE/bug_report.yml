@@ -1,0 +1,97 @@
+name: Bug report
+description: Report an installation, pairing, or remote-control problem.
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Apple TV Remote. Please share enough detail to reproduce the problem; “unknown” or “not reached” is fine where appropriate.
+
+        **This issue is public.** Do not include pairing keys, credential backups, PINs, Apple ID details, or private network identifiers. Logs and screenshots are optional; redact sensitive details before sharing. No private logs or credentials are needed.
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Find the version in Settings → What's new, or use the installer filename if the app won't open.
+      placeholder: "For example: 0.7.4; or unknown (app won't open)"
+    validations:
+      required: true
+  - type: input
+    id: computer
+    attributes:
+      label: Computer OS and architecture
+      description: Include the OS version and Apple silicon, Intel Mac, or Windows x64.
+      placeholder: 'For example: macOS 15.5, Apple M2; or Windows 11 24H2, x64'
+    validations:
+      required: true
+  - type: input
+    id: apple-tv
+    attributes:
+      label: Apple TV model and tvOS version
+      description: On Apple TV, look in Settings → General → About. If unavailable or installation failed before pairing, say unknown or not reached.
+      placeholder: 'For example: Apple TV 4K (3rd generation), tvOS 18.5'
+    validations:
+      required: true
+  - type: dropdown
+    id: install-outcome
+    attributes:
+      label: Installation outcome
+      options:
+        - Installed and opened successfully
+        - Download failed or installer unavailable
+        - Installation failed
+        - First launch blocked by macOS or SmartScreen
+        - App won't open or crashes on launch
+        - Other / not applicable
+    validations:
+      required: true
+  - type: dropdown
+    id: pairing-outcome
+    attributes:
+      label: Pairing outcome
+      description: Companion pairing is the additional TV code for Apps, text input, or smooth scrolling.
+      options:
+        - Paired and connected successfully
+        - Apple TV not discovered
+        - Initial TV-code pairing failed
+        - Companion pairing failed
+        - Previously paired TV won't reconnect
+        - Not reached / not attempted
+        - Other / not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Describe what you clicked or pressed, including whether the computer and Apple TV were on the same local network. Do not share network names, addresses, or keys.
+      placeholder: |
+        1. Open the app…
+        2. Choose…
+        3. Observe…
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      description: Include any visible error text and whether this happens every time or intermittently.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Optional context or redacted screenshots
+      description: Workarounds, the last working version, or anything else that helps. Logs are optional; never attach a credential backup.
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Would you keep using it if this were fixed? (optional)
+      description: Tell us how you use the app and what matters most in your setup.

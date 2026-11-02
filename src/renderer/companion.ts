@@ -1,6 +1,6 @@
 import { companionAPI } from '../shared/companion-api';
 import type { CompanionStatus } from '../shared/companion-api';
-import { refreshDevices } from './state';
+import { loadActiveDevice, refreshDevices } from './state';
 import { icon } from './icons';
 
 let status: CompanionStatus = { status: 'unpaired', identifier: null };
@@ -144,13 +144,31 @@ async function requestFeature(heading: string, action: () => Promise<void>): Pro
     }
     return;
   }
-  if (status.status === 'connecting') {
-    showSheet(heading, 'Connecting Companion…');
+  const pairedDevice = loadActiveDevice();
+  const savedPaired =
+    pairedDevice?.identifier === status.identifier && pairedDevice.companionPaired;
+  const recovering = status.status === 'unavailable' && savedPaired;
+  if (status.status === 'connecting' || recovering) {
+    showSheet(
+      heading,
+      recovering ? 'Companion disconnected. Retrying automatically…' : 'Connecting Companion…',
+    );
     actions.replaceChildren(button('Cancel', closeSheet));
     waitingFeature = { current, action };
+    if (savedPaired) {
+      actions.append(
+        button('Pair again', () => {
+          waitingFeature = null;
+          void beginPairing(heading, action, current);
+        }),
+      );
+    }
     return;
   }
-  showSheet(heading, 'Pair Companion once to use apps, text input, and smooth touch.');
+  showSheet(
+    heading,
+    status.error ?? 'Pair Companion once to use apps, text input, and smooth touch.',
+  );
   actions.replaceChildren(
     button('Cancel', closeSheet),
     button('Show pairing code', () => {
@@ -219,13 +237,13 @@ async function finishPair(
   }
   pairingOpen = false;
   dialog.close();
-  if (current === operation) {
-    try {
-      await refreshDevices();
-      if (current === operation) await action();
-    } catch (error) {
-      if (current === operation) showError(error);
-    }
+  if (current !== operation) return;
+  try {
+    await refreshDevices();
+    if (current !== operation) return;
+    await action();
+  } catch (error) {
+    if (current === operation) showError(error);
   }
 }
 

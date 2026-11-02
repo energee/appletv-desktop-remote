@@ -133,4 +133,16 @@ jobs:
               )
             )
           ' "$RUNNER_TEMP/latest.json"
+          mkdir -p "$RUNNER_TEMP/installers" "$RUNNER_TEMP/downloads"
+          gh release download "$GITHUB_REF_NAME" --dir "$RUNNER_TEMP/installers" \
+            --pattern "Apple.TV.Remote_${version}_aarch64.dmg" \
+            --pattern "Apple.TV.Remote_${version}_x64.dmg" \
+            --pattern "Apple.TV.Remote_${version}_x64-setup.exe"
+          cp "$RUNNER_TEMP/installers/Apple.TV.Remote_${version}_aarch64.dmg" \
+            "$RUNNER_TEMP/downloads/Apple-TV-Remote-macOS-Apple-silicon.dmg"
+          cp "$RUNNER_TEMP/installers/Apple.TV.Remote_${version}_x64.dmg" \
+            "$RUNNER_TEMP/downloads/Apple-TV-Remote-macOS-Intel.dmg"
+          cp "$RUNNER_TEMP/installers/Apple.TV.Remote_${version}_x64-setup.exe" \
+            "$RUNNER_TEMP/downloads/Apple-TV-Remote-Windows-x64-setup.exe"
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/downloads/"* --clobber
           gh release edit "$GITHUB_REF_NAME" --draft=false

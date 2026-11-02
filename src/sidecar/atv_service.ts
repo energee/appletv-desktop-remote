@@ -17,6 +17,7 @@ import type {
   Key as KeyType,
   PairSetup,
 } from 'node-appletv-remote';
+import type { HAPCredentials } from 'node-appletv-remote/dist/auth/types.js';
 
 // node-appletv-remote is ESM-only. Use dynamic import wrapper.
 let atvLib: typeof import('node-appletv-remote') | null = null;
@@ -77,6 +78,11 @@ class ATVService extends EventEmitter {
   private epoch = 0;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private failures = 0;
+  private companionRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  private companionFailures = 0;
+  private companionSetup: { device: AppleTV; attempt: number } | null = null;
+  private companionAttempt = 0;
+  private companionRecoveryEnabled = false;
   /** The current device's last reported PlaybackState; each new device starts Unknown. */
   private playbackState: number = PlaybackState.Unknown;
   /** Optional Companion pairing never replaces the ordinary MRP connection. */
@@ -129,12 +135,22 @@ class ATVService extends EventEmitter {
     // Without an 'error' listener, a socket error would be thrown.
     device.on('error', (err) => console.error('ATV error during pairing:', err));
     try {
+      const opening = device.startPairing();
       const session = await withTimeout(
-        device.startPairing(),
+        opening,
         30000,
         'Pairing timed out. Please try again.',
-      );
-      if (epoch !== this.epoch) return;
+      ).catch((error: unknown) => {
+        void opening.then(
+          (lateSession) => lateSession.destroy(),
+          () => {},
+        );
+        throw error;
+      });
+      if (epoch !== this.epoch) {
+        session.destroy();
+        return;
+      }
       this.pairingSession = session;
       console.log('startPair: AirPlay pairing started, PIN should appear on TV');
     } catch (err) {
@@ -154,7 +170,6 @@ class ATVService extends EventEmitter {
     const session = this.pairingSession;
     const device = this.device;
     if (!session || !device) throw new Error('No active pairing session');
-    this.pairingSession = null;
     const epoch = this.epoch;
     const { Credentials } = await getLib();
     try {
@@ -173,6 +188,9 @@ class ATVService extends EventEmitter {
     } catch (err) {
       if (epoch !== this.epoch) return null;
       throw err;
+    } finally {
+      if (this.pairingSession === session) this.pairingSession = null;
+      session.destroy();
     }
   }
 
@@ -306,17 +324,20 @@ class ATVService extends EventEmitter {
       if (device === this.device) void this.refreshText(device, epoch, this.textFocusGeneration);
     });
     device.on('companionClose', () => {
-      if (device === this.device)
-        this.setCompanionState('unavailable', undefined, 'Companion connection closed.');
+      if (device !== this.device || this.companion.status === 'pairing') return;
+      this.recoverCompanion(device, credsData, epoch, 'Companion connection closed.');
     });
     device.on('companionError', (error: Error) => {
-      if (device === this.device) this.setCompanionState('unavailable', undefined, error.message);
+      if (device !== this.device || this.companion.status === 'pairing') return;
+      this.recoverCompanion(device, credsData, epoch, error);
     });
     device.on('close', () => {
       if (device !== this.device) return;
       this.touchActive = false;
+      this.stopCompanionRecovery();
       this.setCompanionState('unavailable', credsData.identifier, 'Connection lost.');
       this.device = null;
+      void device.close();
       this.retry(epoch, credsData, found);
     });
   }
@@ -333,6 +354,9 @@ class ATVService extends EventEmitter {
     const device = this.connectedDevice();
     const epoch = this.epoch;
     const pairEpoch = ++this.companionPairEpoch;
+    await this.stopCompanionRecovery();
+    if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
+      return;
     this.companionPairing?.destroy();
     this.companionPairing = null;
     this.setCompanionState('pairing');
@@ -346,7 +370,7 @@ class ATVService extends EventEmitter {
     } catch (error) {
       if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch) return;
       this.setCompanionState(
-        'unavailable',
+        'unpaired',
         undefined,
         error instanceof Error ? error.message : 'Unable to start Companion pairing.',
       );
@@ -366,63 +390,59 @@ class ATVService extends EventEmitter {
         30000,
         'Companion pairing verification timed out. Please try again.',
       );
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       const { Credentials } = await getLib();
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       const credentials = Credentials.deserialize(this.requireCredentials().credentials);
       const merged = new Credentials(credentials, companionCredentials).serialize();
-      let connectionError: string | undefined;
-      try {
-        await withTimeout(
-          device.connectCompanion(companionCredentials),
-          15000,
-          'Companion connection timed out. Reconnect the remote to try again.',
-        );
-      } catch (error) {
-        connectionError = error instanceof Error ? error.message : 'Unable to connect Companion.';
-      }
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
       this.companionPairing = null;
       session.destroy();
-      this.requireCredentials().credentials = merged;
-      this.setCompanionState(
-        connectionError ? 'unavailable' : 'connected',
-        undefined,
-        connectionError,
-      );
-      if (!connectionError) {
+      try {
+        await this.openCompanion(device, companionCredentials, epoch);
+        if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
+        this.commitCompanionCredentials(merged);
+        this.companionFailures = 0;
+        this.setCompanionState('connected');
         const focused = device.textFocusState === 'focused';
         this.emit('text-focus', { focused });
         if (focused) this.refreshText(device, epoch, ++this.textFocusGeneration);
+      } catch (error) {
+        if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
+        const activeCredentials = this.commitCompanionCredentials(merged);
+        this.recoverCompanion(
+          device,
+          activeCredentials,
+          epoch,
+          error instanceof Error ? error : 'Unable to connect Companion.',
+        );
       }
-      // Persist verified keys even if opening Companion failed; reconnect can reuse them.
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       return {
         credentials: merged,
         identifier: this.requireCredentials().identifier,
         name: device.name,
       };
     } catch (error) {
-      if (epoch !== this.epoch || pairEpoch !== this.companionPairEpoch || device !== this.device)
-        return null;
-      this.companionPairing = null;
-      session.destroy();
+      if (!this.isCurrentCompanionPair(device, epoch, pairEpoch)) return null;
       this.setCompanionState(
         'unavailable',
         undefined,
         error instanceof Error ? error.message : 'Companion pairing failed.',
       );
       throw error;
+    } finally {
+      if (this.companionPairing === session) this.companionPairing = null;
+      session.destroy();
     }
   }
 
   async cancelCompanionPair(): Promise<void> {
     this.companionPairEpoch++;
+    if (this.companion.status === 'pairing' || this.companion.status === 'connecting')
+      this.setCompanionState('unpaired');
+    await this.stopCompanionRecovery();
     this.companionPairing?.destroy();
     this.companionPairing = null;
-    if (this.companion.status === 'pairing') this.setCompanionState('unpaired');
   }
 
   async apps(): Promise<Array<{ name: string; bundleId: string }>> {
@@ -508,30 +528,119 @@ class ATVService extends EventEmitter {
     if (epoch !== this.epoch || device !== this.device) return;
     const credentials = Credentials.deserialize(credsData.credentials);
     if (!credentials.companionCredentials) {
+      this.companionRecoveryEnabled = false;
       this.setCompanionState('unpaired', credsData.identifier);
       return;
     }
-    this.setCompanionState('connecting', credsData.identifier);
+    this.companionRecoveryEnabled = true;
+    await this.attemptCompanion(device, credsData, epoch, credentials.companionCredentials);
+  }
+
+  private async attemptCompanion(
+    device: AppleTV,
+    credsData: ATVCredentials,
+    epoch: number,
+    credentials: HAPCredentials,
+  ): Promise<void> {
     try {
-      await device.connectCompanion(credentials.companionCredentials);
-      if (epoch === this.epoch && device === this.device) {
-        this.setCompanionState('connected');
-        const focused = device.textFocusState === 'focused';
-        this.emit('text-focus', { focused });
-        if (focused) {
-          this.textFocusGeneration++;
-          this.refreshText(device, epoch, this.textFocusGeneration);
-        }
-      }
+      await this.openCompanion(device, credentials, epoch);
+      if (epoch !== this.epoch || device !== this.device) return;
+      this.companionFailures = 0;
+      this.setCompanionState('connected');
+      const focused = device.textFocusState === 'focused';
+      this.emit('text-focus', { focused });
+      if (focused) this.refreshText(device, epoch, ++this.textFocusGeneration);
     } catch (error) {
-      if (epoch === this.epoch && device === this.device) {
-        this.setCompanionState(
-          'unavailable',
-          undefined,
-          error instanceof Error ? error.message : 'Unable to reconnect Companion.',
-        );
-      }
+      if (epoch !== this.epoch || device !== this.device || !this.companionRecoveryEnabled) return;
+      this.recoverCompanion(
+        device,
+        credsData,
+        epoch,
+        error instanceof Error ? error : 'Unable to reconnect Companion.',
+      );
     }
+  }
+
+  private async openCompanion(
+    device: AppleTV,
+    credentials: HAPCredentials,
+    epoch: number,
+  ): Promise<void> {
+    const attempt = ++this.companionAttempt;
+    this.companionSetup = { device, attempt };
+    this.setCompanionState('connecting');
+    try {
+      await withTimeout(
+        device.connectCompanion(credentials),
+        15000,
+        'Companion connection timed out. Reconnect the remote to try again.',
+      );
+      if (
+        epoch !== this.epoch ||
+        device !== this.device ||
+        this.companionSetup?.device !== device ||
+        this.companionSetup.attempt !== attempt
+      )
+        throw new Error('Companion setup cancelled.');
+      this.companionSetup = null;
+    } catch (error) {
+      if (this.companionSetup?.device === device && this.companionSetup.attempt === attempt) {
+        this.companionSetup = null;
+        await device.closeCompanion();
+      }
+      throw error;
+    }
+  }
+
+  private recoverCompanion(
+    device: AppleTV,
+    credsData: ATVCredentials,
+    epoch: number,
+    error: Error | string,
+  ): void {
+    if (
+      !this.companionRecoveryEnabled ||
+      epoch !== this.epoch ||
+      device !== this.device ||
+      this.companionSetup ||
+      this.companionRetryTimer
+    )
+      return;
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'COMPANION_AUTHENTICATION_FAILED'
+    ) {
+      this.companionRecoveryEnabled = false;
+      this.setCompanionState(
+        'unpaired',
+        undefined,
+        'Companion pairing was rejected. Pair again to restore Companion features.',
+      );
+      return;
+    }
+    this.setCompanionState(
+      'unavailable',
+      undefined,
+      error instanceof Error ? error.message : error,
+    );
+    const delay =
+      this.companionFailures >= RETRY_LIMIT ? SLOW_RETRY_MS : 500 * 2 ** this.companionFailures++;
+    this.companionRetryTimer = setTimeout(() => {
+      this.companionRetryTimer = undefined;
+      void this.restoreCompanion(device, credsData, epoch);
+    }, delay);
+  }
+
+  private async stopCompanionRecovery(): Promise<void> {
+    this.companionRecoveryEnabled = false;
+    this.companionAttempt++;
+    this.companionFailures = 0;
+    clearTimeout(this.companionRetryTimer);
+    this.companionRetryTimer = undefined;
+    const setup = this.companionSetup;
+    this.companionSetup = null;
+    if (setup) await setup.device.closeCompanion();
   }
 
   private setCompanionState(
@@ -554,6 +663,17 @@ class ATVService extends EventEmitter {
   private requireCredentials(): ATVCredentials {
     if (!this.activeCredentials) throw new Error('No active device credentials.');
     return this.activeCredentials;
+  }
+
+  private isCurrentCompanionPair(device: AppleTV, epoch: number, pairEpoch: number): boolean {
+    return epoch === this.epoch && pairEpoch === this.companionPairEpoch && device === this.device;
+  }
+
+  private commitCompanionCredentials(credentials: string): ATVCredentials {
+    const activeCredentials = this.requireCredentials();
+    activeCredentials.credentials = credentials;
+    this.companionRecoveryEnabled = true;
+    return activeCredentials;
   }
 
   private enqueueText(edit: (device: AppleTV) => Promise<string>): Promise<string> {
@@ -589,10 +709,9 @@ class ATVService extends EventEmitter {
   }
 
   /**
-   * Starts a new epoch in `status`: cancels the pending retry, drops the pairing session, and
-   * closes the device. Returns that close, which never rejects.
+   * Starts a new epoch in `status`: cancels retries and pairing sessions, then closes the device.
    */
-  private supersede(status: ConnectionState['status']): Promise<void> {
+  private async supersede(status: ConnectionState['status']): Promise<void> {
     this.epoch++;
     this.companionPairEpoch++;
     this.textFocusGeneration++;
@@ -600,6 +719,7 @@ class ATVService extends EventEmitter {
     this.textWrites = Promise.resolve();
     clearTimeout(this.retryTimer);
     this.failures = 0;
+    this.pairingSession?.destroy();
     this.pairingSession = null;
     this.companionPairing?.destroy();
     this.companionPairing = null;
@@ -609,7 +729,8 @@ class ATVService extends EventEmitter {
     const device = this.device;
     this.device = null;
     this.setState({ status });
-    return device ? device.close() : Promise.resolve();
+    await this.stopCompanionRecovery();
+    if (device) await device.close();
   }
 
   private setState(state: ConnectionState): void {
