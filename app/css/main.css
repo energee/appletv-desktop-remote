@@ -551,15 +551,6 @@ a:active {
     background var(--transition-fast);
 }
 
-#touchpad::after {
-  content: '';
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  pointer-events: none;
-}
-
 .touchpad-select {
   position: absolute;
   z-index: 1;
