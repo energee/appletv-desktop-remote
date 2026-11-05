@@ -77,11 +77,8 @@ function renderText(): void {
     if (input.value !== desiredText) input.value = desiredText;
     input.disabled = !textFocused || !textReady;
   }
-  const visible = textFocused && status.status === 'connected';
-  inlineText.hidden = keyboardButton.hidden = !visible;
-  keyboardButton.disabled = !textReady;
+  inlineText.hidden = !textFocused || status.status !== 'connected';
   if (clearButton) clearButton.disabled = !textFocused || !textReady;
-  if (!visible && keyboardText) dismissSheet();
 }
 
 function resetText(): void {
@@ -341,7 +338,7 @@ export function initCompanion(): void {
       <button type="button" id="companionApps" aria-label="Apps" title="Apps">
         <span aria-hidden="true">${icon('layout-grid')}</span>
       </button>
-      <button type="button" id="companionKeyboard" aria-label="Keyboard" title="Keyboard" hidden>
+      <button type="button" id="companionKeyboard" aria-label="Keyboard" title="Keyboard">
         <span aria-hidden="true">${icon('keyboard')}</span>
       </button>
     </div>
@@ -427,7 +424,10 @@ export function initCompanion(): void {
       desiredText = text;
       renderText();
     }
-    if (!wasReady && textFocused && !dialog.open) inlineText.focus();
+    if (!wasReady && textFocused) {
+      if (keyboardText) keyboardText.focus();
+      else if (!dialog.open) inlineText.focus();
+    }
   });
   void companionAPI
     .status()

@@ -9,6 +9,7 @@ const companionAPI = vi.hoisted(() => ({
   onTextInput: vi.fn(),
   apps: vi.fn(async () => []),
   startPair: vi.fn(async () => {}),
+  setText: vi.fn(async (text: string) => text),
 }));
 vi.mock('../../src/shared/companion-api', () => ({ companionAPI }));
 vi.mock('../../src/renderer/state', () => ({
@@ -18,7 +19,7 @@ vi.mock('../../src/renderer/state', () => ({
 
 // Minimal webview DOM, matching the existing renderer test convention.
 class Element {
-  hidden = true;
+  hidden = false;
   disabled = false;
   checked = false;
   open = false;
@@ -41,11 +42,14 @@ class Element {
   append(...children: Element[]): void {
     this.children.push(...children);
   }
+  prepend(...children: Element[]): void {
+    this.children.unshift(...children);
+  }
   showModal(): void {
     this.open = true;
   }
   setAttribute(): void {}
-  focus(): void {}
+  focus = vi.fn();
   insertAdjacentHTML(): void {}
   close(): void {
     this.open = false;
@@ -56,6 +60,7 @@ class Element {
 }
 
 let elements: Map<string, Element>;
+let dialog: Element;
 function emit(next: CompanionStatus): void {
   companionAPI.onState.mock.calls[0][0](next);
 }
@@ -64,7 +69,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   elements = new Map();
   const host = new Element();
-  const dialog = new Element();
+  dialog = new Element();
   vi.stubGlobal('document', {
     body: new Element(),
     querySelector: (selector: string) =>
@@ -80,6 +85,8 @@ beforeEach(async () => {
   vi.stubGlobal('localStorage', { getItem: () => null });
   initCompanion();
   await Promise.resolve();
+  emit({ status: 'unpaired', identifier: null });
+  emit({ status: 'connected', identifier: 'tv' });
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -137,5 +144,38 @@ describe('Companion error recovery', () => {
 
     emit({ identifier: 'tv', status: 'connected' });
     expect(companionAPI.apps).not.toHaveBeenCalled();
+  });
+});
+
+describe('Keyboard access', () => {
+  it('offers keyboard pairing before Companion is connected or a TV field is focused', async () => {
+    emit({ status: 'unpaired', identifier: 'tv' });
+    const keyboard = elements.get('companionKeyboard')!;
+    expect(keyboard.hidden).toBe(false);
+    expect(keyboard.disabled).toBe(false);
+    keyboard.fire('click');
+    expect(dialog.open).toBe(true);
+    elements.get('companionActions')!.children.at(-1)!.fire('click');
+    await vi.waitFor(() => expect(companionAPI.startPair).toHaveBeenCalledOnce());
+  });
+
+  it('keeps the keyboard open while waiting for a TV field, then enables and focuses text input', async () => {
+    elements.get('companionKeyboard')!.fire('click');
+    await Promise.resolve();
+    const input = elements.get('companionContent')!.children[0];
+    expect(dialog.open).toBe(true);
+    expect(input.disabled).toBe(true);
+    companionAPI.onTextFocus.mock.calls[0][0]({ focused: true });
+    expect(input.disabled).toBe(true);
+    companionAPI.onTextInput.mock.calls[0][0]({ text: 'existing' });
+    expect(input.disabled).toBe(false);
+    expect(input.value).toBe('existing');
+    expect(input.focus).toHaveBeenCalledOnce();
+
+    companionAPI.onTextFocus.mock.calls[0][0]({ focused: false });
+    expect(dialog.open).toBe(true);
+    expect(input.disabled).toBe(true);
+    expect(input.value).toBe('');
+    expect(companionAPI.setText).not.toHaveBeenCalled();
   });
 });
