@@ -1,7 +1,8 @@
-## A cleaner touchpad
+## No more password prompts on Mac
 
-- The off-center circle is gone from the middle of the touchpad.
-- The keyboard focus ring for Select is now centered on the touchpad.
+- The Mac app no longer uses Keychain, so it never asks for your password when it opens.
+- **After updating, pair your Apple TV again.** Mac pairings from earlier versions can't be read without a password prompt, so they don't carry over. You'll need the PIN from your TV once. Windows pairings aren't affected.
+- Mac pairing keys now live in a private file in the app's data folder. The file isn't encrypted, so any app running under your account can read it.
 
 ## Installation caveats
 
