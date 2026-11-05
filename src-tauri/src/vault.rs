@@ -1,10 +1,14 @@
 //! Native credential vault. The renderer can only address credentials by device identifier.
+//! macOS stores credentials in a private file so startup never prompts; Windows uses Credential
+//! Manager.
+#[cfg(not(target_os = "macos"))]
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, path::Path, sync::Mutex};
 use uuid::Uuid;
 
+#[cfg(not(target_os = "macos"))]
 const SERVICE: &str = "com.tedslesinski.atv-desktop-remote";
 const INDEX_ACCOUNT: &str = "device-index-v1";
 
@@ -56,14 +60,17 @@ trait SecretStore: Send {
     fn delete(&self, account: &str) -> Result<(), String>;
 }
 
+#[cfg(not(target_os = "macos"))]
 struct OsSecretStore;
 
+#[cfg(not(target_os = "macos"))]
 impl OsSecretStore {
     fn entry(account: &str) -> Result<Entry, String> {
         Entry::new(SERVICE, account).map_err(|error| error.to_string())
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 impl SecretStore for OsSecretStore {
     fn read(&self, account: &str) -> Result<Option<String>, String> {
         match Self::entry(account)?.get_password() {
@@ -87,6 +94,68 @@ impl SecretStore for OsSecretStore {
     }
 }
 
+/// macOS store: a private JSON file mapping account names to values. Keychain approval is tied
+/// to the exact binary, so ad-hoc signed builds would ask for a password after every update, and
+/// even reading old items can prompt. The app therefore never touches Keychain on macOS.
+/// The trade-off is that any process running as this user can read the unencrypted file.
+#[cfg(target_os = "macos")]
+struct FileSecretStore {
+    path: std::path::PathBuf,
+}
+
+#[cfg(target_os = "macos")]
+impl FileSecretStore {
+    fn load(&self) -> Result<HashMap<String, String>, String> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(contents) => serde_json::from_str(&contents)
+                .map_err(|_| "Saved pairings are corrupted".to_owned()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    fn save(&self, records: &HashMap<String, String>) -> Result<(), String> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        let contents = serde_json::to_string(records).map_err(|error| error.to_string())?;
+        crate::backup::write_private(&self.path, &contents).map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl SecretStore for FileSecretStore {
+    fn read(&self, account: &str) -> Result<Option<String>, String> {
+        Ok(self.load()?.remove(account))
+    }
+
+    fn write(&self, account: &str, value: &str) -> Result<(), String> {
+        let mut records = self.load()?;
+        records.insert(account.to_owned(), value.to_owned());
+        self.save(&records)
+    }
+
+    fn delete(&self, account: &str) -> Result<(), String> {
+        let mut records = self.load()?;
+        if records.remove(account).is_some() {
+            self.save(&records)?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn native_store(data_dir: &Path) -> Box<dyn SecretStore> {
+    Box::new(FileSecretStore {
+        path: data_dir.join("pairings.json"),
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn native_store(_: &Path) -> Box<dyn SecretStore> {
+    Box::new(OsSecretStore)
+}
+
 /// Serializes access because an index update follows each credential update.
 pub struct Vault {
     store: Mutex<Box<dyn SecretStore>>,
@@ -94,9 +163,9 @@ pub struct Vault {
 }
 
 impl Vault {
-    pub fn native() -> Self {
+    pub fn native(data_dir: &Path) -> Self {
         Self {
-            store: Mutex::new(Box::new(OsSecretStore)),
+            store: Mutex::new(native_store(data_dir)),
             pending_pair: Mutex::new(None),
         }
     }
@@ -1100,5 +1169,62 @@ mod tests {
             .unwrap()
             .cleanup_accounts
             .is_empty());
+    }
+
+    #[cfg(target_os = "macos")]
+    mod file_store {
+        use super::*;
+
+        fn open_vault(path: &Path) -> Vault {
+            Vault {
+                store: Mutex::new(Box::new(FileSecretStore { path: path.into() })),
+                pending_pair: Mutex::new(None),
+            }
+        }
+
+        #[test]
+        fn missing_file_means_no_saved_devices() {
+            let directory = tempfile::tempdir().unwrap();
+            let vault = open_vault(&directory.path().join("pairings.json"));
+
+            assert!(vault.devices().unwrap().is_empty());
+            assert_eq!(vault.active().unwrap(), None);
+        }
+
+        #[test]
+        fn saved_pairing_survives_a_restart_in_a_private_file() {
+            use std::os::unix::fs::PermissionsExt;
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("nested/pairings.json");
+
+            open_vault(&path)
+                .save_pair(StoredCredential {
+                    identifier: "id".into(),
+                    name: "TV".into(),
+                    credentials: "secret".into(),
+                    companion_paired: false,
+                })
+                .unwrap();
+
+            let restarted = open_vault(&path);
+            assert_eq!(restarted.credentials("id").unwrap().credentials, "secret");
+            assert_eq!(
+                std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+
+        #[test]
+        fn corrupted_file_is_reported_and_never_overwritten() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("pairings.json");
+            std::fs::write(&path, "not json").unwrap();
+
+            let vault = open_vault(&path);
+
+            assert!(vault.devices().is_err());
+            assert!(vault.select(None).is_err());
+            assert_eq!(std::fs::read_to_string(path).unwrap(), "not json");
+        }
     }
 }

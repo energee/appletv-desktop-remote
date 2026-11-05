@@ -94,8 +94,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::clone(&menu_context))
-        .manage(vault::Vault::native())
         .setup(move |app| {
+            app.manage(vault::Vault::native(&app.path().app_data_dir()?));
             #[cfg(target_os = "macos")]
             macos_wake::install(app.handle()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
