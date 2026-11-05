@@ -1,9 +1,7 @@
-## Keyboard input is easier to find
+## A cleaner touchpad
 
-- The Keyboard button is always available on the remote, even before Companion is paired or a text field is focused on the Apple TV.
-- Opening Keyboard offers Companion pairing when needed. Choose **Show pairing code** and enter the second code displayed on the TV.
-- The keyboard sheet stays open while waiting for a TV text field. Select a text field on the TV; the desktop input enables and receives focus once its current text is loaded.
-- Leaving a TV text field clears and disables the desktop input without closing the sheet, so it is ready for the next field.
+- The off-center circle is gone from the middle of the touchpad.
+- The keyboard focus ring for Select is now centered on the touchpad.
 
 ## Installation caveats
 
