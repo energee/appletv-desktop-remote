@@ -65,6 +65,36 @@ describe('desktopAPI', () => {
     expect(volume.mock.calls).toEqual([[40], [null], [null]]);
   });
 
+  it('passes on only image data URLs as artwork', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const artwork = vi.fn();
+    desktopAPI.onAtvArtwork(artwork);
+
+    for (const data of [
+      'data:image/jpeg;base64,/9g=',
+      'data:image/png;base64,iVA=',
+      null,
+      'https://example.com/a.png',
+      'data:image/svg+xml;base64,PHN2Zz4=',
+      'data:image/png;base64,iVA=");background:url(x',
+    ]) {
+      onBackendEvent({ payload: { event: 'artwork', data } });
+    }
+
+    expect(artwork.mock.calls.map(([url]) => url)).toEqual([
+      'data:image/jpeg;base64,/9g=',
+      'data:image/png;base64,iVA=',
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it('passes on only known power states', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
@@ -78,23 +108,6 @@ describe('desktopAPI', () => {
       onBackendEvent({ payload: { event: 'power-state', data } });
     }
     expect(power.mock.calls).toEqual([['off'], ['on'], ['unknown']]);
-  });
-
-  it('passes the app name through with now-playing', async () => {
-    await desktopAPI.start();
-    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
-      string,
-      (event: { payload: { event: string; data: unknown } }) => void,
-    ];
-    const nowPlaying = vi.fn();
-    desktopAPI.onAtvNowPlaying(nowPlaying);
-
-    onBackendEvent({
-      payload: { event: 'now-playing', data: { title: 'Movie', appDisplayName: 'TV' } },
-    });
-    onBackendEvent({ payload: { event: 'now-playing', data: { appDisplayName: 7 } } });
-
-    expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', appDisplayName: 'TV' }], [{}]]);
   });
 
   it('passes the playing position through with now-playing, for the seek bar', async () => {

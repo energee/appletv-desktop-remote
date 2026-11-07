@@ -23,6 +23,7 @@ class MockAppleTV extends EventEmitter {
   sendKeyCommand = vi.fn((key: unknown, ..._action: unknown[]) => mockSendKeyCommand(key));
   setPosition = vi.fn(async (_seconds: number) => {});
   getState = vi.fn(async () => ({}));
+  requestArtwork = vi.fn(async (): Promise<Buffer | null> => null);
   powerState = 'unknown';
   wake = vi.fn(async () => {});
   setVolume = vi.fn(async (_level: number) => {});
@@ -603,6 +604,92 @@ describe('ATVService', () => {
       first.emit('nowPlaying', { title: 'old' });
       second.emit('nowPlaying', { title: 'new' });
       expect(nowPlaying.mock.calls).toEqual([[{ title: 'new' }]]);
+    });
+
+    describe('artwork', () => {
+      // This suite's fake timers would stall setImmediate, so settle promises directly.
+      const flush = async () => {
+        for (let turn = 0; turn < 5; turn++) await Promise.resolve();
+      };
+
+      it('sends the artwork for each new item once, as a data URL', async () => {
+        const artwork = vi.fn();
+        service.on('artwork', artwork);
+        const device = await connected();
+        device.requestArtwork.mockResolvedValue(Buffer.from([0xff, 0xd8]));
+
+        device.emit('nowPlaying', { title: 'Movie', contentIdentifier: '1', elapsedTime: 1 });
+        device.emit('nowPlaying', { title: 'Movie', contentIdentifier: '1', elapsedTime: 2 });
+        await flush();
+
+        expect(device.requestArtwork).toHaveBeenCalledTimes(1);
+        expect(artwork.mock.calls).toEqual([['data:image/jpeg;base64,/9g=']]);
+      });
+
+      it('labels PNG artwork as PNG', async () => {
+        const artwork = vi.fn();
+        service.on('artwork', artwork);
+        const device = await connected();
+        device.requestArtwork.mockResolvedValue(Buffer.from([0x89, 0x50]));
+
+        device.emit('nowPlaying', { title: 'Song' });
+        await flush();
+
+        expect(artwork.mock.calls).toEqual([['data:image/png;base64,iVA=']]);
+      });
+
+      it('clears the artwork, without asking the TV, when nothing is playing', async () => {
+        const artwork = vi.fn();
+        service.on('artwork', artwork);
+        const device = await connected();
+
+        device.emit('nowPlaying', { title: 'Movie' });
+        await flush();
+        device.emit('nowPlaying', {});
+        await flush();
+
+        expect(device.requestArtwork).toHaveBeenCalledTimes(1);
+        expect(artwork.mock.calls).toEqual([[null], [null]]);
+      });
+
+      it('treats a failed request as no artwork', async () => {
+        const artwork = vi.fn();
+        service.on('artwork', artwork);
+        const device = await connected();
+        device.requestArtwork.mockRejectedValue(new Error('no reply'));
+
+        device.emit('nowPlaying', { title: 'Movie' });
+        await flush();
+
+        expect(artwork.mock.calls).toEqual([[null]]);
+      });
+
+      it('drops artwork that arrives after the item changed', async () => {
+        const artwork = vi.fn();
+        service.on('artwork', artwork);
+        const device = await connected();
+        let finishOld = (_: Buffer) => {};
+        device.requestArtwork.mockReturnValueOnce(
+          new Promise<Buffer>((resolve) => (finishOld = resolve)),
+        );
+        device.requestArtwork.mockResolvedValueOnce(Buffer.from([0xff, 0xd8]));
+
+        device.emit('nowPlaying', { title: 'Old' });
+        device.emit('nowPlaying', { title: 'New' });
+        finishOld(Buffer.from([0x89, 0x50]));
+        await flush();
+
+        expect(artwork.mock.calls).toEqual([['data:image/jpeg;base64,/9g=']]);
+      });
+
+      it('asks again for the same item on a new connection', async () => {
+        const first = await connected(tv1);
+        first.emit('nowPlaying', { title: 'Movie' });
+        const second = await connected(tv2);
+        second.emit('nowPlaying', { title: 'Movie' });
+
+        expect(second.requestArtwork).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('closes the dropped device before replacing its main transport', async () => {

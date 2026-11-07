@@ -180,15 +180,16 @@ a:active {
 
 #keyboardButtonDiv {
   width: 100%;
-  padding: 12px 16px 4px;
+  padding: 8px 8px 0;
 }
 
-.power-btn {
+/* Header icons sit either side of the centred device name, without moving it. */
+.header-btn {
   display: flex;
-  flex: 0 0 32px;
+  flex: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  width: 26px;
   height: 32px;
   padding: 0;
   border: 0;
@@ -198,14 +199,27 @@ a:active {
   cursor: pointer;
 }
 
-.power-btn:hover {
+.header-btn:hover {
   background: var(--glass-hover);
   color: var(--text-primary);
 }
 
-.power-btn .lucide-icon {
+.header-btn .lucide-icon {
   width: 15px;
   height: 15px;
+}
+
+.topText .header-btn {
+  position: absolute;
+  top: 8px;
+}
+
+#collapseButton {
+  left: 6px;
+}
+
+#powerButton {
+  right: 6px;
 }
 
 .topText {
@@ -214,6 +228,7 @@ a:active {
   justify-content: center;
   gap: 4px;
   min-width: 0;
+  padding: 0 50px;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.04em;
@@ -225,11 +240,11 @@ a:active {
 #topTextHeader {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   min-height: 32px;
-  padding: 5px 8px;
+  padding: 5px 4px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -247,7 +262,7 @@ a:active {
 }
 
 #topTextHeader:focus-visible,
-.power-btn:focus-visible {
+.header-btn:focus-visible {
   outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
@@ -523,7 +538,7 @@ a:active {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 6px 20px 10px;
+  padding: 0 20px 10px;
 }
 
 /* ===========================
@@ -532,8 +547,8 @@ a:active {
 
 #touchpad {
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: 240px;
+  height: 150px;
   background: var(--touchpad);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
@@ -574,6 +589,28 @@ a:active {
 #touchpad:active {
   background: var(--touchpad-pressed);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+#touchpadArt {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  pointer-events: none;
+}
+
+/* The arrows stay legible on artwork. */
+#touchpad.has-art .touchpad-arrow {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* The title sits where the down arrow rests, so it appears only for a swipe. */
+#touchpad.has-title .touchpad-arrow-down {
+  opacity: 0;
+}
+
+#touchpad.has-title .touchpad-arrow-down.flash {
+  animation-fill-mode: none;
 }
 
 /* Directional arrow indicators */
@@ -725,14 +762,14 @@ a:active {
 }
 
 /* ===========================
-   Media Row
+   Control Row
    =========================== */
 
-.media-row {
+.control-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 4px;
 }
 
 .media-btn {
@@ -781,15 +818,8 @@ a:active {
 }
 
 /* ===========================
-   Secondary Row
+   Secondary Buttons
    =========================== */
-
-.secondary-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
 
 .secondary-btn {
   width: 40px;
@@ -815,6 +845,25 @@ a:active {
 
 .vol-btn {
   font-size: 12px;
+}
+
+.transport-btn {
+  width: 28px;
+  height: 28px;
+}
+
+/* ===========================
+   Transport: skip, seek, and volume
+   =========================== */
+
+.transport {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  margin-top: -6px;
 }
 
 /* ===========================
@@ -1098,22 +1147,24 @@ a:active {
    Now Playing
    =========================== */
 
+/* Over the touchpad, which must still receive every press and swipe. */
 .now-playing {
-  text-align: center;
-  padding: 4px 20px 8px;
-  max-width: 260px;
-  margin: 0 auto;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 10px 12px;
+  pointer-events: none;
 }
 
-.now-playing-app {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+#touchpad.has-art .now-playing {
+  padding-top: 26px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
+}
+
+#touchpad.has-art .now-playing-title,
+#touchpad.has-art .now-playing-artist {
+  color: #ffffff;
 }
 
 .now-playing-title {
@@ -1138,14 +1189,19 @@ a:active {
    The input is 16px tall for an easy target, but paints its 4px content box: the played fill
    (sized by setSeekBar) over the track. */
 .seek {
-  margin-top: 6px;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .seek input {
   appearance: none;
   -webkit-appearance: none;
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 16px;
   padding: 6px 0;
   margin: 0;
@@ -1176,23 +1232,26 @@ a:active {
   opacity: 1;
 }
 
-.seek-times {
-  display: flex;
-  justify-content: space-between;
+.seek-time {
+  flex: none;
   font-size: 10px;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
-/* The volume slider borrows the seek bar's track (.seek), across the secondary row; its speaker
-   icon tells it apart from the seek bar. */
+/* The volume slider borrows the seek bar's track (.seek) and its place, briefly, after a change;
+   its speaker icon tells it apart from the seek bar. */
 .volume {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 168px;
-  margin: 2px auto 0;
+  display: none;
   color: var(--text-tertiary);
+}
+
+body.volume-active .volume {
+  display: flex;
+}
+
+body.volume-active #seek {
+  display: none;
 }
 
 .volume .lucide-icon {
@@ -1314,4 +1373,173 @@ a:active {
 
 .settings-back-btn:hover {
   color: var(--text-secondary);
+}
+
+/* ===========================
+   Mini Bar
+   =========================== */
+
+#miniBar {
+  display: none;
+}
+
+/* The mini bar leads the page, and only what's left of the remote is text it may need to show. */
+body.mini #miniBar {
+  position: relative;
+  order: -1;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  height: 64px;
+  padding: 0 8px 0 14px;
+}
+
+body.mini #keyboardButtonDiv {
+  display: none;
+}
+
+body.mini .remote-body {
+  gap: 0;
+  padding: 0;
+}
+
+/* !important: showKeyMap sets the touchpad's display inline. */
+body.mini .remote-body > :not(.transport, #companionText, #companionError) {
+  display: none !important;
+}
+
+body.mini .transport {
+  display: contents;
+}
+
+body.mini .transport > :not(#volume) {
+  display: none;
+}
+
+.mini-text {
+  flex: 1;
+  min-width: 0;
+  margin-right: 4px;
+}
+
+.mini-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#miniTitle,
+#miniSubtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#miniSubtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.mini-play {
+  flex: none;
+  width: 36px;
+  height: 36px;
+}
+
+.mini-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent-glass);
+}
+
+#miniProgress {
+  width: 0;
+  height: 100%;
+  background: var(--text-secondary);
+}
+
+/* A row per other saved TV, matching the bar above. No :not(:empty) to hide it: WebKit misses rows
+   added later. Empty, it simply has no height. */
+#miniDevices {
+  display: none;
+}
+
+body.mini #miniDevices {
+  order: -1;
+  display: block;
+  width: 100%;
+}
+
+#miniDevices button {
+  display: block;
+  width: 100%;
+  height: 64px;
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#miniDevices button:hover {
+  background: var(--glass-hover);
+}
+
+#miniDevices button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.mini-device-name,
+.mini-device-note {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-device-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* The same dot as the bar's, grey because this TV isn't connected. */
+.mini-device-name::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  content: '';
+}
+
+.mini-device-note {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* A volume change swaps the text for the slider, as it swaps the seek bar on the full remote. */
+body.mini.volume-active .mini-text {
+  visibility: hidden;
+}
+
+body.mini .volume {
+  position: fixed;
+  top: 24px;
+  left: 14px;
+  width: 124px;
 }

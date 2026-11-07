@@ -1,7 +1,6 @@
+/* The buttons belong to the remote, so they hide with it, but sit in the header to save a row. */
 .companion-tools {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
+  display: contents;
 }
 
 .companion-tools button,
@@ -18,16 +17,26 @@
 }
 
 .companion-tools button {
+  position: absolute;
+  top: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  width: 26px;
   height: 32px;
   padding: 6px;
   border-color: transparent;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-tertiary);
+}
+
+#companionApps {
+  left: 32px;
+}
+
+#companionKeyboard {
+  right: 32px;
 }
 
 .companion-tools button[hidden] {
