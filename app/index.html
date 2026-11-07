@@ -24,8 +24,17 @@
           <span class="device-chevron" data-icon="chevron-down" aria-hidden="true"></span>
         </button>
         <button
+          id="collapseButton"
+          class="header-btn"
+          aria-label="Collapse to mini bar"
+          title="Collapse to mini bar"
+          style="display: none"
+        >
+          <span data-icon="chevron-up"></span>
+        </button>
+        <button
           id="powerButton"
-          class="power-btn"
+          class="header-btn"
           aria-label="Sleep or wake the Apple TV"
           title="Sleep / Wake"
           style="display: none"
@@ -92,8 +101,9 @@
       <!-- Remote controls -->
       <div id="runningElements">
         <div class="remote-body">
-          <!-- Touchpad -->
+          <!-- Touchpad: also shows what's playing, over its artwork when there is any -->
           <div id="touchpad">
+            <div id="touchpadArt" aria-hidden="true"></div>
             <button
               id="touchpadSelect"
               type="button"
@@ -113,10 +123,14 @@
             <div class="touchpad-arrow touchpad-arrow-right">
               <span data-icon="chevron-right"></span>
             </div>
+            <div id="nowPlaying" class="now-playing" style="display: none">
+              <div class="now-playing-title" id="npTitle"></div>
+              <div class="now-playing-artist" id="npArtist"></div>
+            </div>
           </div>
 
-          <!-- Media controls -->
-          <div class="media-row">
+          <!-- Controls -->
+          <div class="control-row">
             <button
               type="button"
               aria-label="Menu"
@@ -126,40 +140,6 @@
             >
               <span class="keyText"><span data-icon="arrow-left"></span></span
               ><span class="keyTextAlt">Esc</span>
-            </button>
-            <button
-              type="button"
-              aria-label="Play or pause"
-              data-key="play_pause"
-              data-tippy-content="Play / Pause"
-              class="directionCircle media-btn play-btn"
-            >
-              <span class="keyText"><span id="playPauseIcon" data-icon="play"></span></span
-              ><span class="keyTextAlt">Space</span>
-            </button>
-            <button
-              type="button"
-              aria-label="Home"
-              data-key="home"
-              data-tippy-content="Home (T) · L for Long-press"
-              class="directionCircle media-btn"
-            >
-              <span class="keyText"><span data-icon="tv"></span></span
-              ><span class="keyTextAlt">T</span>
-            </button>
-          </div>
-
-          <!-- Secondary controls -->
-          <div class="secondary-row">
-            <button
-              type="button"
-              aria-label="Skip backward"
-              data-key="skip_backward"
-              data-tippy-content="Skip Back"
-              class="directionCircle secondary-btn"
-            >
-              <span class="keyText"><span data-icon="skip-back"></span></span
-              ><span class="keyTextAlt">[</span>
             </button>
             <button
               type="button"
@@ -173,6 +153,16 @@
             </button>
             <button
               type="button"
+              aria-label="Play or pause"
+              data-key="play_pause"
+              data-tippy-content="Play / Pause"
+              class="directionCircle media-btn play-btn"
+            >
+              <span class="keyText"><span id="playPauseIcon" data-icon="play"></span></span
+              ><span class="keyTextAlt">Space</span>
+            </button>
+            <button
+              type="button"
               aria-label="Raise volume"
               data-key="volume_up"
               data-tippy-content="Raise Volume"
@@ -183,31 +173,48 @@
             </button>
             <button
               type="button"
+              aria-label="Home"
+              data-key="home"
+              data-tippy-content="Home (T) · L for Long-press"
+              class="directionCircle media-btn"
+            >
+              <span class="keyText"><span data-icon="tv"></span></span
+              ><span class="keyTextAlt">T</span>
+            </button>
+          </div>
+
+          <!-- Skip and position; a volume change swaps the seek bar for the slider -->
+          <div class="transport">
+            <button
+              type="button"
+              aria-label="Skip backward"
+              data-key="skip_backward"
+              data-tippy-content="Skip Back"
+              class="directionCircle secondary-btn transport-btn"
+            >
+              <span class="keyText"><span data-icon="skip-back"></span></span
+              ><span class="keyTextAlt">[</span>
+            </button>
+            <div class="seek" id="seek" style="display: none">
+              <span class="seek-time" id="npElapsed"></span>
+              <input type="range" id="seekBar" min="0" step="1" aria-label="Playback position" />
+              <span class="seek-time" id="npDuration"></span>
+            </div>
+            <!-- Absolute volume: only for outputs that report one (AirPods, HomePod) -->
+            <div class="seek volume" id="volume">
+              <span data-icon="volume-2"></span>
+              <input type="range" id="volumeBar" min="0" max="100" step="1" aria-label="Volume" />
+            </div>
+            <button
+              type="button"
               aria-label="Skip forward"
               data-key="skip_forward"
               data-tippy-content="Skip Forward"
-              class="directionCircle secondary-btn"
+              class="directionCircle secondary-btn transport-btn"
             >
               <span class="keyText"><span data-icon="skip-forward"></span></span
               ><span class="keyTextAlt">]</span>
             </button>
-          </div>
-
-          <!-- Absolute volume: only for outputs that report one (AirPods, HomePod) -->
-          <div class="seek volume" id="volume" style="display: none">
-            <span data-icon="volume-2"></span>
-            <input type="range" id="volumeBar" min="0" max="100" step="1" aria-label="Volume" />
-          </div>
-        </div>
-
-        <!-- Now Playing -->
-        <div id="nowPlaying" class="now-playing" style="display: none">
-          <div class="now-playing-app" id="npApp"></div>
-          <div class="now-playing-title" id="npTitle"></div>
-          <div class="now-playing-artist" id="npArtist"></div>
-          <div class="seek" id="seek" style="display: none">
-            <input type="range" id="seekBar" min="0" step="1" aria-label="Playback position" />
-            <div class="seek-times"><span id="npElapsed"></span><span id="npDuration"></span></div>
           </div>
         </div>
       </div>
@@ -260,6 +267,55 @@
 
       <h2 id="statusText"></h2>
     </div>
+
+    <!-- Mini bar: after the remote, because key presses flash the first matching [data-key] -->
+    <div id="miniBar">
+      <div class="mini-text">
+        <div class="mini-title">
+          <span id="miniDot" class="connection-dot" aria-hidden="true"></span>
+          <span id="miniTitle"></span>
+        </div>
+        <div id="miniSubtitle"></div>
+      </div>
+      <button
+        type="button"
+        aria-label="Play or pause"
+        data-key="play_pause"
+        class="directionCircle media-btn play-btn mini-play"
+      >
+        <span class="keyText"><span id="miniPlayIcon" data-icon="play"></span></span
+        ><span class="keyTextAlt">Space</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Lower volume"
+        data-key="volume_down"
+        class="directionCircle secondary-btn transport-btn"
+      >
+        <span class="keyText"><span data-icon="volume-1"></span></span
+        ><span class="keyTextAlt">-</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Raise volume"
+        data-key="volume_up"
+        class="directionCircle secondary-btn transport-btn"
+      >
+        <span class="keyText"><span data-icon="volume-2"></span></span
+        ><span class="keyTextAlt">+</span>
+      </button>
+      <button
+        id="miniExpand"
+        type="button"
+        class="header-btn"
+        aria-label="Expand to full remote"
+        title="Expand to full remote"
+      >
+        <span data-icon="chevron-down"></span>
+      </button>
+      <div class="mini-progress"><div id="miniProgress"></div></div>
+    </div>
+    <div id="miniDevices" role="group" aria-label="Apple TVs"></div>
     <dialog
       id="releaseNotesDialog"
       class="update-dialog release-notes-dialog"

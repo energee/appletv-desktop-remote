@@ -18,6 +18,7 @@ export interface ContextMenuConfig {
 type BackendEvent =
   | 'state'
   | 'now-playing'
+  | 'artwork'
   | 'power-state'
   | 'volume'
   | 'outputs'
@@ -42,15 +43,15 @@ function emit(name: string, value: unknown): void {
   listeners.get(name)?.forEach((handler) => handler(value));
 }
 
+/** Base64 only, so the value is safe to place inside a CSS url(). */
+const ARTWORK_URL = /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/;
+
 function nowPlayingInfo(data: unknown): NowPlayingInfo {
   if (typeof data !== 'object' || data === null) return {};
   const info: NowPlayingInfo = {};
   if ('title' in data && typeof data.title === 'string') info.title = data.title;
   if ('artist' in data && typeof data.artist === 'string') info.artist = data.artist;
   if ('album' in data && typeof data.album === 'string') info.album = data.album;
-  if ('appDisplayName' in data && typeof data.appDisplayName === 'string') {
-    info.appDisplayName = data.appDisplayName;
-  }
   const record = data as Record<string, unknown>;
   for (const key of [
     'playbackState',
@@ -206,6 +207,11 @@ export const desktopAPI = {
     }),
   onAtvNowPlaying: (callback: (info: NowPlayingInfo) => void) =>
     subscribe('backend:now-playing', (data) => callback(nowPlayingInfo(data))),
+  /** The playing item's artwork as a data URL, or null when it has none. */
+  onAtvArtwork: (callback: (url: string | null) => void) =>
+    subscribe('backend:artwork', (data) =>
+      callback(typeof data === 'string' && ARTWORK_URL.test(data) ? data : null),
+    ),
   onErrorMessage: (callback: (message: string) => void) =>
     subscribe('backend:error', (data) => {
       if (typeof data === 'object' && data !== null && 'message' in data) {

@@ -15,6 +15,7 @@ import type {
   CompanionPairSetup,
   DiscoveredDevice,
   Key as KeyType,
+  NowPlayingInfo,
   PairSetup,
 } from 'node-appletv-remote';
 import type { HAPCredentials } from 'node-appletv-remote/dist/auth/types.js';
@@ -62,6 +63,15 @@ const PAUSED_STATES: readonly number[] = [
 ];
 /** The player the TV reports when no app has registered as now playing. */
 const DEFAULT_PLAYER = 'MediaRemote-DefaultPlayer';
+/** Square size to request: the touchpad crops it to fill 240px, at up to 2x pixel density. */
+const ARTWORK_SIZE = 480;
+
+/** The TV sends JPEG or PNG without saying which; PNG files start with byte 0x89. */
+function artworkDataUrl(bytes: Buffer | null): string | null {
+  if (!bytes?.length) return null;
+  return `data:image/${bytes[0] === 0x89 ? 'png' : 'jpeg'};base64,${bytes.toString('base64')}`;
+}
+
 /** PlaybackQueueRequest error for an idle receiver with no now-playing client. */
 const NO_NOW_PLAYING_CLIENT = 35;
 
@@ -85,6 +95,8 @@ class ATVService extends EventEmitter {
   private companionRecoveryEnabled = false;
   /** The current device's last reported PlaybackState; each new device starts Unknown. */
   private playbackState: number = PlaybackState.Unknown;
+  /** The item whose artwork was last requested, so position updates don't request it again. */
+  private artworkItem: { device: AppleTV; key: string } | null = null;
   /** Optional Companion pairing never replaces the ordinary MRP connection. */
   private companionPairing: CompanionPairSetup | null = null;
   private companionPairEpoch = 0;
@@ -312,6 +324,7 @@ class ATVService extends EventEmitter {
       this.playbackState =
         info.playerIdentifier === DEFAULT_PLAYER ? PlaybackState.Unknown : info.playbackState;
       this.emit('now-playing', info);
+      this.refreshArtwork(device, info);
     });
     device.on('textFocusState', (state) => {
       if (device !== this.device) return;
@@ -340,6 +353,29 @@ class ATVService extends EventEmitter {
       void device.close();
       this.retry(epoch, credsData, found);
     });
+  }
+
+  /**
+   * Emits `artwork` for each new item: a data URL, or null when there is none. The TV repeats
+   * now-playing as the position changes, and a slow reply may outlive its item, so both are
+   * filtered out by `artworkItem`.
+   */
+  private refreshArtwork(device: AppleTV, info: NowPlayingInfo): void {
+    const playing = Boolean(info.title || info.artist);
+    const key = playing ? info.contentIdentifier || `${info.title}\n${info.artist}` : '';
+    if (this.artworkItem?.device === device && this.artworkItem.key === key) return;
+    const item = { device, key };
+    this.artworkItem = item;
+    if (!playing) {
+      this.emit('artwork', null);
+      return;
+    }
+    void device
+      .requestArtwork(ARTWORK_SIZE, ARTWORK_SIZE)
+      .then(artworkDataUrl, () => null)
+      .then((url) => {
+        if (item === this.artworkItem && device === this.device) this.emit('artwork', url);
+      });
   }
 
   companionStatus(): {
