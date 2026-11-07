@@ -1466,12 +1466,13 @@ body.mini .transport > :not(#volume) {
   background: var(--text-secondary);
 }
 
-/* A row per other saved TV, matching the bar above; empty, and so hidden, with only one TV. */
+/* A row per other saved TV, matching the bar above. No :not(:empty) to hide it: WebKit misses rows
+   added later. Empty, it simply has no height. */
 #miniDevices {
   display: none;
 }
 
-body.mini #miniDevices:not(:empty) {
+body.mini #miniDevices {
   order: -1;
   display: block;
   width: 100%;
