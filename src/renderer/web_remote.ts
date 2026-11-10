@@ -91,6 +91,7 @@ export function initIPC(): void {
 
   desktopAPI.onAtvState(renderState);
   desktopAPI.onAtvNowPlaying(updateNowPlaying);
+  desktopAPI.onAtvArtwork(showArtwork);
   desktopAPI.onAtvVolume(showVolume);
   // The TV confirmed a change of outputs: update the checks without scanning again.
   desktopAPI.onAtvOutputs((ids) => {
@@ -108,7 +109,9 @@ function renderState(next: ConnectionState): void {
   const previous = connection.status;
   connection = next;
   if (next.status !== 'connected') asleep = false;
-  $('#powerButton')!.style.display = next.status === 'connected' ? '' : 'none';
+  const remoteControls = next.status === 'connected' ? '' : 'none';
+  $('#powerButton')!.style.display = remoteControls;
+  $('#collapseButton')!.style.display = remoteControls;
   if (next.status !== 'connected') cancelPresses();
   if (next.status !== 'connected') {
     showVolume(null);
@@ -147,8 +150,9 @@ function renderState(next: ConnectionState): void {
 
 /** Shows the pairing screen while pairing and the remote otherwise, behind Settings if open. */
 function showScreen(): void {
-  if (settingsOpen()) return;
   const pairing = connection.status === 'pairing';
+  if (pairing) setMini(false);
+  if (settingsOpen()) return;
   $('#addNewElements')!.style.display = pairing ? '' : 'none';
   $('#runningElements')!.style.display = pairing ? 'none' : '';
 }
@@ -736,13 +740,16 @@ function getConnectedDeviceName(): string | null {
 }
 
 export function updateConnectionDot(state: ConnectionDotState): void {
-  const dot = $('#connectionDot')!;
-  dot.classList.remove('connected', 'connecting', 'disconnected', 'asleep');
-  dot.classList.add(asleep && state === 'connected' ? 'asleep' : state);
+  for (const dot of [$('#connectionDot')!, $('#miniDot')!]) {
+    dot.classList.remove('connected', 'connecting', 'disconnected', 'asleep');
+    dot.classList.add(asleep && state === 'connected' ? 'asleep' : state);
+  }
 
   const showName = state === 'connected' || state === 'connecting';
   const name = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
   $('#deviceName')!.textContent = asleep && state === 'connected' ? `${name} · Asleep` : name;
+  renderMiniText();
+  renderMiniDevices();
 }
 
 /** Connects to the selected device; the native host supplies its pairing keys. */
@@ -901,6 +908,7 @@ function setSeekBar(bar: HTMLInputElement, seconds: number): void {
   bar.value = String(Math.round(seconds));
   const played = ((seconds / position.duration) * 100).toFixed(1);
   bar.style.backgroundSize = `${played}% 100%, 100% 100%`;
+  $('#miniProgress')!.style.width = `${played}%`;
   $('#npElapsed')!.textContent = formatTime(seconds);
 }
 
@@ -909,6 +917,7 @@ function renderSeekBar(): void {
   const seek = $('#seek');
   if (!seek) return;
   seek.style.display = position.duration > 0 ? '' : 'none';
+  if (position.duration <= 0) $('#miniProgress')!.style.width = '0';
   if (position.duration <= 0 || dragging) return;
   const now = position.elapsed + (position.rate * (Date.now() - position.at)) / 1000;
   const seconds = Math.min(position.duration, Math.max(0, now));
@@ -938,9 +947,7 @@ function initSeekBar(): void {
   }, 1000);
 }
 
-/**
- * Shows the app, title, artist, and position, and a pause icon on the play button while playing.
- */
+/** Shows the title, artist, and position, and a pause icon on the play button while playing. */
 function updateNowPlaying(info: NowPlayingInfo): void {
   reportedPlaying = info.playbackState === PlaybackState.Playing;
   position = {
@@ -958,16 +965,21 @@ function updateNowPlaying(info: NowPlayingInfo): void {
 
   const title = info.title || '';
   const artist = info.artist || '';
+  playingText = { title, artist };
+  renderMiniText();
+  const showing = Boolean(title || artist);
+  $('#touchpad')!.classList.toggle('has-title', showing);
+  container.style.display = showing ? 'block' : 'none';
+  if (!showing) return;
 
-  if (!title && !artist) {
-    container.style.display = 'none';
-    return;
-  }
-
-  container.style.display = 'block';
-  $('#npApp')!.textContent = info.appDisplayName || '';
   $('#npTitle')!.textContent = title;
   $('#npArtist')!.textContent = artist;
+}
+
+/** Fills the touchpad with the item's artwork. `url` is a validated base64 data URL. */
+function showArtwork(url: string | null): void {
+  $('#touchpadArt')!.style.backgroundImage = url ? `url("${url}")` : '';
+  $('#touchpad')!.classList.toggle('has-art', Boolean(url));
 }
 
 /** Not connected: hides the title and artist, and the play button shows play. */
@@ -977,14 +989,74 @@ function hideNowPlaying(): void {
   cancelFlip();
   reportedPlaying = false;
   showPlayPauseIcon(false);
+  showArtwork(null);
+  playingText = { title: '', artist: '' };
+  renderMiniText();
+  $('#touchpad')!.classList.toggle('has-title', false);
   const container = $('#nowPlaying');
   if (container) container.style.display = 'none';
 }
 
 function showPlayPauseIcon(playing: boolean): void {
   iconPlaying = playing;
-  const el = $('#playPauseIcon');
-  if (el) el.innerHTML = icon(playing ? 'pause' : 'play');
+  for (const el of [$('#playPauseIcon'), $('#miniPlayIcon')]) {
+    if (el) el.innerHTML = icon(playing ? 'pause' : 'play');
+  }
+}
+
+// --- Mini bar ---
+
+/** The playing item's text, which the mini bar shows in place of the device name. */
+let playingText = { title: '', artist: '' };
+
+function renderMiniText(): void {
+  const { title, artist } = playingText;
+  const playing = title || artist;
+  $('#miniTitle')!.textContent = playing || $('#deviceName')!.textContent;
+  $('#miniSubtitle')!.textContent = playing ? title && artist : 'Nothing playing';
+}
+
+/**
+ * Stacks a row under the bar for each other saved TV, which also gives the bar a way to switch.
+ * The app connects to one TV at a time, so only the bar above shows live state and controls.
+ */
+function renderMiniDevices(): void {
+  const list = $('#miniDevices')!;
+  list.innerHTML = '';
+  const active = getActiveIdentifier();
+  for (const { identifier, name } of Object.values(loadDevices())) {
+    if (identifier === active) continue;
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.setAttribute('aria-label', `Switch to ${name}`);
+    const title = document.createElement('span');
+    title.className = 'mini-device-name';
+    title.textContent = name;
+    const note = document.createElement('span');
+    note.className = 'mini-device-note';
+    note.textContent = 'Click to switch';
+    row.appendChild(title);
+    row.appendChild(note);
+    row.addEventListener('click', () => {
+      void handleContextMenuAction('selectDevice', identifier);
+    });
+    list.appendChild(row);
+  }
+}
+
+/** Switches between the full remote and the mini bar; the window follows the page's height. */
+function setMini(on: boolean): void {
+  if (on) hideSettings();
+  document.body.classList.toggle('mini', on);
+}
+
+function initMiniBar(): void {
+  $('#collapseButton')!.addEventListener('click', () => setMini(true));
+  $('#miniExpand')!.addEventListener('click', () => setMini(false));
+  // Dialogs sit outside the page's height, so a 64px window would clip them.
+  new MutationObserver(() => {
+    if (document.querySelector('dialog[open]')) setMini(false);
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
 }
 
 // --- Speakers ---
@@ -1002,8 +1074,13 @@ async function loadSpeakers(): Promise<void> {
 
 // --- Volume ---
 
+/** How long the slider stays after the last change before the seek bar returns. */
+const VOLUME_VISIBLE_MS = 2500;
+
 /** True while the volume slider is being dragged, so reports do not move it. */
 let volumeDragging = false;
+let volumeLevel: number | null = null;
+let volumeHideTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Moves the slider's thumb and its filled part to `level`. */
 function setVolumeBar(bar: HTMLInputElement, level: number): void {
@@ -1011,10 +1088,31 @@ function setVolumeBar(bar: HTMLInputElement, level: number): void {
   bar.style.backgroundSize = `${level}% 100%, 100% 100%`;
 }
 
-/** Shows the TV's absolute volume; null (TV speakers, or not connected) hides the slider. */
+/** Swaps the seek bar for the slider, and back after a pause unless it is being dragged. */
+function revealVolume(): void {
+  document.body.classList.toggle('volume-active', true);
+  clearTimeout(volumeHideTimer);
+  volumeHideTimer = setTimeout(() => {
+    if (volumeDragging) revealVolume();
+    else document.body.classList.toggle('volume-active', false);
+  }, VOLUME_VISIBLE_MS);
+}
+
+/**
+ * Tracks the TV's absolute volume, and shows the slider when it changes. The first report is the
+ * current level, not a change. Null (TV speakers, or not connected) leaves no slider to show.
+ */
 function showVolume(level: number | null): void {
-  $('#volume')!.style.display = level === null ? 'none' : '';
-  if (level !== null && !volumeDragging) setVolumeBar($('#volumeBar') as HTMLInputElement, level);
+  const changed = volumeLevel !== null && level !== volumeLevel;
+  volumeLevel = level;
+  if (level === null) {
+    clearTimeout(volumeHideTimer);
+    document.body.classList.toggle('volume-active', false);
+    return;
+  }
+  if (volumeDragging) return;
+  setVolumeBar($('#volumeBar') as HTMLInputElement, level);
+  if (changed) revealVolume();
 }
 
 function initVolumeBar(): void {
@@ -1022,9 +1120,11 @@ function initVolumeBar(): void {
   bar.addEventListener('input', () => {
     volumeDragging = true;
     setVolumeBar(bar, Number(bar.value));
+    revealVolume();
   });
   bar.addEventListener('change', () => {
     volumeDragging = false;
+    revealVolume();
     desktopAPI.setVolume(Number(bar.value)).catch(showRequestError);
   });
 }
@@ -1032,6 +1132,7 @@ function initVolumeBar(): void {
 // --- Settings Panel ---
 
 function showSettings(): void {
+  setMini(false);
   cancelPresses();
   $('#runningElements')!.style.display = 'none';
   $('#addNewElements')!.style.display = 'none';
@@ -1221,6 +1322,7 @@ export async function init(): Promise<void> {
   initSettingsListeners();
   initSeekBar();
   initVolumeBar();
+  initMiniBar();
   $('#powerButton')!.addEventListener('click', () => {
     desktopAPI.togglePower().catch(showRequestError);
   });

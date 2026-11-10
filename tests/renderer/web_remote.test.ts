@@ -30,6 +30,7 @@ const desktopAPI = {
   importCredentials: vi.fn(),
   onAtvState: vi.fn(),
   onAtvNowPlaying: vi.fn(),
+  onAtvArtwork: vi.fn(),
   onAtvPowerState: vi.fn(),
   onAtvVolume: vi.fn(),
   onAtvOutputs: vi.fn(),
@@ -80,9 +81,10 @@ const mockElement = {
   innerHTML: '',
   textContent: '',
   value: '',
-  classList: { add: vi.fn(), remove: vi.fn() },
+  classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() },
   appendChild: vi.fn(),
   addEventListener: vi.fn(),
+  setAttribute: vi.fn(),
 };
 const statusElement = { textContent: '', style: { display: '' } };
 const defaultQuery = (selector: string) =>
@@ -92,6 +94,17 @@ class ButtonElement {
   dataset: Record<string, string> = {};
 }
 vi.stubGlobal('HTMLButtonElement', ButtonElement);
+
+let dialogObserved = () => {};
+vi.stubGlobal(
+  'MutationObserver',
+  class {
+    constructor(callback: () => void) {
+      dialogObserved = callback;
+    }
+    observe = vi.fn();
+  },
+);
 
 vi.stubGlobal('window', {
   ...globalThis.window,
@@ -124,9 +137,10 @@ function fakeElement(value = '') {
     value,
     checked: false,
     disabled: false,
-    classList: { add: vi.fn(), remove: vi.fn() },
+    classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() },
     appendChild: vi.fn(),
     addEventListener: vi.fn(),
+    setAttribute: vi.fn(),
     focus: vi.fn(),
     getBoundingClientRect: () => ({ left: 12, bottom: 44 }),
     querySelectorAll: vi.fn(() => []),
@@ -162,6 +176,7 @@ let web: typeof WebRemote;
 let keydown: (event: unknown) => void;
 let setState: (state: ConnectionState) => void;
 let nowPlaying: (info: NowPlayingInfo) => void;
+let artwork: (url: string | null) => void;
 let powerState: (state: 'on' | 'off' | 'unknown') => void;
 let volume: (level: number | null) => void;
 let outputs: (ids: string[]) => void;
@@ -196,6 +211,7 @@ beforeAll(async () => {
   web.initIPC();
   setState = desktopAPI.onAtvState.mock.calls[0][0];
   nowPlaying = desktopAPI.onAtvNowPlaying.mock.calls[0][0];
+  artwork = desktopAPI.onAtvArtwork.mock.calls[0][0];
   powerState = desktopAPI.onAtvPowerState.mock.calls[0][0];
   volume = desktopAPI.onAtvVolume.mock.calls[0][0];
   outputs = desktopAPI.onAtvOutputs.mock.calls[0][0];
@@ -836,45 +852,229 @@ describe('speakers', () => {
 });
 
 describe('volume slider', () => {
+  const bodyClass = () => vi.mocked(document.body.classList.toggle);
+  afterEach(() => vi.useRealTimers());
+
   // TV speakers have no absolute volume; outputs such as AirPods or HomePod do.
-  it('shows the absolute volume, hides without one, and sets it when released', async () => {
+  it('appears briefly when the volume changes, not when it is first reported', async () => {
+    vi.useFakeTimers();
+    const dom = useElements();
+    await web.init();
+    state('connecting');
+    state('connected');
+
+    volume(40);
+    expect(dom.get('#volumeBar').value).toBe('40');
+    expect(bodyClass()).not.toHaveBeenCalledWith('volume-active', true);
+
+    volume(45);
+    expect(bodyClass()).toHaveBeenLastCalledWith('volume-active', true);
+    vi.advanceTimersByTime(2499);
+    expect(bodyClass()).toHaveBeenLastCalledWith('volume-active', true);
+    vi.advanceTimersByTime(1);
+    expect(bodyClass()).toHaveBeenLastCalledWith('volume-active', false);
+  });
+
+  it('stays while dragged, ignores reports, and sets the level when released', async () => {
+    vi.useFakeTimers();
     const dom = useElements();
     desktopAPI.setVolume.mockResolvedValue(undefined);
     await web.init();
-    const box = dom.get('#volume');
     const bar = dom.get('#volumeBar');
-    state('connecting');
-    state('connected');
-    expect(box.style.display).toBe('none');
-
     volume(40);
-    expect(box.style.display).toBe('');
-    expect(bar.value).toBe('40');
+    volume(45);
 
-    // While dragging, reports don't move the thumb; releasing sets the level.
     bar.value = '70';
     dom.listener('#volumeBar', 'input')();
-    volume(45);
+    volume(50);
     expect(bar.value).toBe('70');
+    vi.advanceTimersByTime(10000);
+    expect(bodyClass()).toHaveBeenLastCalledWith('volume-active', true);
+
     dom.listener('#volumeBar', 'change')();
     expect(desktopAPI.setVolume).toHaveBeenCalledWith(70);
+    vi.advanceTimersByTime(2500);
+    expect(bodyClass()).toHaveBeenLastCalledWith('volume-active', false);
+  });
 
-    volume(null);
-    expect(box.style.display).toBe('none');
+  it('hides at once when the output loses absolute volume or the connection ends', async () => {
+    vi.useFakeTimers();
+    useElements();
+    await web.init();
     volume(40);
+    volume(45);
+    volume(null);
+    expect(bodyClass()).toHaveBeenLastCalledWith('volume-active', false);
+
+    volume(40);
+    volume(45);
     state('connecting');
-    expect(box.style.display).toBe('none');
+    expect(bodyClass()).toHaveBeenLastCalledWith('volume-active', false);
   });
 });
 
-describe('now playing', () => {
-  it('names the app that is playing above the title', () => {
+describe('touchpad now playing', () => {
+  it('shows artwork on the touchpad and clears it when the connection ends', async () => {
     const dom = useElements();
+    await web.init();
+    state('connecting');
     state('connected');
-    nowPlaying({ title: 'Movie', artist: 'Studio', appDisplayName: 'TV' });
-    expect(dom.get('#npApp').textContent).toBe('TV');
+    const art = dom.get('#touchpadArt');
+    const touchpad = dom.get('#touchpad').classList.toggle;
+
+    artwork('data:image/jpeg;base64,/9g=');
+    expect(art.style.backgroundImage).toBe('url("data:image/jpeg;base64,/9g=")');
+    expect(touchpad).toHaveBeenLastCalledWith('has-art', true);
+
+    artwork(null);
+    expect(art.style.backgroundImage).toBe('');
+    expect(touchpad).toHaveBeenLastCalledWith('has-art', false);
+
+    artwork('data:image/jpeg;base64,/9g=');
+    state('connecting');
+    expect(art.style.backgroundImage).toBe('');
+  });
+
+  it('marks the touchpad while it shows a title', async () => {
+    const dom = useElements();
+    await web.init();
+    const touchpad = dom.get('#touchpad').classList.toggle;
+
     nowPlaying({ title: 'Movie' });
-    expect(dom.get('#npApp').textContent).toBe('');
+    expect(touchpad).toHaveBeenLastCalledWith('has-title', true);
+    nowPlaying({});
+    expect(touchpad).toHaveBeenLastCalledWith('has-title', false);
+  });
+});
+
+describe('mini bar', () => {
+  const bodyClass = () => vi.mocked(document.body.classList.toggle);
+
+  it('collapses from the header and expands from the bar', async () => {
+    const dom = useElements();
+    await web.init();
+
+    dom.listener('#collapseButton', 'click')();
+    expect(bodyClass()).toHaveBeenLastCalledWith('mini', true);
+
+    dom.listener('#miniExpand', 'click')();
+    expect(bodyClass()).toHaveBeenLastCalledWith('mini', false);
+  });
+
+  it('offers collapsing only while connected', async () => {
+    const dom = useElements();
+    await web.init();
+    state('connecting');
+    expect(dom.get('#collapseButton').style.display).toBe('none');
+    state('connected');
+    expect(dom.get('#collapseButton').style.display).toBe('');
+  });
+
+  it('shows the title and artist, or the device when nothing plays', async () => {
+    const dom = useElements();
+    await web.init();
+    state('connecting');
+    state('connected');
+
+    nowPlaying({ title: 'Movie', artist: 'Director' });
+    expect(dom.get('#miniTitle').textContent).toBe('Movie');
+    expect(dom.get('#miniSubtitle').textContent).toBe('Director');
+
+    nowPlaying({ artist: 'Radio' });
+    expect(dom.get('#miniTitle').textContent).toBe('Radio');
+    expect(dom.get('#miniSubtitle').textContent).toBe('');
+
+    nowPlaying({});
+    expect(dom.get('#miniTitle').textContent).toBe(creds.name);
+    expect(dom.get('#miniSubtitle').textContent).toBe('Nothing playing');
+  });
+
+  it('follows the connection dot and the play button', async () => {
+    const dom = useElements();
+    await web.init();
+    state('connecting');
+    state('connected');
+    expect(dom.get('#miniDot').classList.add).toHaveBeenLastCalledWith('connected');
+
+    nowPlaying({ title: 'Movie', playbackState: PlaybackState.Playing });
+    expect(dom.get('#miniPlayIcon').innerHTML).toBe(icon('pause'));
+  });
+
+  it('shows progress, and none for an item with no length', async () => {
+    const dom = useElements();
+    await web.init();
+
+    nowPlaying({ title: 'Movie', duration: 600, elapsedTime: 60, playbackRate: 0 });
+    expect(dom.get('#miniProgress').style.width).toBe('10.0%');
+
+    nowPlaying({ title: 'Live' });
+    expect(dom.get('#miniProgress').style.width).toBe('0');
+  });
+
+  describe('saved Apple TVs', () => {
+    const second = { identifier: 'tv-2', name: 'Back Room', companionPaired: false };
+    const buttons = (dom: ReturnType<typeof useElements>) =>
+      dom.get('#miniDevices').appendChild.mock.calls.map(([button]) => button);
+
+    function createButtons(): void {
+      vi.mocked(document.createElement).mockImplementation(() => fakeElement() as never);
+    }
+    const defaultCreate = vi.mocked(document.createElement).getMockImplementation()!;
+    afterEach(() => vi.mocked(document.createElement).mockImplementation(defaultCreate));
+
+    it('stacks a row for each TV other than the connected one', async () => {
+      const dom = useElements();
+      createButtons();
+      useDevices([creds, second]);
+      await web.init();
+      dom.get('#miniDevices').appendChild.mockClear();
+      state('connecting');
+
+      expect(buttons(dom)).toHaveLength(1);
+      expect(buttons(dom)[0].setAttribute).toHaveBeenCalledWith(
+        'aria-label',
+        'Switch to Back Room',
+      );
+    });
+
+    it('switches to the chosen TV', async () => {
+      const dom = useElements();
+      createButtons();
+      useDevices([creds, second]);
+      await web.init();
+      state('connecting');
+
+      const other = buttons(dom).at(-1)!;
+      const click = other.addEventListener.mock.calls.find(([name]) => name === 'click')![1];
+      click();
+      await vi.waitFor(() => expect(desktopAPI.connect).toHaveBeenCalledWith('tv-2'));
+    });
+
+    it('adds no rows for a single TV, since there is nothing to switch to', async () => {
+      const dom = useElements();
+      createButtons();
+      useDevices([creds]);
+      await web.init();
+      state('connecting');
+
+      expect(dom.get('#miniDevices').appendChild).not.toHaveBeenCalled();
+      expect(dom.get('#miniDevices').innerHTML).toBe('');
+    });
+  });
+
+  it('expands for Settings, pairing, and any dialog, which need the full window', async () => {
+    useElements();
+    await web.init();
+
+    for (const open of [
+      () => contextMenuAction('openSettings'),
+      () => state('pairing'),
+      () => dialogObserved(),
+    ]) {
+      bodyClass().mockClear();
+      void open();
+      expect(bodyClass()).toHaveBeenCalledWith('mini', false);
+    }
   });
 });
 
