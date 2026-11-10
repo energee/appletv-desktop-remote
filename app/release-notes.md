@@ -1,8 +1,19 @@
-## No more password prompts on Mac
+## A smaller remote
 
-- The Mac app no longer uses Keychain, so it never asks for your password when it opens.
-- **After updating, pair your Apple TV again.** Mac pairings from earlier versions can't be read without a password prompt, so they don't carry over. You'll need the PIN from your TV once. Windows pairings aren't affected.
-- Mac pairing keys now live in a private file in the app's data folder. The file isn't encrypted, so any app running under your account can read it.
+- The remote is much shorter, and it no longer grows when something starts playing.
+- What's playing now shows on the touchpad, over its artwork when the playing app provides any.
+- Back, volume, play/pause, and Home share one row, with skip beside the seek bar. Apps and Keyboard sit in the header.
+- On AirPods and HomePod, changing the volume briefly shows a volume slider in place of the seek bar.
+
+## Every Apple TV in a mini bar
+
+- Click the chevron at the top left to collapse the remote to a mini bar with play/pause and volume.
+- Every other saved Apple TV gets a row of its own, showing what it's playing, with its own play/pause and volume. Click a row's name to switch the full remote to that TV.
+- The remote always opens full size. Settings, pairing, and dialogs expand it automatically.
+
+## Updating from v0.7.6 or earlier on a Mac
+
+Pair your Apple TV again after updating. Since v0.7.7 the Mac app no longer uses Keychain, so it never asks for your password, and pairings from earlier versions don't carry over.
 
 ## Installation caveats
 
