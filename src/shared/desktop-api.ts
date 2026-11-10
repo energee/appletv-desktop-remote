@@ -3,7 +3,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
-import type { ConnectionState, NowPlayingInfo, PowerStatus, SavedDevice, Speaker } from './types';
+import type {
+  ConnectionState,
+  NowPlayingInfo,
+  PowerStatus,
+  SavedDevice,
+  Speaker,
+  WatchedTvUpdate,
+} from './types';
 import type { CompanionStatus, TextFocusState, TextInputState } from './companion-api';
 
 export interface ContextMenuConfig {
@@ -64,6 +71,17 @@ function nowPlayingInfo(data: unknown): NowPlayingInfo {
     if (typeof value === 'number') info[key] = value;
   }
   return info;
+}
+
+function watchedTvUpdate(data: unknown): WatchedTvUpdate | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const { identifier, state, nowPlaying } = data as Record<string, unknown>;
+  if (typeof identifier !== 'string') return null;
+  const update: WatchedTvUpdate = { identifier };
+  const status = connectionState(state);
+  if (status) update.state = status;
+  if (nowPlaying !== undefined) update.nowPlaying = nowPlayingInfo(nowPlaying);
+  return update;
 }
 
 const statuses: readonly ConnectionState['status'][] = [
@@ -207,6 +225,16 @@ export const desktopAPI = {
     }),
   onAtvNowPlaying: (callback: (info: NowPlayingInfo) => void) =>
     subscribe('backend:now-playing', (data) => callback(nowPlayingInfo(data))),
+  watch: (identifier: string) => backendRequest<void>('watch', { identifier }),
+  unwatch: (identifier: string) => backendRequest<void>('unwatch', { identifier }),
+  sendWatchedKey: (identifier: string, key: string) =>
+    backendRequest<void>('sendWatchedKey', { identifier, key }),
+  /** Updates from TVs other than the selected one, while watched for the mini bar. */
+  onWatchedTv: (callback: (update: WatchedTvUpdate) => void) =>
+    subscribe('backend:watched', (data) => {
+      const update = watchedTvUpdate(data);
+      if (update) callback(update);
+    }),
   /** The playing item's artwork as a data URL, or null when it has none. */
   onAtvArtwork: (callback: (url: string | null) => void) =>
     subscribe('backend:artwork', (data) =>

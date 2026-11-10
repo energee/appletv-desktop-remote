@@ -4,19 +4,21 @@
 // Protocol: one JSON object per line. Requests are `{ id, method, params }` and are handled
 // concurrently, so replies `{ id, result }` or `{ id, error }` can arrive in any order. Events
 // are `{ event, data }`: `state` (ConnectionState), `now-playing`, `artwork` (a data URL or null),
-// `power-state` (PowerStatus), `volume` (0-100 or null), `outputs` (the selected output IDs), and
-// `error`. `connect` and
+// `power-state` (PowerStatus), `volume` (0-100 or null), `outputs` (the selected output IDs),
+// `watched` (a WatchUpdate for a TV other than the selected one), and `error`. `connect` and
 // `reconnect` reply at once and report progress as `state`. Logs go only to stderr. When stdin
 // closes, requests that finish within a second are still answered, then the process exits.
 import { Console } from 'node:console';
 import { createInterface } from 'node:readline';
 import ATVService from './atv_service';
+import TvWatchers from './watchers';
 import type { ATVKeyName } from '../shared/types';
 
 // stdout belongs exclusively to the protocol, including logs from dependencies.
 globalThis.console = new Console({ stdout: process.stderr, stderr: process.stderr });
 
 const service = new ATVService();
+const watchers = new TvWatchers(() => new ATVService());
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 type RequestId = string | number;
 interface Request {
@@ -80,6 +82,21 @@ async function dispatch({ method, params }: Request): Promise<unknown> {
         credentials: stringParam(params, 'credentials'),
         identifier: stringParam(params, 'identifier'),
       });
+      return null;
+    case 'watch':
+      watchers.watch({
+        credentials: stringParam(params, 'credentials'),
+        identifier: stringParam(params, 'identifier'),
+      });
+      return null;
+    case 'unwatch':
+      await watchers.unwatch(stringParam(params, 'identifier'));
+      return null;
+    case 'sendWatchedKey':
+      await watchers.sendKey(
+        stringParam(params, 'identifier'),
+        stringParam(params, 'key') as ATVKeyName,
+      );
       return null;
     case 'disconnect':
       await service.disconnect();
@@ -157,13 +174,14 @@ for (const event of [
   service.on(event, (data: unknown = null) => send({ event, data }));
 }
 service.on('error', (error: Error) => send({ event: 'error', data: { message: error.message } }));
+watchers.on('update', (data: unknown) => send({ event: 'watched', data }));
 
 let stopping = false;
 async function stop(id?: RequestId): Promise<void> {
   if (stopping) return;
   stopping = true;
   input.close();
-  await service.destroy();
+  await Promise.all([service.destroy(), watchers.closeAll()]);
   if (id !== undefined) send({ id, result: null });
   // Existing service/library timers must not keep an orphaned sidecar alive.
   process.stdout.end(() => process.exit(0));

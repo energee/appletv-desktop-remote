@@ -73,6 +73,13 @@ export const PlaybackState = {
   Seeking: 5,
 } as const;
 
+/** A change on a TV other than the selected one, reported while the mini bar watches it. */
+export interface WatchedTvUpdate {
+  identifier: string;
+  state?: ConnectionState;
+  nowPlaying?: NowPlayingInfo;
+}
+
 /** The parts of the library's now-playing snapshot that reach the webview. */
 export interface NowPlayingInfo {
   title?: string;

@@ -9,6 +9,8 @@ import {
   type ConnectionState,
   type NowPlayingInfo,
   type Speaker,
+  type WatchedTvUpdate,
+  type SavedDevice,
 } from '../shared/types';
 import { desktopAPI, type ContextMenuConfig } from '../shared/desktop-api';
 import { icon } from './icons';
@@ -78,7 +80,7 @@ export function initIPC(): void {
   // After sleep the old socket is usually dead but not yet closed; a relaunched sidecar has no
   // connection at all. Either way the sidecar starts a fresh one unless pairing is under way.
   desktopAPI.onPowerResume(reconnectToATV);
-  desktopAPI.onBackendLost(reconnectToATV);
+  desktopAPI.onBackendLost(recoverFromLostBackend);
   // While connected an error is only logged: if the connection drops, Reconnecting says so,
   // and if it survives, the message would sit on the remote with nothing wrong.
   desktopAPI.onErrorMessage((msg: string) => {
@@ -92,6 +94,7 @@ export function initIPC(): void {
   desktopAPI.onAtvState(renderState);
   desktopAPI.onAtvNowPlaying(updateNowPlaying);
   desktopAPI.onAtvArtwork(showArtwork);
+  desktopAPI.onWatchedTv(updateWatchedTv);
   desktopAPI.onAtvVolume(showVolume);
   // The TV confirmed a change of outputs: update the checks without scanning again.
   desktopAPI.onAtvOutputs((ids) => {
@@ -895,6 +898,22 @@ let position = NO_POSITION;
 /** True while the seek bar is being dragged, so the clock does not move it. */
 let dragging = false;
 
+/** The position `info` reports. The TV can report rate 1 for a moment after pausing. */
+function reportedPosition(info: NowPlayingInfo): typeof NO_POSITION {
+  const playing = info.playbackState === PlaybackState.Playing;
+  return {
+    duration: info.duration ?? 0,
+    elapsed: info.elapsedTime ?? 0,
+    at: info.timestamp ? (info.timestamp + MRP_EPOCH_OFFSET) * 1000 : Date.now(),
+    rate: playing ? (info.playbackRate ?? 1) : 0,
+  };
+}
+
+/** Where a position has reached by now, as the clock advances it between reports. */
+function secondsNow({ elapsed, rate, at, duration }: typeof NO_POSITION): number {
+  return Math.min(duration, Math.max(0, elapsed + (rate * (Date.now() - at)) / 1000));
+}
+
 function formatTime(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   const h = Math.floor(total / 3600);
@@ -919,8 +938,7 @@ function renderSeekBar(): void {
   seek.style.display = position.duration > 0 ? '' : 'none';
   if (position.duration <= 0) $('#miniProgress')!.style.width = '0';
   if (position.duration <= 0 || dragging) return;
-  const now = position.elapsed + (position.rate * (Date.now() - position.at)) / 1000;
-  const seconds = Math.min(position.duration, Math.max(0, now));
+  const seconds = secondsNow(position);
   const bar = $('#seekBar') as HTMLInputElement;
   bar.max = String(Math.round(position.duration));
   setSeekBar(bar, seconds);
@@ -944,19 +962,14 @@ function initSeekBar(): void {
   // The TV reports the position only when it changes, so while playing the clock advances it.
   setInterval(() => {
     if (position.rate) renderSeekBar();
+    renderRowProgress();
   }, 1000);
 }
 
 /** Shows the title, artist, and position, and a pause icon on the play button while playing. */
 function updateNowPlaying(info: NowPlayingInfo): void {
   reportedPlaying = info.playbackState === PlaybackState.Playing;
-  position = {
-    duration: info.duration ?? 0,
-    elapsed: info.elapsedTime ?? 0,
-    at: info.timestamp ? (info.timestamp + MRP_EPOCH_OFFSET) * 1000 : Date.now(),
-    // The TV can report rate 1 for a moment after pausing; only a playing item moves.
-    rate: reportedPlaying ? (info.playbackRate ?? 1) : 0,
-  };
+  position = reportedPosition(info);
   renderSeekBar();
   if (reportedPlaying === iconPlaying) cancelFlip();
   if (!flipTimer) showPlayPauseIcon(reportedPlaying);
@@ -1013,41 +1026,184 @@ function renderMiniText(): void {
   const { title, artist } = playingText;
   const playing = title || artist;
   $('#miniTitle')!.textContent = playing || $('#deviceName')!.textContent;
-  $('#miniSubtitle')!.textContent = playing ? title && artist : 'Nothing playing';
+  // With rows below, the room says which TV this is; the title alone would not.
+  const room = otherDevices().length > 0 ? $('#deviceName')!.textContent : title && artist;
+  $('#miniSubtitle')!.textContent = playing ? room : 'Nothing playing';
+}
+
+// --- Mini bar rows: the other saved TVs ---
+
+/** Which TVs have a watch connection; they live only while the mini bar is open. */
+const watchedIds = new Set<string>();
+const watchedTvs = new Map<string, { status: ConnectionState['status']; info: NowPlayingInfo }>();
+/** Each row's progress fill, which the clock moves between the TV's reports. */
+const rowProgress = new Map<string, HTMLElement>();
+let miniOpen = false;
+
+function otherDevices(): SavedDevice[] {
+  const active = getActiveIdentifier();
+  return Object.values(loadDevices()).filter(({ identifier }) => identifier !== active);
+}
+
+function logWatchError(error: unknown): void {
+  console.error('Watching an Apple TV failed:', error);
+}
+
+/** Opens a connection to each TV with a row, and closes the rest. */
+function syncWatchedTvs(): void {
+  const wanted = new Set(miniOpen ? otherDevices().map(({ identifier }) => identifier) : []);
+  for (const identifier of watchedIds) {
+    if (wanted.has(identifier)) continue;
+    watchedIds.delete(identifier);
+    watchedTvs.delete(identifier);
+    desktopAPI.unwatch(identifier).catch(logWatchError);
+  }
+  for (const identifier of wanted) {
+    if (watchedIds.has(identifier)) continue;
+    watchedIds.add(identifier);
+    desktopAPI.watch(identifier).catch(logWatchError);
+  }
+}
+
+function updateWatchedTv({ identifier, state, nowPlaying }: WatchedTvUpdate): void {
+  // A report can arrive just after the row's connection was closed.
+  if (!watchedIds.has(identifier)) return;
+  const tv = watchedTvs.get(identifier);
+  const status = state?.status ?? tv?.status ?? 'connecting';
+  const info = nowPlaying ?? (status === 'connected' ? (tv?.info ?? {}) : {});
+  watchedTvs.set(identifier, { status, info });
+  renderMiniDevices();
+}
+
+/** The sidecar's watch connections died with it, so the next render opens them again. */
+function recoverFromLostBackend(): void {
+  watchedIds.clear();
+  watchedTvs.clear();
+  reconnectToATV();
+}
+
+function createElement<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className: string,
+  text = '',
+): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tag);
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function rowSubtitle(name: string, status: ConnectionState['status'], playing: boolean): string {
+  if (playing) return name;
+  if (status === 'connected') return 'Nothing playing';
+  return status === 'disconnected' ? 'Not available' : 'Connecting…';
+}
+
+function rowControl(
+  className: string,
+  iconName: string,
+  label: string,
+  send: () => void,
+  connected: boolean,
+): HTMLButtonElement {
+  const button = createElement('button', `directionCircle ${className}`);
+  button.type = 'button';
+  button.innerHTML = icon(iconName);
+  button.disabled = !connected;
+  button.setAttribute('aria-label', label);
+  button.addEventListener('click', send);
+  return button;
+}
+
+/** A row like the bar above: the TV's playback and controls, and its text switches to it. */
+function miniRow({ identifier, name }: SavedDevice): HTMLElement {
+  const { status, info } = watchedTvs.get(identifier) ?? { status: 'connecting', info: {} };
+  const item = info.title || info.artist;
+  const connected = status === 'connected';
+  const send = (key: ATVKeyName) => () => {
+    desktopAPI.sendWatchedKey(identifier, key).catch(showRequestError);
+  };
+
+  const text = createElement('button', 'mini-text');
+  text.type = 'button';
+  text.setAttribute('aria-label', `Switch to ${name}`);
+  text.addEventListener('click', () => {
+    void handleContextMenuAction('selectDevice', identifier);
+  });
+  const title = createElement('div', 'mini-title');
+  const dotState = connected || status === 'disconnected' ? status : 'connecting';
+  title.appendChild(createElement('span', `connection-dot ${dotState}`));
+  title.appendChild(createElement('span', 'mini-name', item || name));
+  text.appendChild(title);
+  text.appendChild(createElement('div', 'mini-subtitle', rowSubtitle(name, status, Boolean(item))));
+
+  const playing = info.playbackState === PlaybackState.Playing;
+  const row = createElement('div', 'mini-row');
+  row.appendChild(text);
+  for (const control of [
+    rowControl(
+      'media-btn play-btn mini-play',
+      playing ? 'pause' : 'play',
+      `Play or pause ${name}`,
+      send('play_pause'),
+      connected,
+    ),
+    rowControl(
+      'secondary-btn transport-btn',
+      'volume-1',
+      `Lower volume on ${name}`,
+      send('volume_down'),
+      connected,
+    ),
+    rowControl(
+      'secondary-btn transport-btn',
+      'volume-2',
+      `Raise volume on ${name}`,
+      send('volume_up'),
+      connected,
+    ),
+  ]) {
+    row.appendChild(control);
+  }
+
+  const progress = createElement('div', 'mini-progress');
+  const fill = createElement('div', 'mini-progress-fill');
+  progress.appendChild(fill);
+  row.appendChild(progress);
+  rowProgress.set(identifier, fill);
+  return row;
+}
+
+function renderRowProgress(): void {
+  for (const [identifier, fill] of rowProgress) {
+    const position = reportedPosition(watchedTvs.get(identifier)?.info ?? {});
+    const played = position.duration > 0 ? (secondsNow(position) / position.duration) * 100 : 0;
+    fill.style.width = `${played.toFixed(1)}%`;
+  }
 }
 
 /**
- * Stacks a row under the bar for each other saved TV, which also gives the bar a way to switch.
- * The app connects to one TV at a time, so only the bar above shows live state and controls.
+ * Rebuilds the rows under the bar. The app controls the selected TV through the bar and the rest
+ * through their rows, each over its own connection.
  */
+// ponytail: rebuilds every row on each report; patch the rows in place if clicks ever get lost.
 function renderMiniDevices(): void {
+  syncWatchedTvs();
   const list = $('#miniDevices')!;
   list.innerHTML = '';
-  const active = getActiveIdentifier();
-  for (const { identifier, name } of Object.values(loadDevices())) {
-    if (identifier === active) continue;
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.setAttribute('aria-label', `Switch to ${name}`);
-    const title = document.createElement('span');
-    title.className = 'mini-device-name';
-    title.textContent = name;
-    const note = document.createElement('span');
-    note.className = 'mini-device-note';
-    note.textContent = 'Click to switch';
-    row.appendChild(title);
-    row.appendChild(note);
-    row.addEventListener('click', () => {
-      void handleContextMenuAction('selectDevice', identifier);
-    });
-    list.appendChild(row);
-  }
+  rowProgress.clear();
+  if (!miniOpen) return;
+  for (const device of otherDevices()) list.appendChild(miniRow(device));
+  renderRowProgress();
 }
 
 /** Switches between the full remote and the mini bar; the window follows the page's height. */
 function setMini(on: boolean): void {
   if (on) hideSettings();
+  miniOpen = on;
   document.body.classList.toggle('mini', on);
+  renderMiniDevices();
+  renderMiniText();
 }
 
 function initMiniBar(): void {
