@@ -1385,15 +1385,26 @@ body.volume-active #seek {
 
 /* The mini bar leads the page, and only what's left of the remote is text it may need to show. */
 body.mini #miniBar {
-  position: relative;
   order: -1;
   display: flex;
+}
+
+/* The bar and the rows for other TVs share one shape. */
+#miniBar,
+.mini-row {
+  position: relative;
   flex: none;
   align-items: center;
   gap: 2px;
   width: 100%;
   height: 64px;
   padding: 0 8px 0 14px;
+}
+
+/* The extra right padding stands in for the bar's chevron, so the controls line up. */
+.mini-row {
+  display: flex;
+  padding-right: 36px;
 }
 
 body.mini #keyboardButtonDiv {
@@ -1424,6 +1435,27 @@ body.mini .transport > :not(#volume) {
   margin-right: 4px;
 }
 
+/* In a row the text is the button that switches to that TV. */
+button.mini-text {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.mini-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mini-row .directionCircle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .mini-title {
   display: flex;
   align-items: center;
@@ -1432,14 +1464,14 @@ body.mini .transport > :not(#volume) {
   font-weight: 600;
 }
 
-#miniTitle,
-#miniSubtitle {
+.mini-name,
+.mini-subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-#miniSubtitle {
+.mini-subtitle {
   margin-top: 2px;
   font-size: 11px;
   color: var(--text-secondary);
@@ -1460,14 +1492,13 @@ body.mini .transport > :not(#volume) {
   background: var(--accent-glass);
 }
 
-#miniProgress {
+.mini-progress-fill {
   width: 0;
   height: 100%;
   background: var(--text-secondary);
 }
 
-/* A row per other saved TV, matching the bar above. No :not(:empty) to hide it: WebKit misses rows
-   added later. Empty, it simply has no height. */
+/* No :not(:empty) to hide it: WebKit misses rows added later. Empty, it simply has no height. */
 #miniDevices {
   display: none;
 }
@@ -1476,60 +1507,6 @@ body.mini #miniDevices {
   order: -1;
   display: block;
   width: 100%;
-}
-
-#miniDevices button {
-  display: block;
-  width: 100%;
-  height: 64px;
-  padding: 0 14px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-#miniDevices button:hover {
-  background: var(--glass-hover);
-}
-
-#miniDevices button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.mini-device-name,
-.mini-device-note {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mini-device-name {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-/* The same dot as the bar's, grey because this TV isn't connected. */
-.mini-device-name::before {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  vertical-align: 1px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  content: '';
-}
-
-.mini-device-note {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--text-secondary);
 }
 
 /* A volume change swaps the text for the slider, as it swaps the seek bar on the full remote. */

@@ -95,6 +95,30 @@ describe('desktopAPI', () => {
     ]);
   });
 
+  it('passes on updates from watched TVs, dropping ones without a TV', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const update = vi.fn();
+    desktopAPI.onWatchedTv(update);
+
+    for (const data of [
+      { identifier: 'tv', state: { status: 'connected' } },
+      { identifier: 'tv', nowPlaying: { title: 'Movie', extra: true } },
+      { state: { status: 'connected' } },
+      'nonsense',
+    ]) {
+      onBackendEvent({ payload: { event: 'watched', data } });
+    }
+
+    expect(update.mock.calls).toEqual([
+      [{ identifier: 'tv', state: { status: 'connected' } }],
+      [{ identifier: 'tv', nowPlaying: { title: 'Movie' } }],
+    ]);
+  });
+
   it('passes on only known power states', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [

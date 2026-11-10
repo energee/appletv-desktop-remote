@@ -44,7 +44,7 @@ async fn backend_request(
                     .map_err(|error| error.to_string())
             }
         }
-        "connect" | "reconnect" => {
+        "connect" | "reconnect" | "watch" => {
             let identifier = params
                 .as_object()
                 .and_then(|params| params.get("identifier"))
@@ -53,7 +53,10 @@ async fn backend_request(
             if params.as_object().is_none_or(|params| params.len() != 1) {
                 return Err("Credentials may only be supplied by the native vault".into());
             }
-            vault.clear_pending_pair()?;
+            // Watching another TV for the mini bar must not disturb a pairing in progress.
+            if method != "watch" {
+                vault.clear_pending_pair()?;
+            }
             state
                 .request(method, vault.connection_params(identifier)?)
                 .await

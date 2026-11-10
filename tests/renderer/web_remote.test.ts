@@ -6,6 +6,7 @@ import {
   type ConnectionState,
   type NowPlayingInfo,
   type SavedDevice,
+  type WatchedTvUpdate,
 } from '../../src/shared/types';
 import { icon } from '../../src/renderer/icons';
 import type * as RendererState from '../../src/renderer/state';
@@ -31,6 +32,10 @@ const desktopAPI = {
   onAtvState: vi.fn(),
   onAtvNowPlaying: vi.fn(),
   onAtvArtwork: vi.fn(),
+  onWatchedTv: vi.fn(),
+  watch: vi.fn(),
+  unwatch: vi.fn(),
+  sendWatchedKey: vi.fn(),
   onAtvPowerState: vi.fn(),
   onAtvVolume: vi.fn(),
   onAtvOutputs: vi.fn(),
@@ -177,6 +182,7 @@ let keydown: (event: unknown) => void;
 let setState: (state: ConnectionState) => void;
 let nowPlaying: (info: NowPlayingInfo) => void;
 let artwork: (url: string | null) => void;
+let watched: (update: WatchedTvUpdate) => void;
 let powerState: (state: 'on' | 'off' | 'unknown') => void;
 let volume: (level: number | null) => void;
 let outputs: (ids: string[]) => void;
@@ -212,6 +218,7 @@ beforeAll(async () => {
   setState = desktopAPI.onAtvState.mock.calls[0][0];
   nowPlaying = desktopAPI.onAtvNowPlaying.mock.calls[0][0];
   artwork = desktopAPI.onAtvArtwork.mock.calls[0][0];
+  watched = desktopAPI.onWatchedTv.mock.calls[0][0];
   powerState = desktopAPI.onAtvPowerState.mock.calls[0][0];
   volume = desktopAPI.onAtvVolume.mock.calls[0][0];
   outputs = desktopAPI.onAtvOutputs.mock.calls[0][0];
@@ -237,6 +244,9 @@ beforeEach(() => {
     desktopAPI.seek,
     desktopAPI.startPair,
     desktopAPI.showContextMenu,
+    desktopAPI.watch,
+    desktopAPI.unwatch,
+    desktopAPI.sendWatchedKey,
   ]) {
     request.mockResolvedValue(undefined);
   }
@@ -1011,54 +1021,135 @@ describe('mini bar', () => {
     expect(dom.get('#miniProgress').style.width).toBe('0');
   });
 
-  describe('saved Apple TVs', () => {
+  describe('other Apple TVs', () => {
     const second = { identifier: 'tv-2', name: 'Back Room', companionPaired: false };
-    const buttons = (dom: ReturnType<typeof useElements>) =>
-      dom.get('#miniDevices').appendChild.mock.calls.map(([button]) => button);
-
-    function createButtons(): void {
-      vi.mocked(document.createElement).mockImplementation(() => fakeElement() as never);
-    }
     const defaultCreate = vi.mocked(document.createElement).getMockImplementation()!;
-    afterEach(() => vi.mocked(document.createElement).mockImplementation(defaultCreate));
+    let created: ReturnType<typeof fakeElement>[];
 
-    it('stacks a row for each TV other than the connected one', async () => {
+    /** Connects with two saved TVs and collapses to the mini bar. */
+    async function openMini() {
       const dom = useElements();
-      createButtons();
+      created = [];
+      vi.mocked(document.createElement).mockImplementation(() => {
+        const element = { ...fakeElement(), className: '', disabled: false };
+        created.push(element);
+        return element as never;
+      });
       useDevices([creds, second]);
       await web.init();
-      dom.get('#miniDevices').appendChild.mockClear();
       state('connecting');
+      state('connected');
+      dom.listener('#collapseButton', 'click')();
+      return dom;
+    }
+    const labelled = (label: string) =>
+      created.findLast((element) =>
+        element.setAttribute.mock.calls.some(([, value]) => value === label),
+      )!;
+    const click = (element: ReturnType<typeof fakeElement>) =>
+      (element.addEventListener.mock.calls.find(([name]) => name === 'click')![1] as () => void)();
+    const text = (value: string) => created.some((element) => element.textContent === value);
 
-      expect(buttons(dom)).toHaveLength(1);
-      expect(buttons(dom)[0].setAttribute).toHaveBeenCalledWith(
-        'aria-label',
-        'Switch to Back Room',
-      );
+    afterEach(async () => {
+      // Leaves the mini bar, so the next test starts with nothing watched.
+      useDevices([creds]);
+      contextMenuAction('openSettings');
+      vi.mocked(document.createElement).mockImplementation(defaultCreate);
     });
 
-    it('switches to the chosen TV', async () => {
-      const dom = useElements();
-      createButtons();
-      useDevices([creds, second]);
-      await web.init();
-      state('connecting');
+    it('connects to the other TVs only while the mini bar is open', async () => {
+      const dom = await openMini();
+      expect(desktopAPI.watch.mock.calls).toEqual([['tv-2']]);
+      expect(desktopAPI.unwatch).not.toHaveBeenCalled();
 
-      const other = buttons(dom).at(-1)!;
-      const click = other.addEventListener.mock.calls.find(([name]) => name === 'click')![1];
-      click();
+      dom.listener('#miniExpand', 'click')();
+      expect(desktopAPI.unwatch.mock.calls).toEqual([['tv-2']]);
+    });
+
+    it('watches the previous TV instead of the newly selected one', async () => {
+      await openMini();
+      desktopAPI.watch.mockClear();
+
+      click(labelled('Switch to Back Room'));
       await vi.waitFor(() => expect(desktopAPI.connect).toHaveBeenCalledWith('tv-2'));
+      state('connecting');
+
+      expect(desktopAPI.unwatch).toHaveBeenCalledWith('tv-2');
+      expect(desktopAPI.watch).toHaveBeenCalledWith(creds.identifier);
     });
 
-    it('adds no rows for a single TV, since there is nothing to switch to', async () => {
+    it('shows what each TV is playing, named by room', async () => {
+      await openMini();
+      watched({ identifier: 'tv-2', state: { status: 'connected' } });
+      watched({ identifier: 'tv-2', nowPlaying: { title: 'Cartoon' } });
+
+      expect(text('Cartoon')).toBe(true);
+      expect(text('Back Room')).toBe(true);
+    });
+
+    it('says when a TV has nothing playing or cannot be reached', async () => {
+      await openMini();
+      watched({ identifier: 'tv-2', state: { status: 'connected' } });
+      expect(text('Nothing playing')).toBe(true);
+
+      watched({ identifier: 'tv-2', state: { status: 'disconnected' } });
+      expect(text('Not available')).toBe(true);
+    });
+
+    it('controls that TV from its row, only while it is connected', async () => {
+      await openMini();
+      expect(labelled('Play or pause Back Room').disabled).toBe(true);
+
+      watched({ identifier: 'tv-2', state: { status: 'connected' } });
+      expect(labelled('Play or pause Back Room').disabled).toBe(false);
+      click(labelled('Play or pause Back Room'));
+      click(labelled('Raise volume on Back Room'));
+
+      expect(desktopAPI.sendWatchedKey.mock.calls).toEqual([
+        ['tv-2', 'play_pause'],
+        ['tv-2', 'volume_up'],
+      ]);
+      expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+    });
+
+    it('shows a pause icon while that TV plays', async () => {
+      await openMini();
+      watched({ identifier: 'tv-2', state: { status: 'connected' } });
+      watched({
+        identifier: 'tv-2',
+        nowPlaying: { title: 'Cartoon', playbackState: PlaybackState.Playing },
+      });
+
+      expect(labelled('Play or pause Back Room').innerHTML).toBe(icon('pause'));
+    });
+
+    it('shows the room under the title in the bar, so rooms can be told apart', async () => {
+      const dom = await openMini();
+      nowPlaying({ title: 'Movie', artist: 'Director' });
+
+      expect(dom.get('#miniTitle').textContent).toBe('Movie');
+      expect(dom.get('#miniSubtitle').textContent).toBe(creds.name);
+    });
+
+    it('rewatches after the sidecar restarts, since its connections died with it', async () => {
+      await openMini();
+      desktopAPI.watch.mockClear();
+
+      backendLost();
+      state('connecting');
+
+      expect(desktopAPI.watch).toHaveBeenCalledWith('tv-2');
+    });
+
+    it('adds no rows and no connections for a single TV', async () => {
       const dom = useElements();
-      createButtons();
       useDevices([creds]);
       await web.init();
-      state('connecting');
+      state('connected');
+      dom.listener('#collapseButton', 'click')();
 
       expect(dom.get('#miniDevices').appendChild).not.toHaveBeenCalled();
-      expect(dom.get('#miniDevices').innerHTML).toBe('');
+      expect(desktopAPI.watch).not.toHaveBeenCalled();
     });
   });
 
