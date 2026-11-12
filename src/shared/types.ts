@@ -82,6 +82,7 @@ export interface WatchedTvUpdate {
 
 /** The parts of the library's now-playing snapshot that reach the webview. */
 export interface NowPlayingInfo {
+  /** The item's title, or the app's name while it plays or is paused without a title or artist. */
   title?: string;
   artist?: string;
   album?: string;

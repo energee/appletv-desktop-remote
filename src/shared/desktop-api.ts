@@ -3,13 +3,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
-import type {
-  ConnectionState,
-  NowPlayingInfo,
-  PowerStatus,
-  SavedDevice,
-  Speaker,
-  WatchedTvUpdate,
+import {
+  PlaybackState,
+  type ConnectionState,
+  type NowPlayingInfo,
+  type PowerStatus,
+  type SavedDevice,
+  type Speaker,
+  type WatchedTvUpdate,
 } from './types';
 import type { CompanionStatus, TextFocusState, TextInputState } from './companion-api';
 
@@ -70,6 +71,12 @@ function nowPlayingInfo(data: unknown): NowPlayingInfo {
     const value = record[key];
     if (typeof value === 'number') info[key] = value;
   }
+  // Netflix reports that it is playing or paused and nothing else: no title, artist, or position.
+  // Its name stands in as the title, so the remote shows "Netflix" rather than "Nothing playing".
+  const app = record.appDisplayName;
+  const active =
+    info.playbackState === PlaybackState.Playing || info.playbackState === PlaybackState.Paused;
+  if (active && !info.title && !info.artist && typeof app === 'string') info.title = app;
   return info;
 }
 
