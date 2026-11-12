@@ -682,6 +682,31 @@ describe('ATVService', () => {
         expect(artwork.mock.calls).toEqual([['data:image/jpeg;base64,/9g=']]);
       });
 
+      it('asks again when the TV swaps the picture of the same item', async () => {
+        // Plex (Apple TV HD, tvOS 26): a new episode arrives still carrying the last one's picture.
+        // About 6 s later an UpdateContentItem changes only the item's artworkIdentifier.
+        const artwork = vi.fn();
+        service.on('artwork', artwork);
+        const device = await connected();
+        device.requestArtwork.mockResolvedValueOnce(Buffer.from([0xff, 0xd8]));
+        device.requestArtwork.mockResolvedValueOnce(Buffer.from([0x89, 0x50]));
+        const report = async (artworkIdentifier: string) => {
+          const contentItems = [{ metadata: { artworkIdentifier } }];
+          device.emit('message', { payload: { '.updateContentItemMessage': { contentItems } } });
+          device.emit('nowPlaying', { title: 'Episode 2', contentIdentifier: '2' });
+          await flush();
+        };
+
+        await report('last-episode');
+        await report('last-episode');
+        await report('this-episode');
+
+        expect(artwork.mock.calls).toEqual([
+          ['data:image/jpeg;base64,/9g='],
+          ['data:image/png;base64,iVA='],
+        ]);
+      });
+
       it('asks again for the same item on a new connection', async () => {
         const first = await connected(tv1);
         first.emit('nowPlaying', { title: 'Movie' });

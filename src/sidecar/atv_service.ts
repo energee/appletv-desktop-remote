@@ -72,6 +72,21 @@ function artworkDataUrl(bytes: Buffer | null): string | null {
   return `data:image/${bytes[0] === 0x89 ? 'png' : 'jpeg'};base64,${bytes.toString('base64')}`;
 }
 
+/** The parts of a raw MRP message that name an item's picture. */
+interface ItemList {
+  contentItems?: { metadata?: { artworkIdentifier?: string } }[];
+}
+interface ArtworkMessage {
+  '.setStateMessage'?: { playbackQueue?: ItemList };
+  '.updateContentItemMessage'?: ItemList;
+}
+
+/** The picture ID a SetState or UpdateContentItem gives its first item, if it gives one. */
+function artworkIdentifier(payload: ArtworkMessage): string | undefined {
+  const list = payload['.setStateMessage']?.playbackQueue ?? payload['.updateContentItemMessage'];
+  return list?.contentItems?.[0]?.metadata?.artworkIdentifier;
+}
+
 /** PlaybackQueueRequest error for an idle receiver with no now-playing client. */
 const NO_NOW_PLAYING_CLIENT = 35;
 
@@ -97,6 +112,8 @@ class ATVService extends EventEmitter {
   private playbackState: number = PlaybackState.Unknown;
   /** The item whose artwork was last requested, so position updates don't request it again. */
   private artworkItem: { device: AppleTV; key: string } | null = null;
+  /** The picture ID the TV last gave an item; a change means the item's picture changed. */
+  private artworkId = '';
   /** Optional Companion pairing never replaces the ordinary MRP connection. */
   private companionPairing: CompanionPairSetup | null = null;
   private companionPairEpoch = 0;
@@ -317,6 +334,15 @@ class ATVService extends EventEmitter {
     device.on('powerState', (state) => {
       if (device === this.device) this.emit('power-state', state);
     });
+    // Plex shows a new item with the previous item's picture and swaps it seconds later, changing
+    // only the picture ID, which the library's now-playing snapshot leaves out. The library emits
+    // `message` before the `nowPlaying` that the same message causes, so the ID is set in time.
+    // ponytail: takes the ID from any player's message, not only the active one's; the cost is
+    // a spare artwork request. Match the player path if those ever become frequent.
+    device.on('message', ({ payload }: { payload: ArtworkMessage }) => {
+      const id = artworkIdentifier(payload);
+      if (device === this.device && id) this.artworkId = id;
+    });
     device.on('nowPlaying', (info) => {
       if (device !== this.device) return;
       // Apps such as Plex report through the TV's default player, which accepts the explicit
@@ -356,13 +382,14 @@ class ATVService extends EventEmitter {
   }
 
   /**
-   * Emits `artwork` for each new item: a data URL, or null when there is none. The TV repeats
-   * now-playing as the position changes, and a slow reply may outlive its item, so both are
-   * filtered out by `artworkItem`.
+   * Emits `artwork` for each new item, and again when the TV changes that item's picture: a data
+   * URL, or null when there is none. The TV repeats now-playing as the position changes, and a
+   * slow reply may outlive its item, so both are filtered out by `artworkItem`.
    */
   private refreshArtwork(device: AppleTV, info: NowPlayingInfo): void {
     const playing = Boolean(info.title || info.artist);
-    const key = playing ? info.contentIdentifier || `${info.title}\n${info.artist}` : '';
+    const content = info.contentIdentifier || `${info.title}\n${info.artist}`;
+    const key = playing ? `${content}\n${this.artworkId}` : '';
     if (this.artworkItem?.device === device && this.artworkItem.key === key) return;
     const item = { device, key };
     this.artworkItem = item;
