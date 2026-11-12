@@ -35,6 +35,34 @@ describe('desktopAPI', () => {
     expect(nowPlaying.mock.calls).toEqual([[{ title: 'Movie', playbackState: 1 }], [{}]]);
   });
 
+  it('titles an item with the app name when the app reports no title or artist', async () => {
+    await desktopAPI.start();
+    const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
+      string,
+      (event: { payload: { event: string; data: unknown } }) => void,
+    ];
+    const nowPlaying = vi.fn();
+    desktopAPI.onAtvNowPlaying(nowPlaying);
+    // What Netflix sends while a show plays (Apple TV 4K, tvOS 26): a state and no metadata.
+    const netflix = { title: '', artist: '', appDisplayName: 'Netflix' };
+
+    for (const data of [
+      { ...netflix, playbackState: 1 },
+      { ...netflix, playbackState: 2 },
+      { ...netflix, playbackState: 3 },
+      { ...netflix, artist: 'Band', playbackState: 1 },
+    ]) {
+      onBackendEvent({ payload: { event: 'now-playing', data } });
+    }
+
+    expect(nowPlaying.mock.calls.map(([info]) => info.title)).toEqual([
+      'Netflix',
+      'Netflix',
+      '',
+      '',
+    ]);
+  });
+
   it('passes on the selected outputs only as a list of IDs', async () => {
     await desktopAPI.start();
     const [, onBackendEvent] = listen.mock.calls.find(([name]) => name === 'backend-event')! as [
