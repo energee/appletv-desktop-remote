@@ -63,6 +63,14 @@ pub struct DeviceMenuItem {
     checked: bool,
 }
 
+/// One app in the Apps menu, as the webview sends it.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppMenuItem {
+    name: String,
+    bundle_id: String,
+}
+
 #[derive(serde::Serialize, Clone)]
 struct ContextMenuAction {
     action: String,
@@ -401,6 +409,34 @@ fn check_item(
         .map_err(|error| error.to_string())
 }
 
+/// Where in the window a popup menu opens: the request's `x` and `y`, in logical points.
+fn menu_position(args: &Value) -> Result<tauri::LogicalPosition<f64>, String> {
+    let coordinate = |name: &str| {
+        args.get(name)
+            .and_then(Value::as_f64)
+            .ok_or_else(|| format!("Missing menu {name}"))
+    };
+    Ok(tauri::LogicalPosition::new(
+        coordinate("x")?,
+        coordinate("y")?,
+    ))
+}
+
+/// The Apple TV's apps as a menu. Each item's ID carries its bundle ID (`app:<bundle ID>`), so
+/// a pick needs no saved state: `handle_menu_event` sends it back as the `launchApp` action.
+fn build_apps_menu(app: &AppHandle, apps: &[AppMenuItem]) -> Result<Menu<tauri::Wry>, String> {
+    let menu = Menu::new(app).map_err(|error| error.to_string())?;
+    for item in apps {
+        menu.append(&menu_item(
+            app,
+            &format!("app:{}", item.bundle_id),
+            &item.name,
+        )?)
+        .map_err(|error| error.to_string())?;
+    }
+    Ok(menu)
+}
+
 fn build_device_menu(
     app: &AppHandle,
     config: &ContextMenuConfig,
@@ -422,7 +458,7 @@ fn build_device_menu(
             .map_err(|error| error.to_string())?;
     }
     devices_menu
-        .append(&menu_item(app, "pair-new", "Pair new device...")?)
+        .append(&menu_item(app, "pair-new", "Pair new device…")?)
         .map_err(|error| error.to_string())?;
     devices_menu
         .append(&menu_item(app, "repair-current", "Re-pair current device")?)
@@ -471,7 +507,7 @@ fn build_context_menu(
     root.append(&check_item(
         app,
         "always-on-top",
-        "Always on-top",
+        "Always on Top",
         config.always_on_top,
     )?)
     .map_err(|error| error.to_string())?;
@@ -550,6 +586,9 @@ pub fn handle_menu_event(
                     .map(|device| ("selectDevice", Some(device.identifier.clone())))
             })
         }),
+        item if item.starts_with("app:") => item
+            .strip_prefix("app:")
+            .map(|bundle_id| ("launchApp", Some(bundle_id.to_owned()))),
         item if item.starts_with("speaker:") => context.lock().ok().and_then(|config| {
             config.as_ref().and_then(|config| {
                 item.strip_prefix("speaker:")
@@ -769,22 +808,22 @@ pub async fn desktop_action(
         "showDeviceMenu" => {
             let config: ContextMenuConfig =
                 serde_json::from_value(args.clone()).map_err(|error| error.to_string())?;
-            let x = args
-                .get("x")
-                .and_then(Value::as_f64)
-                .ok_or("Missing menu x")?;
-            let y = args
-                .get("y")
-                .and_then(Value::as_f64)
-                .ok_or("Missing menu y")?;
+            let position = menu_position(&args)?;
             *context
                 .lock()
                 .map_err(|_| "Context menu state lock poisoned")? = Some(config.clone());
             main_window(&app)?
-                .popup_menu_at(
-                    &build_device_menu(&app, &config)?,
-                    tauri::LogicalPosition::new(x, y),
-                )
+                .popup_menu_at(&build_device_menu(&app, &config)?, position)
+                .map_err(|error| error.to_string())?;
+            Ok(Value::Null)
+        }
+        "showAppsMenu" => {
+            let apps: Vec<AppMenuItem> =
+                serde_json::from_value(args.get("apps").cloned().unwrap_or_default())
+                    .map_err(|error| error.to_string())?;
+            let position = menu_position(&args)?;
+            main_window(&app)?
+                .popup_menu_at(&build_apps_menu(&app, &apps)?, position)
                 .map_err(|error| error.to_string())?;
             Ok(Value::Null)
         }

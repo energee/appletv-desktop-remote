@@ -27,6 +27,14 @@ export const companionAPI = {
   cancelPair: () => backendRequest<void>('cancelCompanionPair'),
   apps: () => backendRequest<CompanionApp[]>('apps'),
   launchApp: (bundleId: string) => backendRequest<void>('launchApp', { bundleId }),
+  /** Pops a native menu of `apps` at `position` in the window; a pick arrives by onAppChosen. */
+  showAppsMenu: (apps: CompanionApp[], position: { x: number; y: number }) =>
+    desktopAPI.showAppsMenu(apps, position),
+  /** The bundle ID of the app picked from the menu showAppsMenu opened. */
+  onAppChosen: (callback: (bundleId: string) => void) =>
+    desktopAPI.onContextMenuAction((action, payload) => {
+      if (action === 'launchApp' && payload) callback(payload);
+    }),
   setText: (text: string) => backendRequest<string>('setText', { text }),
   clearText: () => backendRequest<string>('clearText'),
   touch: (x: number, y: number, phase: 'press' | 'hold' | 'release') =>

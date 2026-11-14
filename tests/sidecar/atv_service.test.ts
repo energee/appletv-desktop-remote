@@ -2,7 +2,7 @@
 // device switching, wake, pairing), so stale work must never change state.
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
-import { PlaybackState, type ConnectionState } from '../../src/shared/types';
+import { MRP_EPOCH_OFFSET, PlaybackState, type ConnectionState } from '../../src/shared/types';
 import type ATVServiceClass from '../../src/sidecar/atv_service';
 import type { Credentials as LibraryCredentials } from '../../app/node_modules/node-appletv-remote/dist/credentials.js';
 
@@ -604,6 +604,85 @@ describe('ATVService', () => {
       first.emit('nowPlaying', { title: 'old' });
       second.emit('nowPlaying', { title: 'new' });
       expect(nowPlaying.mock.calls).toEqual([[{ title: 'new' }]]);
+    });
+
+    // The TV sends nothing when an app is quit: it goes on reporting the last item, paused.
+    describe('an item left over from an app that was quit', () => {
+      /** The TV's clock, seconds since 2001, `agoMs` in the past. */
+      const tvTime = (agoMs = 0) => (Date.now() - agoMs) / 1000 - MRP_EPOCH_OFFSET;
+      const movie = { title: 'Movie', duration: 6000, elapsedTime: 1200, appDisplayName: 'Plex' };
+      const paused = { playbackState: PlaybackState.Paused };
+
+      it('shows a just-paused item, then drops it after five minutes', async () => {
+        const nowPlaying = vi.fn();
+        service.on('now-playing', nowPlaying);
+        const device = await connected();
+        const item = { ...movie, ...paused, timestamp: tvTime() };
+
+        device.emit('nowPlaying', item);
+        expect(nowPlaying).toHaveBeenLastCalledWith(item);
+        await flush(5 * 60_000 - 1000);
+        expect(nowPlaying).toHaveBeenLastCalledWith(item);
+        await flush(1000);
+        expect(nowPlaying).toHaveBeenLastCalledWith(paused);
+      });
+
+      it.each([
+        ['paused long ago', { timestamp: tvTime(96 * 60_000) }],
+        ['paused at its end', { elapsedTime: 5999.9, timestamp: tvTime() }],
+      ])('drops an item %s at once, without fetching its artwork', async (_, fields) => {
+        const nowPlaying = vi.fn();
+        const artwork = vi.fn();
+        service.on('now-playing', nowPlaying);
+        service.on('artwork', artwork);
+        const device = await connected();
+
+        device.emit('nowPlaying', { ...movie, ...paused, ...fields });
+        await flush();
+
+        expect(nowPlaying.mock.calls).toEqual([[paused]]);
+        expect(device.requestArtwork).not.toHaveBeenCalled();
+        expect(artwork.mock.calls).toEqual([[null]]);
+      });
+
+      it('keeps a playing item, however old its report', async () => {
+        const nowPlaying = vi.fn();
+        service.on('now-playing', nowPlaying);
+        const device = await connected();
+        const item = {
+          ...movie,
+          playbackState: PlaybackState.Playing,
+          timestamp: tvTime(3_600_000),
+        };
+
+        device.emit('nowPlaying', item);
+        await flush(10 * 60_000);
+        expect(nowPlaying.mock.calls).toEqual([[item]]);
+      });
+
+      it('keeps an item that resumes before the five minutes are up', async () => {
+        const nowPlaying = vi.fn();
+        service.on('now-playing', nowPlaying);
+        const device = await connected();
+        const playing = { ...movie, playbackState: PlaybackState.Playing, timestamp: tvTime() };
+
+        device.emit('nowPlaying', { ...movie, ...paused, timestamp: tvTime() });
+        await flush(60_000);
+        device.emit('nowPlaying', playing);
+        await flush(10 * 60_000);
+        expect(nowPlaying).toHaveBeenLastCalledWith(playing);
+      });
+
+      // Netflix reports only that it is paused: no time to age it by, so the wait starts on arrival.
+      it('drops a paused item that carries no time five minutes after it arrives', async () => {
+        const nowPlaying = vi.fn();
+        service.on('now-playing', nowPlaying);
+        const device = await connected();
+
+        device.emit('nowPlaying', { ...paused, appDisplayName: 'Netflix' });
+        await flush(5 * 60_000);
+        expect(nowPlaying).toHaveBeenLastCalledWith(paused);
+      });
     });
 
     describe('artwork', () => {

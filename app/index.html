@@ -18,11 +18,6 @@
     <!-- Header -->
     <div class="center" id="keyboardButtonDiv">
       <div class="topText">
-        <button id="topTextHeader" type="button" aria-haspopup="menu" title="Switch Apple TV">
-          <span id="deviceName">Apple TV Remote</span>
-          <span id="connectionDot" class="connection-dot" aria-hidden="true"></span>
-          <span class="device-chevron" data-icon="chevron-down" aria-hidden="true"></span>
-        </button>
         <button
           id="collapseButton"
           class="header-btn"
@@ -31,6 +26,11 @@
           style="display: none"
         >
           <span data-icon="chevron-up"></span>
+        </button>
+        <button id="topTextHeader" type="button" aria-haspopup="menu">
+          <span id="connectionDot" class="connection-dot" aria-hidden="true"></span>
+          <span id="deviceName">Apple TV Remote</span>
+          <span class="device-chevron" data-icon="chevron-down" aria-hidden="true"></span>
         </button>
         <button
           id="powerButton"
@@ -48,16 +48,6 @@
         <span id="updatePillLabel">Update available</span>
         <span aria-hidden="true">&rsaquo;</span>
       </button>
-
-      <div id="initText">
-        <p>Starting up...</p>
-        <div class="lds-ellipsis">
-          <div></div>
-          <div></div>
-          <div></div>
-          <div></div>
-        </div>
-      </div>
     </div>
 
     <div id="main">
@@ -69,13 +59,12 @@
         <div id="pairingElements">
           <div id="results">
             <div class="pair-section">
-              <p class="pair-label">Select a device to pair</p>
-              <select id="atv_picker"></select>
+              <select id="atv_picker" aria-label="Device to pair"></select>
             </div>
           </div>
           <div id="pairCodeElements">
             <div class="pair-section">
-              <p class="pair-label">Enter the code shown on your Apple TV</p>
+              <p id="pairCodeLabel" class="pair-label">Enter the code shown on your Apple TV</p>
               <!-- One transparent input over four boxes; see renderPin in web_remote.ts. -->
               <div class="pin">
                 <input
@@ -135,7 +124,7 @@
               type="button"
               aria-label="Menu"
               data-key="menu"
-              data-tippy-content="Menu (Esc) · G for Top Menu"
+              title="Menu (Esc) · G for Top Menu"
               class="directionCircle media-btn"
             >
               <span class="keyText"><span data-icon="arrow-left"></span></span
@@ -145,7 +134,7 @@
               type="button"
               aria-label="Lower volume"
               data-key="volume_down"
-              data-tippy-content="Lower Volume"
+              title="Lower Volume"
               class="directionCircle secondary-btn vol-btn"
             >
               <span class="keyText"><span data-icon="volume-1"></span></span
@@ -155,7 +144,7 @@
               type="button"
               aria-label="Play or pause"
               data-key="play_pause"
-              data-tippy-content="Play / Pause"
+              title="Play / Pause"
               class="directionCircle media-btn play-btn"
             >
               <span class="keyText"><span id="playPauseIcon" data-icon="play"></span></span
@@ -165,7 +154,7 @@
               type="button"
               aria-label="Raise volume"
               data-key="volume_up"
-              data-tippy-content="Raise Volume"
+              title="Raise Volume"
               class="directionCircle secondary-btn vol-btn"
             >
               <span class="keyText"><span data-icon="volume-2"></span></span
@@ -175,7 +164,7 @@
               type="button"
               aria-label="Home"
               data-key="home"
-              data-tippy-content="Home (T) · L for Long-press"
+              title="Home (T) · L for Long-press"
               class="directionCircle media-btn"
             >
               <span class="keyText"><span data-icon="tv"></span></span
@@ -189,7 +178,7 @@
               type="button"
               aria-label="Skip backward"
               data-key="skip_backward"
-              data-tippy-content="Skip Back"
+              title="Skip Back"
               class="directionCircle secondary-btn transport-btn"
             >
               <span class="keyText"><span data-icon="skip-back"></span></span
@@ -209,7 +198,7 @@
               type="button"
               aria-label="Skip forward"
               data-key="skip_forward"
-              data-tippy-content="Skip Forward"
+              title="Skip Forward"
               class="directionCircle secondary-btn transport-btn"
             >
               <span class="keyText"><span data-icon="skip-forward"></span></span
@@ -222,22 +211,21 @@
       <!-- Settings Panel -->
       <div id="settingsPanel" style="display: none">
         <div class="settings-body">
+          <button id="settingsBackBtn" class="settings-back-btn">&larr; Back</button>
           <div class="settings-section">
-            <div class="settings-label">Saved Devices</div>
+            <div class="settings-label">Saved devices</div>
             <div id="settingsDeviceList"></div>
           </div>
           <div class="settings-section">
-            <div class="settings-label">Move saved remotes</div>
-            <p>Pairing keys are stored securely. Export a backup to move saved remotes.</p>
-            <button id="settingsExportCredentialsBtn" class="settings-btn">
-              Export Credentials
-            </button>
-            <button id="settingsImportCredentialsBtn" class="settings-btn">
-              Import Credentials
-            </button>
+            <div class="settings-label">Backup</div>
+            <p class="companion-setting-note">
+              Pairings are stored securely. Export a backup to move them to another computer.
+            </p>
+            <button id="settingsExportCredentialsBtn" class="settings-btn">Export backup</button>
+            <button id="settingsImportCredentialsBtn" class="settings-btn">Import backup</button>
           </div>
           <div class="settings-section">
-            <button id="settingsHotkeyBtn" class="settings-btn">Change Hotkey</button>
+            <button id="settingsHotkeyBtn" class="settings-btn">Change hotkey</button>
           </div>
           <div class="settings-section">
             <div class="settings-label">Touchpad</div>
@@ -261,11 +249,10 @@
             </label>
             <button id="settingsUpdateBtn" class="settings-btn">Check for updates</button>
           </div>
-          <button id="settingsBackBtn" class="settings-back-btn">&larr; Back</button>
         </div>
       </div>
 
-      <h2 id="statusText"></h2>
+      <p id="statusText" role="status">Starting up…</p>
     </div>
 
     <!-- Mini bar: after the remote, because key presses flash the first matching [data-key] -->
@@ -281,6 +268,7 @@
         type="button"
         aria-label="Play or pause"
         data-key="play_pause"
+        title="Play / Pause"
         class="directionCircle media-btn play-btn mini-play"
       >
         <span class="keyText"><span id="miniPlayIcon" data-icon="play"></span></span
@@ -290,6 +278,7 @@
         type="button"
         aria-label="Lower volume"
         data-key="volume_down"
+        title="Lower Volume"
         class="directionCircle secondary-btn transport-btn"
       >
         <span class="keyText"><span data-icon="volume-1"></span></span
@@ -299,6 +288,7 @@
         type="button"
         aria-label="Raise volume"
         data-key="volume_up"
+        title="Raise Volume"
         class="directionCircle secondary-btn transport-btn"
       >
         <span class="keyText"><span data-icon="volume-2"></span></span

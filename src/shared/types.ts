@@ -38,7 +38,7 @@ export type ATVKeyName =
 
 export type KeyboardKeyMap = Record<string, ATVKeyName>;
 
-export type ConnectionDotState = 'connected' | 'connecting' | 'disconnected';
+export type ConnectionDotState = 'connected' | 'connecting' | 'disconnected' | 'idle';
 
 /** An AirPlay receiver the TV can play to; `id` is its output ID (the scan's `airplayPsi`). */
 export interface Speaker {
@@ -59,6 +59,9 @@ export type PowerStatus = 'on' | 'off' | 'unknown';
 export interface ConnectionState {
   status: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'pairing';
 }
+
+/** Seconds from the Unix epoch to 2001-01-01, the epoch of the TV's MRP timestamps. */
+export const MRP_EPOCH_OFFSET = 978307200;
 
 /**
  * NowPlayingInfo.playbackState values: node-appletv-remote's PlaybackState enum (MRP

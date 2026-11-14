@@ -305,7 +305,17 @@ describe('screens', () => {
     state('connected');
     expect(dom.get('#addNewElements').style.display).toBe('none');
     expect(dom.get('#runningElements').style.display).toBe('');
-    expect(dom.get('#touchpad').style.display).toBe('flex');
+  });
+
+  // The stylesheet dims the remote and ignores clicks on it unless the page is `connected`.
+  it('marks the page connected only while a TV is connected', () => {
+    useElements();
+    const bodyClass = vi.mocked(document.body.classList.toggle);
+    for (const status of ['connecting', 'connected', 'disconnected', 'pairing'] as const) {
+      bodyClass.mockClear();
+      state(status);
+      expect(bodyClass).toHaveBeenCalledWith('connected', status === 'connected');
+    }
   });
 
   it('keeps the settings panel in front when the state changes', async () => {
@@ -665,6 +675,24 @@ describe('keys', () => {
     expect(desktopAPI.sendKey).toHaveBeenCalledWith('down', false);
   });
 
+  it('leaves Settings on Esc, unless a dialog is open over it', async () => {
+    const dom = useElements();
+    await web.init();
+    state('connected');
+    contextMenuAction('openSettings');
+    // The element stub answers every selector, so a dialog counts as open.
+    press('Escape');
+    expect(dom.get('#settingsPanel').style.display).toBe('block');
+
+    const query = vi.mocked(document.querySelector).getMockImplementation()!;
+    vi.mocked(document.querySelector).mockImplementation(((selector: string) =>
+      selector === 'dialog[open]' ? null : query(selector)) as never);
+    press('Escape');
+    expect(dom.get('#settingsPanel').style.display).toBe('none');
+    // Esc left Settings; it was not sent to the TV as Menu.
+    expect(desktopAPI.sendKey).not.toHaveBeenCalled();
+  });
+
   it('sends a native button activation exactly once', () => {
     const button = { ...fakeElement(), dataset: { key: 'home' } };
     vi.mocked(document.querySelectorAll).mockImplementation(
@@ -736,6 +764,13 @@ describe('PIN entry', () => {
     };
     return { pin, type };
   }
+
+  it('names the TV whose code is wanted, without its address', async () => {
+    await openPin();
+    expect(document.querySelector('#pairCodeLabel')!.textContent).toBe(
+      'Enter the code shown on Living Room',
+    );
+  });
 
   it('focuses the boxes when they open and submits the fourth digit', async () => {
     const { pin, type } = await openPin();
@@ -814,23 +849,39 @@ describe('header', () => {
     expect(desktopAPI.togglePower).toHaveBeenCalledTimes(1);
   });
 
-  // The TV keeps its connection while asleep, so the dot alone can't tell.
-  it('says the TV is asleep while it is, and only while connected', () => {
+  it('keeps the name of a TV that dropped, and names none while pairing', () => {
     const dom = useElements();
     const header = dom.get('#deviceName');
+    const dot = dom.get('#connectionDot').classList.add;
     state('connected');
+    state('disconnected');
     expect(header.textContent).toBe('Living Room');
+    expect(dot).toHaveBeenLastCalledWith('disconnected');
 
+    dot.mockClear();
+    state('pairing');
+    expect(header.textContent).toBe('Apple TV Remote');
+    // Pairing is not a lost connection: the dot stays its plain grey.
+    expect(dot).not.toHaveBeenCalled();
+  });
+
+  // The TV keeps its connection while asleep: the dot turns amber and the name stays as it is.
+  it('marks a sleeping TV with the dot alone, and only while connected', () => {
+    const dom = useElements();
+    const header = dom.get('#deviceName');
+    const dot = dom.get('#connectionDot').classList.add;
+    state('connected');
     powerState('off');
-    expect(header.textContent).toBe('Living Room · Asleep');
-    powerState('on');
+    expect(dot).toHaveBeenLastCalledWith('asleep');
     expect(header.textContent).toBe('Living Room');
+    powerState('on');
+    expect(dot).toHaveBeenLastCalledWith('connected');
 
     powerState('off');
     state('connecting');
-    expect(header.textContent).toBe('Living Room');
+    expect(dot).toHaveBeenLastCalledWith('connecting');
     state('connected');
-    expect(header.textContent).toBe('Living Room');
+    expect(dot).toHaveBeenLastCalledWith('connected');
   });
 });
 
@@ -1279,17 +1330,29 @@ describe('status text', () => {
   it('describes connecting, reconnecting, and giving up', () => {
     useElements();
     state('connecting');
-    expect(statusElement.textContent).toBe('Connecting to ATV...');
+    expect(statusElement.textContent).toBe('Connecting…');
     state('connected');
     expect(statusElement.style.display).toBe('none');
     state('connecting');
-    expect(statusElement.textContent).toBe('Reconnecting...');
+    expect(statusElement.textContent).toBe('Reconnecting…');
     // A retry reports connecting again; the text stays.
-    statusElement.textContent = 'Reconnecting...';
+    statusElement.textContent = 'Reconnecting…';
     state('connecting');
-    expect(statusElement.textContent).toBe('Reconnecting...');
+    expect(statusElement.textContent).toBe('Reconnecting…');
     state('disconnected');
-    expect(statusElement.textContent).toBe('Connection lost. Right-click to reconnect.');
+    expect(statusElement.textContent).toBe('Connection lost. Retrying…');
+  });
+
+  it('clears an old message once a key reaches the TV, and keeps it when the key fails', async () => {
+    useElements();
+    state('connected');
+    desktopAPI.sendKey.mockRejectedValueOnce(new Error('offline'));
+    web.setStatus('Apple TV did not respond');
+    await web.sendCommand('up');
+    expect(statusElement.style.display).toBe('block');
+
+    await web.sendCommand('up');
+    expect(statusElement.style.display).toBe('none');
   });
 
   it('shows why a connect request failed', async () => {
@@ -1428,7 +1491,7 @@ describe('requests', () => {
 
     expect(desktopAPI.connect).not.toHaveBeenCalled();
     // No active device, so nothing is reconnecting.
-    expect(statusElement.textContent).toBe('Credentials imported.');
+    expect(statusElement.textContent).toBe('Backup imported.');
     expect(desktopAPI.showContextMenu).toHaveBeenLastCalledWith(
       {
         devices: [{ label: 'Living Room', identifier: 'tv', checked: false }],
