@@ -1,9 +1,23 @@
-/* The buttons belong to the remote, so they hide with it, but sit in the header to save a row. */
+/* Apps and Keyboard belong to the remote, so they hide and dim with it, but sit in the header to
+   save a row. They are header buttons (.header-btn in main.css), placed inside the outer pair. */
 .companion-tools {
   display: contents;
 }
 
-.companion-tools button,
+#companionApps {
+  left: 32px;
+}
+
+#companionKeyboard {
+  right: 32px;
+}
+
+/* Apps while its list loads. */
+.companion-tools .header-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .companion-dialog button {
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -16,49 +30,6 @@
   cursor: pointer;
 }
 
-.companion-tools button {
-  position: absolute;
-  top: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 32px;
-  padding: 6px;
-  border-color: transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-tertiary);
-}
-
-#companionApps {
-  left: 32px;
-}
-
-#companionKeyboard {
-  right: 32px;
-}
-
-.companion-tools button[hidden] {
-  display: none;
-}
-
-.companion-tools button:hover {
-  background: var(--glass-hover);
-  color: var(--text-primary);
-}
-
-.companion-tools button:focus-visible {
-  outline: 2px solid var(--text-secondary);
-  outline-offset: 2px;
-}
-
-.companion-tools .lucide-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.companion-tools button:disabled,
 .companion-dialog button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -109,22 +80,27 @@
   -webkit-user-select: text;
 }
 
-#companionText:not([hidden]) {
+/* The text field under the remote. It is a search field for its built-in clear button, drawn
+   like the app's other fields instead of the system's rounded search box. */
+#companionText {
   display: block;
   margin: 0;
   max-width: 252px;
+  appearance: none;
+  -webkit-appearance: none;
+  /* Translucent like the remote's buttons; the sheet's fields stay solid. */
+  background: var(--glass);
+  font-size: 12px;
 }
 
-.companion-apps {
-  max-height: 210px;
-  overflow: auto;
-  display: grid;
-  gap: 4px;
+#companionText:disabled {
+  background: transparent;
 }
 
-.companion-apps button {
-  text-align: left;
-  overflow-wrap: anywhere;
+/* The app's tan ring, as on the PIN boxes, in place of the system's blue one. */
+#companionText:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .companion-actions {

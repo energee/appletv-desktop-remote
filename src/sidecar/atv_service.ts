@@ -3,6 +3,7 @@
 // event (ConnectionState) and the webview only renders that.
 import { EventEmitter } from 'events';
 import {
+  MRP_EPOCH_OFFSET,
   PlaybackState,
   type ATVCredentials,
   type ATVKeyName,
@@ -61,6 +62,25 @@ const PAUSED_STATES: readonly number[] = [
   PlaybackState.Stopped,
   PlaybackState.Interrupted,
 ];
+/** How long a paused item stays on the remote before it counts as left over. */
+const LEFTOVER_AFTER_MS = 5 * 60_000;
+/** A paused item this close to its end, in seconds, has finished. */
+const FINISHED_WITHIN_S = 2;
+
+/**
+ * Milliseconds until a paused item counts as left over: 0 if it already does, Infinity if it is
+ * not paused. The TV sends nothing when an app is quit or an item ends; it goes on reporting the
+ * last item, paused, for hours. So the only evidence is the item itself: it sits at its end, or
+ * its pause is old. A report with no timestamp (Netflix) is aged from when it arrives.
+ */
+function leftoverIn(info: Partial<NowPlayingInfo>, now = Date.now()): number {
+  if (!PAUSED_STATES.includes(info.playbackState ?? PlaybackState.Unknown)) return Infinity;
+  const { duration = 0, elapsedTime = 0, timestamp } = info;
+  if (duration > 0 && duration - elapsedTime <= FINISHED_WITHIN_S) return 0;
+  const pausedAt = timestamp ? (timestamp + MRP_EPOCH_OFFSET) * 1000 : now;
+  return Math.max(0, pausedAt + LEFTOVER_AFTER_MS - now);
+}
+
 /** The player the TV reports when no app has registered as now playing. */
 const DEFAULT_PLAYER = 'MediaRemote-DefaultPlayer';
 /** Square size to request: the touchpad crops it to fill 240px, at up to 2x pixel density. */
@@ -114,6 +134,8 @@ class ATVService extends EventEmitter {
   private artworkItem: { device: AppleTV; key: string } | null = null;
   /** The picture ID the TV last gave an item; a change means the item's picture changed. */
   private artworkId = '';
+  /** Drops the current paused item once it has been paused long enough to count as left over. */
+  private leftoverTimer: ReturnType<typeof setTimeout> | undefined;
   /** Optional Companion pairing never replaces the ordinary MRP connection. */
   private companionPairing: CompanionPairSetup | null = null;
   private companionPairEpoch = 0;
@@ -349,8 +371,7 @@ class ATVService extends EventEmitter {
       // play and pause commands and ignores them, so its state must not choose them.
       this.playbackState =
         info.playerIdentifier === DEFAULT_PLAYER ? PlaybackState.Unknown : info.playbackState;
-      this.emit('now-playing', info);
-      this.refreshArtwork(device, info);
+      this.showNowPlaying(device, info);
     });
     device.on('textFocusState', (state) => {
       if (device !== this.device) return;
@@ -382,11 +403,31 @@ class ATVService extends EventEmitter {
   }
 
   /**
+   * Emits `now-playing` and its artwork. A left-over item (see leftoverIn) is reported as only
+   * its playback state, which the remote shows as nothing playing; one that is still fresh is
+   * reported whole and dropped later, unless another report replaces it first.
+   */
+  private showNowPlaying(device: AppleTV, info: NowPlayingInfo): void {
+    clearTimeout(this.leftoverTimer);
+    const show = (shown: Partial<NowPlayingInfo>): void => {
+      // The timer may fire after the device was replaced.
+      if (device !== this.device) return;
+      this.emit('now-playing', shown);
+      this.refreshArtwork(device, shown);
+    };
+    const stateOnly = { playbackState: info.playbackState };
+    const wait = leftoverIn(info);
+    if (wait === 0) return show(stateOnly);
+    if (wait !== Infinity) this.leftoverTimer = setTimeout(() => show(stateOnly), wait);
+    show(info);
+  }
+
+  /**
    * Emits `artwork` for each new item, and again when the TV changes that item's picture: a data
    * URL, or null when there is none. The TV repeats now-playing as the position changes, and a
    * slow reply may outlive its item, so both are filtered out by `artworkItem`.
    */
-  private refreshArtwork(device: AppleTV, info: NowPlayingInfo): void {
+  private refreshArtwork(device: AppleTV, info: Partial<NowPlayingInfo>): void {
     const playing = Boolean(info.title || info.artist);
     const content = info.contentIdentifier || `${info.title}\n${info.artist}`;
     const key = playing ? `${content}\n${this.artworkId}` : '';

@@ -2,6 +2,7 @@
 // text, connection dot) and forwards user actions, including the scan and pairing requests; the
 // sidecar owns connecting, reconnecting, and pairing mode.
 import {
+  MRP_EPOCH_OFFSET,
   PlaybackState,
   type ATVKeyName,
   type KeyboardKeyMap,
@@ -111,12 +112,15 @@ export function initIPC(): void {
 function renderState(next: ConnectionState): void {
   const previous = connection.status;
   connection = next;
-  if (next.status !== 'connected') asleep = false;
-  const remoteControls = next.status === 'connected' ? '' : 'none';
+  const connected = next.status === 'connected';
+  if (!connected) asleep = false;
+  // The stylesheet dims the remote and ignores clicks on it unless the page is `connected`.
+  document.body.classList.toggle('connected', connected);
+  const remoteControls = connected ? '' : 'none';
   $('#powerButton')!.style.display = remoteControls;
   $('#collapseButton')!.style.display = remoteControls;
-  if (next.status !== 'connected') cancelPresses();
-  if (next.status !== 'connected') {
+  if (!connected) {
+    cancelPresses();
     showVolume(null);
     if (speakers.length > 0) {
       speakers = [];
@@ -124,12 +128,12 @@ function renderState(next: ConnectionState): void {
     }
   }
   showScreen();
-  if (next.status !== 'connected') hideNowPlaying();
+  if (!connected) hideNowPlaying();
   switch (next.status) {
     case 'connected':
       updateConnectionDot('connected');
       if (previous !== 'connected') void loadSpeakers();
-      $('#statusText')!.style.display = 'none';
+      clearStatus();
       handleContextMenu();
       showKeyMap();
       break;
@@ -137,17 +141,17 @@ function renderState(next: ConnectionState): void {
       updateConnectionDot('connecting');
       // Retries report 'connecting' again; keep the text from the start of the attempt.
       if (previous !== 'connecting') {
-        setStatus(previous === 'connected' ? 'Reconnecting...' : 'Connecting to ATV...');
+        setStatus(previous === 'connected' ? 'Reconnecting…' : 'Connecting…');
       }
       break;
     case 'disconnected':
-      $('#initText')!.style.display = 'none';
       updateConnectionDot('disconnected');
-      setStatus('Connection lost. Right-click to reconnect.');
+      // The sidecar keeps retrying, and showing the window retries at once (see 'focus' below).
+      setStatus('Connection lost. Retrying…');
       break;
     default:
       // idle, or pairing, whose screen shows its own status.
-      updateConnectionDot('disconnected');
+      updateConnectionDot('idle');
   }
 }
 
@@ -188,7 +192,12 @@ window.addEventListener('keyup', (e) => {
 });
 
 window.addEventListener('keydown', (e) => {
-  if (settingsOpen() || companionKeyboardGuard(e)) return;
+  if (settingsOpen()) {
+    // Esc leaves Settings, unless a dialog over it takes the key.
+    if (e.key === 'Escape' && !document.querySelector('dialog[open]')) hideSettings();
+    return;
+  }
+  if (companionKeyboardGuard(e)) return;
   // Let focused buttons activate natively instead of sending their activation keys to the TV.
   if (e.target instanceof HTMLButtonElement && (e.key === 'Enter' || e.key === ' ')) {
     const command = e.target.dataset.key;
@@ -245,7 +254,7 @@ window.addEventListener('keydown', (e) => {
 
 export function createDropdown(ks: string[]): void {
   $('#loader')!.style.display = 'none';
-  $('#statusText')!.style.display = 'none';
+  clearStatus();
   $('#pairingLoader')!.innerHTML = '';
   $('#pairingElements')!.style.display = 'block';
 
@@ -302,6 +311,8 @@ export async function sendCommand(k: string, hold = false): Promise<void> {
   if (rcmd === 'play_pause') flipPlayPauseIcon();
   try {
     await desktopAPI.sendKey(rcmd, hold);
+    // The remote works again, so an earlier error or notice no longer applies.
+    clearStatus();
   } catch {
     if (el) {
       el.classList.remove('sent');
@@ -361,7 +372,8 @@ export async function finishPair(code: string): Promise<void> {
 
 /** Shows the empty PIN boxes, ready to type in, and asks the TV for a PIN. */
 function startPairing(dev: string): void {
-  $('#initText')!.style.display = 'none';
+  const name = dev.replace(/ \([^()]*\)$/, '');
+  $('#pairCodeLabel')!.textContent = `Enter the code shown on ${name}`;
   $('#results')!.style.display = 'none';
   $('#pairCodeElements')!.style.display = 'block';
   clearPin();
@@ -426,10 +438,7 @@ function showKeyMap(): void {
   const { signal } = buttonAbort;
   const deviceIdentifier = getActiveIdentifier();
 
-  $('#initText')!.style.display = 'none';
   const touchpad = document.getElementById('touchpad')!;
-  touchpad.style.display = 'flex';
-  touchpad.classList.add('fade-in');
 
   // --- Touchpad gesture detection ---
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -745,12 +754,13 @@ function getConnectedDeviceName(): string | null {
 export function updateConnectionDot(state: ConnectionDotState): void {
   for (const dot of [$('#connectionDot')!, $('#miniDot')!]) {
     dot.classList.remove('connected', 'connecting', 'disconnected', 'asleep');
-    dot.classList.add(asleep && state === 'connected' ? 'asleep' : state);
+    // Idle (and pairing) leaves the dot its plain grey.
+    if (state !== 'idle') dot.classList.add(asleep && state === 'connected' ? 'asleep' : state);
   }
 
-  const showName = state === 'connected' || state === 'connecting';
-  const name = (showName && getConnectedDeviceName()) || 'Apple TV Remote';
-  $('#deviceName')!.textContent = asleep && state === 'connected' ? `${name} · Asleep` : name;
+  // The dot alone says the TV is asleep; the name has no room for more.
+  $('#deviceName')!.textContent =
+    (state !== 'idle' && getConnectedDeviceName()) || 'Apple TV Remote';
   renderMiniText();
   renderMiniDevices();
 }
@@ -777,12 +787,16 @@ export function setStatus(txt: string): void {
   el.style.display = 'block';
 }
 
+/** Hides the status line; the next setStatus shows it again. */
+function clearStatus(): void {
+  $('#statusText')!.style.display = 'none';
+}
+
 /**
  * Scans for Apple TVs to pair. The scan puts the sidecar in pairing mode, and that state
  * shows this screen.
  */
 export function startScan(): void {
-  $('#initText')!.style.display = 'none';
   const loader = $('#loader')!;
   loader.style.display = 'block';
   loader.classList.add('fade-in');
@@ -791,7 +805,7 @@ export function startScan(): void {
   $('#pairingElements')!.style.display = 'none';
   $('#results')!.style.display = '';
   $('#pairCodeElements')!.style.display = 'none';
-  setStatus('Please wait, scanning...');
+  setStatus('Looking for Apple TVs…');
   $('#pairingLoader')!.innerHTML =
     '<div style="text-align:center"><div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div></div>';
   scanDevices();
@@ -834,7 +848,7 @@ async function exportCredentials(): Promise<void> {
       alwaysOnTopChecked: localStorage.getItem('alwaysOnTopChecked'),
     })
   ) {
-    setStatus('Credentials exported.');
+    setStatus('Backup exported.');
   }
 }
 
@@ -854,10 +868,10 @@ async function importCredentials(): Promise<void> {
   handleContextMenu();
   // connect replaces the old connection; without an active device, just drop it.
   if (loadActiveDevice()) {
-    setStatus('Credentials imported. Reconnecting...');
+    setStatus('Backup imported. Reconnecting…');
     connectToATV();
   } else {
-    setStatus('Credentials imported.');
+    setStatus('Backup imported.');
     await desktopAPI.disconnect();
   }
 }
@@ -890,8 +904,6 @@ function cancelFlip(): void {
   flipTimer = undefined;
 }
 
-/** Seconds from the Unix epoch to 2001-01-01, the epoch of the TV's MRP timestamps. */
-const MRP_EPOCH_OFFSET = 978307200;
 /** The playing item: `elapsed` seconds in at `at` (ms since the Unix epoch), moving at `rate`. */
 const NO_POSITION = { duration: 0, elapsed: 0, at: 0, rate: 0 };
 let position = NO_POSITION;
@@ -1025,7 +1037,10 @@ let playingText = { title: '', artist: '' };
 function renderMiniText(): void {
   const { title, artist } = playingText;
   const playing = title || artist;
-  $('#miniTitle')!.textContent = playing || $('#deviceName')!.textContent;
+  const miniTitle = $('#miniTitle')!;
+  miniTitle.textContent = playing || $('#deviceName')!.textContent;
+  // The bar cuts long titles off; the tooltip shows the whole one.
+  miniTitle.title = miniTitle.textContent ?? '';
   // With rows below, the room says which TV this is; the title alone would not.
   const room = otherDevices().length > 0 ? $('#deviceName')!.textContent : title && artist;
   $('#miniSubtitle')!.textContent = playing ? room : 'Nothing playing';
@@ -1111,6 +1126,7 @@ function rowControl(
   button.innerHTML = icon(iconName);
   button.disabled = !connected;
   button.setAttribute('aria-label', label);
+  button.title = label;
   button.addEventListener('click', send);
   return button;
 }
@@ -1365,12 +1381,12 @@ function initSettingsListeners(): void {
 
   $('#settingsExportCredentialsBtn')!.addEventListener('click', () => {
     void exportCredentials().catch((error: unknown) => {
-      setStatus(error instanceof Error ? error.message : 'Unable to export credentials.');
+      setStatus(error instanceof Error ? error.message : 'Unable to export the backup.');
     });
   });
   $('#settingsImportCredentialsBtn')!.addEventListener('click', () => {
     void importCredentials().catch((error: unknown) => {
-      setStatus(error instanceof Error ? error.message : 'Unable to import credentials.');
+      setStatus(error instanceof Error ? error.message : 'Unable to import the backup.');
     });
   });
 

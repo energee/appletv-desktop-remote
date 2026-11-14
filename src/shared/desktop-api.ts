@@ -12,7 +12,12 @@ import {
   type Speaker,
   type WatchedTvUpdate,
 } from './types';
-import type { CompanionStatus, TextFocusState, TextInputState } from './companion-api';
+import type {
+  CompanionApp,
+  CompanionStatus,
+  TextFocusState,
+  TextInputState,
+} from './companion-api';
 
 export interface ContextMenuConfig {
   devices: Array<{ label: string; identifier: string; checked: boolean }>;
@@ -177,6 +182,9 @@ export const desktopAPI = {
     action<void>('showContextMenu', { ...config, popup }),
   showDeviceMenu: (config: ContextMenuConfig, position: { x: number; y: number }) =>
     action<void>('showDeviceMenu', { ...config, ...position }),
+  /** Pops a menu of app names; picking one sends the `launchApp` action with its bundle ID. */
+  showAppsMenu: (apps: CompanionApp[], position: { x: number; y: number }) =>
+    action<void>('showAppsMenu', { apps, ...position }),
 
   loadDevices: () => action<SavedDevice[]>('loadDevices'),
   activeDevice: () => action<string | null>('activeDevice'),

@@ -7,9 +7,13 @@ const companionAPI = vi.hoisted(() => ({
   onState: vi.fn(),
   onTextFocus: vi.fn(),
   onTextInput: vi.fn(),
-  apps: vi.fn(async () => []),
+  apps: vi.fn(async (): Promise<{ name: string; bundleId: string }[]> => []),
+  showAppsMenu: vi.fn(async () => {}),
+  onAppChosen: vi.fn(),
+  launchApp: vi.fn(async () => {}),
   startPair: vi.fn(async () => {}),
   setText: vi.fn(async (text: string) => text),
+  clearText: vi.fn(async () => ''),
 }));
 vi.mock('../../src/shared/companion-api', () => ({ companionAPI }));
 vi.mock('../../src/renderer/state', () => ({
@@ -42,13 +46,13 @@ class Element {
   append(...children: Element[]): void {
     this.children.push(...children);
   }
-  prepend(...children: Element[]): void {
-    this.children.unshift(...children);
-  }
   showModal(): void {
     this.open = true;
   }
   setAttribute(): void {}
+  getBoundingClientRect(): { left: number; bottom: number } {
+    return { left: 32, bottom: 36 };
+  }
   focus = vi.fn();
   insertAdjacentHTML(): void {}
   close(): void {
@@ -147,6 +151,31 @@ describe('Companion error recovery', () => {
   });
 });
 
+describe('Apps', () => {
+  const plex = { name: 'Plex', bundleId: 'com.plexapp.plex' };
+
+  it('drops a native menu of the apps under the Apps button and launches the one chosen', async () => {
+    companionAPI.apps.mockResolvedValueOnce([plex]);
+    elements.get('companionApps')!.fire('click');
+    await vi.waitFor(() =>
+      expect(companionAPI.showAppsMenu).toHaveBeenCalledWith([plex], { x: 32, y: 40 }),
+    );
+    expect(dialog.open).toBe(false);
+
+    companionAPI.onAppChosen.mock.calls[0][0](plex.bundleId);
+    expect(companionAPI.launchApp).toHaveBeenCalledWith(plex.bundleId);
+  });
+
+  it('says so under the remote, with no menu, when the TV reports no apps', async () => {
+    elements.get('companionApps')!.fire('click');
+    const banner = elements.get('companionError')!;
+    await vi.waitFor(() => expect(banner.hidden).toBe(false));
+    expect(banner.textContent).toBe('No launchable apps were reported by this Apple TV.');
+    expect(companionAPI.showAppsMenu).not.toHaveBeenCalled();
+    expect(dialog.open).toBe(false);
+  });
+});
+
 describe('Keyboard access', () => {
   it('offers keyboard pairing before Companion is connected or a TV field is focused', async () => {
     emit({ status: 'unpaired', identifier: 'tv' });
@@ -159,11 +188,16 @@ describe('Keyboard access', () => {
     await vi.waitFor(() => expect(companionAPI.startPair).toHaveBeenCalledOnce());
   });
 
-  it('keeps the keyboard open while waiting for a TV field, then enables and focuses text input', async () => {
-    elements.get('companionKeyboard')!.fire('click');
+  it('shows a text field under the remote, which a TV field enables and focuses', async () => {
+    const keyboard = elements.get('companionKeyboard')!;
+    const input = elements.get('companionText')!;
+    expect(input.hidden).toBe(true);
+
+    keyboard.fire('click');
     await Promise.resolve();
-    const input = elements.get('companionContent')!.children[0];
-    expect(dialog.open).toBe(true);
+    // No sheet: the touchpad stays free to find a text field on the TV.
+    expect(dialog.open).toBe(false);
+    expect(input.hidden).toBe(false);
     expect(input.disabled).toBe(true);
     companionAPI.onTextFocus.mock.calls[0][0]({ focused: true });
     expect(input.disabled).toBe(true);
@@ -173,9 +207,33 @@ describe('Keyboard access', () => {
     expect(input.focus).toHaveBeenCalledOnce();
 
     companionAPI.onTextFocus.mock.calls[0][0]({ focused: false });
-    expect(dialog.open).toBe(true);
+    expect(input.hidden).toBe(false);
     expect(input.disabled).toBe(true);
     expect(input.value).toBe('');
+    expect(companionAPI.setText).not.toHaveBeenCalled();
+
+    // A second click puts the field away.
+    keyboard.fire('click');
+    await Promise.resolve();
+    expect(input.hidden).toBe(true);
+  });
+
+  it('shows the field for a TV text field without a click, and hides it afterwards', () => {
+    const input = elements.get('companionText')!;
+    companionAPI.onTextFocus.mock.calls[0][0]({ focused: true });
+    expect(input.hidden).toBe(false);
+    companionAPI.onTextFocus.mock.calls[0][0]({ focused: false });
+    expect(input.hidden).toBe(true);
+  });
+
+  it("clears the TV field when the text is emptied, as the field's own clear button does", async () => {
+    const input = elements.get('companionText')!;
+    companionAPI.onTextFocus.mock.calls[0][0]({ focused: true });
+    companionAPI.onTextInput.mock.calls[0][0]({ text: 'existing' });
+
+    input.value = '';
+    input.fire('input');
+    await vi.waitFor(() => expect(companionAPI.clearText).toHaveBeenCalledOnce());
     expect(companionAPI.setText).not.toHaveBeenCalled();
   });
 });

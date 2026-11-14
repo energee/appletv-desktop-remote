@@ -76,6 +76,11 @@ body.darkMode {
   padding: 0;
 }
 
+/* A class that sets display would otherwise show an element marked hidden. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   font-weight: 400;
@@ -129,7 +134,6 @@ html.glass .darkMode {
 html.glass .play-btn {
   background: var(--glass);
   border-color: var(--glass-border);
-  color: var(--text-primary);
 }
 
 html.glass .play-btn:hover {
@@ -178,9 +182,10 @@ a:active {
    Header / Title
    =========================== */
 
+/* The 32px header row sits in the middle of the 40px above the touchpad. */
 #keyboardButtonDiv {
   width: 100%;
-  padding: 8px 8px 0;
+  padding: 4px 8px;
 }
 
 /* Header icons sit either side of the centred device name, without moving it. */
@@ -199,19 +204,22 @@ a:active {
   cursor: pointer;
 }
 
+/* Hover only darkens the icon: a filled box crowds the neighbouring button. */
 .header-btn:hover {
-  background: var(--glass-hover);
   color: var(--text-primary);
 }
 
 .header-btn .lucide-icon {
-  width: 15px;
-  height: 15px;
+  /* block: an inline icon sits on the text baseline, a fraction above the row's centre. */
+  display: block;
+  width: 13px;
+  height: 13px;
 }
 
-.topText .header-btn {
+.topText .header-btn,
+.companion-tools .header-btn {
   position: absolute;
-  top: 8px;
+  top: 4px;
 }
 
 #collapseButton {
@@ -228,37 +236,38 @@ a:active {
   justify-content: center;
   gap: 4px;
   min-width: 0;
+  /* The row keeps the header icons' height; the device picker inside it is shorter. */
+  min-height: 32px;
   padding: 0 50px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
 
-/* Connection status dot */
+/* Device picker: the device name, its connection dot and a chevron, in a small pill. */
 #topTextHeader {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
   max-width: 100%;
-  min-height: 32px;
-  padding: 5px 4px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 12px;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
   letter-spacing: normal;
-  line-height: 20px;
+  line-height: 16px;
   text-transform: none;
   cursor: pointer;
 }
 
-#topTextHeader:hover {
-  background: var(--glass-hover);
-  border-color: var(--border);
+#topTextHeader:hover .device-chevron {
+  color: var(--text-primary);
 }
 
 #topTextHeader:focus-visible,
@@ -282,8 +291,8 @@ a:active {
 
 .device-chevron .lucide-icon {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
 }
 
 .connection-dot {
@@ -295,14 +304,12 @@ a:active {
   opacity: 0.4;
   transition:
     background 0.3s ease,
-    opacity 0.3s ease,
-    box-shadow 0.3s ease;
+    opacity 0.3s ease;
 }
 
 .connection-dot.connected {
   background: #30d158;
   opacity: 1;
-  box-shadow: 0 0 6px rgba(48, 209, 88, 0.4);
 }
 
 .connection-dot.asleep,
@@ -314,13 +321,11 @@ a:active {
 
 .connection-dot.asleep {
   animation: none;
-  box-shadow: 0 0 6px rgba(255, 159, 10, 0.4);
 }
 
 .connection-dot.disconnected {
   background: #ff453a;
   opacity: 1;
-  box-shadow: 0 0 6px rgba(255, 69, 58, 0.4);
 }
 
 @keyframes pulse-dot {
@@ -356,18 +361,6 @@ a:active {
 #topTextKBLink .lucide-icon {
   width: 12px;
   height: 12px;
-}
-
-/* ===========================
-   Init / Setup Text
-   =========================== */
-
-#initText {
-  text-align: center;
-  padding: 10px 16px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.6;
 }
 
 /* ===========================
@@ -539,6 +532,13 @@ a:active {
   align-items: center;
   gap: 12px;
   padding: 0 20px 10px;
+  transition: opacity var(--transition-med);
+}
+
+/* Starting up, connecting, or disconnected: the remote is there but cannot be used. */
+body:not(.connected) .remote-body {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* ===========================
@@ -557,7 +557,7 @@ a:active {
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
   cursor: pointer;
   touch-action: none;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -604,23 +604,13 @@ a:active {
   color: rgba(255, 255, 255, 0.85);
 }
 
-/* The title sits where the down arrow rests, so it appears only for a swipe. */
-#touchpad.has-title .touchpad-arrow-down {
-  opacity: 0;
-}
-
-#touchpad.has-title .touchpad-arrow-down.flash {
-  animation-fill-mode: none;
-}
-
-/* Directional arrow indicators */
+/* Direction arrows: invisible at rest, flashed by a swipe. A click anywhere is Select. */
 .touchpad-arrow {
   position: absolute;
-  opacity: 0.55;
+  opacity: 0;
   color: var(--text-secondary);
   font-size: 16px;
   pointer-events: none;
-  transition: opacity 80ms ease;
 }
 
 .touchpad-arrow-up {
@@ -648,7 +638,7 @@ a:active {
 }
 
 .touchpad-arrow.flash {
-  animation: arrow-flash 0.5s ease-out forwards;
+  animation: arrow-flash 0.5s ease-out;
 }
 
 @keyframes arrow-flash {
@@ -659,7 +649,7 @@ a:active {
     opacity: 1;
   }
   100% {
-    opacity: 0.55;
+    opacity: 0;
   }
 }
 
@@ -802,7 +792,8 @@ a:active {
   height: 50px;
   background: var(--accent-glass);
   border: 1px solid var(--accent);
-  color: var(--accent);
+  /* The icon is the control's label, so it takes the text color, not the tan accent. */
+  color: var(--text-primary);
 }
 
 .play-btn:hover {
@@ -826,21 +817,20 @@ a:active {
   height: 40px;
   font-size: 11px;
   background: transparent;
-  /* Bare icon like the row above; the circle shows on hover. */
+  /* A bare icon: hover darkens it, and only a press tints its circle. */
   border: 1px solid transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
+/* No circle on hover: the row's buttons sit 4px apart, and one here crowds its neighbours.
+   The background and shadow undo .directionCircle:hover. */
 .secondary-btn:hover {
-  background: var(--glass);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
-  border-color: var(--glass-border);
+  background: transparent;
+  box-shadow: none;
   color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
 }
 
 .vol-btn {
@@ -966,13 +956,12 @@ a:active {
    =========================== */
 
 #statusText {
-  display: none;
   text-align: center;
   text-wrap: balance;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
-  padding: 4px 0;
+  padding: 4px 16px;
 }
 
 /* ===========================
@@ -1235,7 +1224,7 @@ a:active {
 .seek-time {
   flex: none;
   font-size: 10px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1265,7 +1254,7 @@ body.volume-active #seek {
    =========================== */
 
 .settings-body {
-  padding: 16px 20px;
+  padding: 4px 20px 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1375,6 +1364,10 @@ body.volume-active #seek {
   color: var(--text-secondary);
 }
 
+#settingsBackBtn {
+  align-self: flex-start;
+}
+
 /* ===========================
    Mini Bar
    =========================== */
@@ -1416,9 +1409,8 @@ body.mini .remote-body {
   padding: 0;
 }
 
-/* !important: showKeyMap sets the touchpad's display inline. */
 body.mini .remote-body > :not(.transport, #companionText, #companionError) {
-  display: none !important;
+  display: none;
 }
 
 body.mini .transport {

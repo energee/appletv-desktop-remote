@@ -39,8 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
         status.textContent = message;
         status.style.display = 'block';
       }
-      const loading = document.getElementById('initText');
-      if (loading) loading.style.display = 'none';
     }
   })();
 });

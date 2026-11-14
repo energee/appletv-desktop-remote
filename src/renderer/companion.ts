@@ -12,9 +12,10 @@ let actions: HTMLElement;
 let dialogError: HTMLElement;
 let inlineError: HTMLElement;
 let inlineText: HTMLInputElement;
-let keyboardText: HTMLInputElement | null = null;
-let clearButton: HTMLButtonElement | null = null;
+let appsButton: HTMLButtonElement;
 let keyboardButton: HTMLButtonElement;
+/** The Keyboard button asked for the text field; a TV text field shows it without being asked. */
+let keyboardOpen = false;
 let smoothToggle: HTMLInputElement;
 let smoothTouchEnabled = false;
 let pairingOpen = false;
@@ -28,7 +29,6 @@ let textDirty = false;
 let textVersion = 0;
 let writeToken = 0;
 let writing = false;
-let clearRequested = false;
 let textTimer: ReturnType<typeof setTimeout> | undefined;
 
 function button(label: string, action: () => void): HTMLButtonElement {
@@ -51,8 +51,6 @@ function showSheet(heading: string, note: string): void {
   content.replaceChildren();
   actions.replaceChildren(button('Done', closeSheet));
   dialogError.hidden = true;
-  keyboardText = null;
-  clearButton = null;
   if (!dialog.open) dialog.showModal();
 }
 
@@ -67,18 +65,18 @@ function dismissSheet(): void {
   waitingFeature = null;
   pairingOpen = false;
   dialog.close();
-  keyboardText = null;
-  clearButton = null;
 }
 
+/**
+ * The text field under the remote: shown for a TV text field or the Keyboard button, and usable
+ * once the TV has sent the field's text. Until then its placeholder says what it is waiting for.
+ */
 function renderText(): void {
-  for (const input of [inlineText, keyboardText]) {
-    if (!input) continue;
-    if (input.value !== desiredText) input.value = desiredText;
-    input.disabled = !textFocused || !textReady;
-  }
-  inlineText.hidden = !textFocused || status.status !== 'connected';
-  if (clearButton) clearButton.disabled = !textFocused || !textReady;
+  if (inlineText.value !== desiredText) inlineText.value = desiredText;
+  inlineText.disabled = !textFocused || !textReady;
+  inlineText.placeholder = textFocused ? '' : 'Select a text field on the Apple TV';
+  inlineText.hidden = status.status !== 'connected' || !(textFocused || keyboardOpen);
+  keyboardButton.setAttribute('aria-pressed', String(!inlineText.hidden));
 }
 
 function resetText(): void {
@@ -94,7 +92,6 @@ function resetText(): void {
 function queueText(value: string): void {
   desiredText = value;
   textDirty = true;
-  clearRequested = false;
   textVersion++;
   clearTimeout(textTimer);
   textTimer = setTimeout(() => void flushText(), 180);
@@ -106,10 +103,10 @@ async function flushText(): Promise<void> {
   const version = textVersion;
   const currentField = field;
   const value = desiredText;
-  const clear = clearRequested;
   writing = true;
   try {
-    const observed = await (clear ? companionAPI.clearText() : companionAPI.setText(value));
+    // Emptied text, by deleting or by the field's clear button, clears the TV's field.
+    const observed = await (value ? companionAPI.setText(value) : companionAPI.clearText());
     if (token !== writeToken || currentField !== field) return;
     if (version === textVersion) {
       textDirty = false;
@@ -118,7 +115,7 @@ async function flushText(): Promise<void> {
     }
   } catch (error) {
     if (token !== writeToken || currentField !== field) return;
-    // Keep the user's text; another edit or Clear retries without an automatic request loop.
+    // Keep the user's text; another edit retries without an automatic request loop.
     showError(error);
   } finally {
     if (token === writeToken) {
@@ -244,62 +241,29 @@ async function finishPair(
   }
 }
 
+/** Drops a native menu of the TV's apps under the Apps button; onAppChosen launches the pick. */
 async function openApps(): Promise<void> {
   await requestFeature('Apps', async () => {
-    const current = operation;
-    showSheet('Apps', 'Loading installed apps…');
+    // Listing takes a moment: the dimmed button shows the click registered and blocks a second.
+    appsButton.disabled = true;
     try {
       const apps = await companionAPI.apps();
-      if (current !== operation) return;
-      description.textContent = apps.length
-        ? ''
-        : 'No launchable apps were reported by this Apple TV.';
-      const list = document.createElement('div');
-      list.className = 'companion-apps';
-      for (const app of apps) {
-        const launch = button(app.name, () => {
-          launch.disabled = true;
-          void companionAPI
-            .launchApp(app.bundleId)
-            .then(() => {
-              if (current === operation) closeSheet();
-            })
-            .catch((error: unknown) => {
-              if (current === operation) {
-                launch.disabled = false;
-                showError(error);
-              }
-            });
-        });
-        list.append(launch);
-      }
-      content.append(list);
-    } catch (error) {
-      if (current !== operation) return;
-      description.textContent = '';
-      showError(error);
-      actions.prepend(button('Retry', () => void openApps()));
+      if (apps.length === 0) throw new Error('No launchable apps were reported by this Apple TV.');
+      const { left, bottom } = appsButton.getBoundingClientRect();
+      await companionAPI.showAppsMenu(apps, { x: left, y: bottom + 4 });
+    } finally {
+      appsButton.disabled = false;
     }
   });
 }
 
+/** Shows or puts away the text field under the remote; with a TV field focused, types into it. */
 async function openKeyboard(): Promise<void> {
   await requestFeature('Keyboard', async () => {
-    showSheet('Keyboard', 'Select a text field on the Apple TV to edit it here.');
-    keyboardText = document.createElement('input');
-    keyboardText.setAttribute('aria-label', 'Apple TV text');
-    keyboardText.addEventListener('input', () => queueText(keyboardText!.value));
-    content.append(keyboardText);
-    clearButton = button('Clear', () => {
-      queueText('');
-      clearRequested = true;
-      clearTimeout(textTimer);
-      renderText();
-      void flushText();
-    });
-    actions.prepend(clearButton);
+    // A focused TV field keeps the text field up; otherwise the button shows or hides it.
+    keyboardOpen = textFocused || !keyboardOpen;
     renderText();
-    if (textFocused && textReady) keyboardText.focus();
+    if (textFocused && textReady) inlineText.focus();
   });
 }
 
@@ -331,18 +295,23 @@ export async function companionTouchAdapter(
 export function initCompanion(): void {
   const host = document.querySelector('#runningElements .remote-body');
   if (!host || document.getElementById('companionTools')) return;
+  // First in the remote, so Tab reaches these header buttons before the remote's own controls.
+  host.insertAdjacentHTML(
+    'afterbegin',
+    `
+    <div id="companionTools" class="companion-tools">
+      <button type="button" id="companionApps" class="header-btn" aria-label="Apps" title="Apps">
+        <span aria-hidden="true">${icon('layout-grid')}</span>
+      </button>
+      <button type="button" id="companionKeyboard" class="header-btn" aria-label="Keyboard" title="Keyboard">
+        <span aria-hidden="true">${icon('keyboard')}</span>
+      </button>
+    </div>`,
+  );
   host.insertAdjacentHTML(
     'beforeend',
     `
-    <div id="companionTools" class="companion-tools">
-      <button type="button" id="companionApps" aria-label="Apps" title="Apps">
-        <span aria-hidden="true">${icon('layout-grid')}</span>
-      </button>
-      <button type="button" id="companionKeyboard" aria-label="Keyboard" title="Keyboard">
-        <span aria-hidden="true">${icon('keyboard')}</span>
-      </button>
-    </div>
-    <input id="companionText" aria-label="Apple TV text" autocomplete="off" hidden />
+    <input id="companionText" type="search" aria-label="Apple TV text" autocomplete="off" hidden />
     <p id="companionError" class="companion-error" role="alert" hidden></p>`,
   );
   document.body.insertAdjacentHTML(
@@ -362,9 +331,11 @@ export function initCompanion(): void {
   dialogError = document.getElementById('companionDialogError')!;
   inlineError = document.getElementById('companionError')!;
   inlineText = document.getElementById('companionText') as HTMLInputElement;
+  appsButton = document.getElementById('companionApps') as HTMLButtonElement;
   keyboardButton = document.getElementById('companionKeyboard') as HTMLButtonElement;
   smoothToggle = document.getElementById('settingsSmoothTouch') as HTMLInputElement;
-  document.getElementById('companionApps')!.addEventListener('click', () => void openApps());
+  appsButton.addEventListener('click', () => void openApps());
+  companionAPI.onAppChosen((bundleId) => void companionAPI.launchApp(bundleId).catch(showError));
   keyboardButton.addEventListener('click', () => void openKeyboard());
   smoothToggle.addEventListener('change', () => {
     const enabled = smoothToggle.checked;
@@ -424,10 +395,7 @@ export function initCompanion(): void {
       desiredText = text;
       renderText();
     }
-    if (!wasReady && textFocused) {
-      if (keyboardText) keyboardText.focus();
-      else if (!dialog.open) inlineText.focus();
-    }
+    if (!wasReady && textFocused && !dialog.open) inlineText.focus();
   });
   void companionAPI
     .status()
