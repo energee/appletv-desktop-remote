@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/energee/appletv-desktop-remote/releases/latest"><img src="https://badgen.net/github/release/energee/appletv-desktop-remote" alt="Latest release"/></a>
-  <a href="https://github.com/energee/appletv-desktop-remote/actions/workflows/ci.yml"><img src="https://badgen.net/github/checks/energee/appletv-desktop-remote" alt="CI checks"/></a>
+  <a href="https://github.com/energee/appletv-desktop-remote/actions/workflows/ci.yml"><img src="https://github.com/energee/appletv-desktop-remote/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI checks"/></a>
   <img src="https://badgen.net/badge/platform/macOS%20%7C%20Windows/blue" alt="Platforms: macOS and Windows"/>
   <a href="LICENSE"><img src="https://badgen.net/badge/license/GPL-3.0-only/grey" alt="License: GPL-3.0-only"/></a>
 </p>
